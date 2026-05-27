@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, RefreshCw, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, RefreshCw, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { signOutUser, isFirebaseConfigured, getCurrentUser } from '../firebase';
 

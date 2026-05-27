@@ -144,16 +144,6 @@ export default function LoginPage({ onLogin }) {
               style={{ padding: '0.75rem', fontSize: '0.9rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               {loading ? 'Signing in...' : <><LogIn size={16} /> Sign In</>}
             </button>
-
-            {/* No Firebase SDK paste is required here.
-                Email login uses Firebase only when config is already available. */}
-
-            {!isEmail && (
-              <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)', borderRadius: '0.5rem', padding: '0.6rem 0.9rem', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-                Default: <strong style={{ color: 'var(--primary)' }}>admin</strong> / <strong style={{ color: 'var(--primary)' }}>admin123</strong>
-                {fbAvailable && <><br />Or enter your <strong>Firebase email</strong> to sign in with Firebase.</>}
-              </div>
-            )}
           </form>
         </div>
       </div>

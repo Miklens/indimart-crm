@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, RefreshCw, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { signOutUser, isFirebaseConfigured, getCurrentUser } from '../firebase';
+import { DATA_CONFIG } from '../utils/dataConfig';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -69,7 +70,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
   };
 
   const today = new Date().toISOString().split('T')[0];
-  const overdueFollowups = leads.filter(l => l.followUpDate && l.followUpDate <= today && !['No Response','Not Interested','No Current Requirement','Invalid Lead','Closed Lost'].includes(l.status)).length;
+  const overdueFollowups = leads.filter(l => l.followUpDate && l.followUpDate <= today && !DATA_CONFIG.getDeadStatusLabels().includes(l.status)).length;
 
   const SyncIcon = isSyncing ? Loader : syncStatus.status === 'connected' ? Wifi : syncStatus.status === 'error' ? WifiOff : Wifi;
   const syncColor = syncStatus.status === 'connected' ? '#10b981' : syncStatus.status === 'error' ? '#ef4444' : syncStatus.status === 'syncing' ? '#f59e0b' : '#94a3b8';

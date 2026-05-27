@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { Save, Upload, X, Wifi, Download, Upload as UploadIcon, RefreshCw, Trash2, Flame, CheckCircle, AlertCircle, Settings2, Eye, EyeOff } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getStoredFirebaseConfig, saveFirebaseConfig, clearFirebaseConfig, reinitFirebase, isFirebaseConfigured } from '../firebase';
-import { normalizeDisplayDate } from '../utils/dataConfig';
+import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
 import MigrationWizard from '../components/MigrationWizard';
 
 export default function Settings() {
@@ -124,14 +124,14 @@ export default function Settings() {
       const dsConfirmedRev = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.totalAmount)||0); }, 0);
       const dsTotalReceived = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.receivedAmount)||0); }, 0);
       const dsBilledIds = new Set(dsPaidInv.map(inv => inv.leadId).filter(Boolean));
-      const dsValidLeads = leads.filter(l => l.status !== 'Invalid Lead').length;
+      const dsValidLeads = leads.filter(l => !DATA_CONFIG.getLostStatusLabels().includes(l.status)).length;
       const dsConvRate = dsValidLeads ? ((dsBilledIds.size / dsValidLeads) * 100).toFixed(1) : '0';
-      const dsContactedCount = leads.filter(l => !['New Enquiry','Invalid Lead'].includes(l.status)).length;
+      const dsContactedCount = leads.filter(l => DATA_CONFIG.getContactedStatusLabels().includes(l.status)).length;
       const dsContactRate = leads.length ? ((dsContactedCount / leads.length) * 100).toFixed(1) : '0';
       const dsPending = Math.max(0, dsConfirmedRev - dsTotalReceived);
-      const dsInTransit = leads.filter(l => l.status === 'Material Dispatched').length;
-      const dsWonAll = ['Converted','Purchased','Repeat Customer','Material Dispatched','Material Reached'];
-      const dsProjectedRev = leads.filter(l => !dsBilledIds.has(l.id) && !['Purchased','Closed Lost','Invalid Lead','No Response','Not Interested','No Current Requirement'].includes(l.status)).reduce((s,l) => s+(l.orderValue||0), 0);
+      const dsInTransit = leads.filter(l => DATA_CONFIG.getStatusGroupStatuses('inTransit').includes(l.status)).length;
+      const dsWonAll = DATA_CONFIG.getWonStatusLabels();
+      const dsProjectedRev = leads.filter(l => !dsBilledIds.has(l.id) && !new Set(['Purchased', ...DATA_CONFIG.getLostStatusLabels()]).has(l.status)).reduce((s,l) => s+(l.orderValue||0), 0);
 
       // KPI section
       dsSection('📊  KEY PERFORMANCE INDICATORS', greenFill);
@@ -158,8 +158,8 @@ export default function Settings() {
       dsColHead('Status', 'Count', '% of Total');
       const dsStatusCounts = {};
       leads.forEach(l => { dsStatusCounts[l.status] = (dsStatusCounts[l.status]||0) + 1; });
-      const dsWonOnes  = ['Converted','Purchased','Repeat Customer','Material Dispatched','Material Reached'];
-      const dsLostOnes = ['Closed Lost','Invalid Lead','Not Interested','No Response','No Current Requirement'];
+      const dsWonOnes  = DATA_CONFIG.getWonStatusLabels();
+      const dsLostOnes = DATA_CONFIG.getLostStatusLabels();
       Object.entries(dsStatusCounts).sort((a,b) => b[1]-a[1]).forEach(([status, count]) => {
         dsDataRow(status, count, leads.length ? `${((count/leads.length)*100).toFixed(1)}%` : '0%', r => {
           if (dsWonOnes.includes(status)) { r.getCell(1).fill = { type:'pattern',pattern:'solid',fgColor:{argb:'FFD1FAE5'} }; r.getCell(1).font = { bold:true, color:{argb:'FF065F46'} }; }

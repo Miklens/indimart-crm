@@ -140,6 +140,7 @@ export default function LeadModal({ leadId, onClose }) {
     onClose();
   };
 
+  const simpleStatus = DATA_CONFIG.getSimpleStatusLabel(form.status);
   const isLost = DATA_CONFIG.getLostStatusLabels().includes(form.status);
 
   // Build unique customer suggestions from existing leads

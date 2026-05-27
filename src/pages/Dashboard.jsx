@@ -37,10 +37,10 @@ export default function Dashboard() {
   const billedLeadIds = new Set(paidInvoices.map(inv => inv.leadId).filter(Boolean));
   const paidOrderCount = paidInvoices.length;
   const projectedRevenue = leads
-    .filter(l => !billedLeadIds.has(l.id) && !['Purchased','Closed Lost','Invalid Lead','No Response','Not Interested','No Current Requirement'].includes(l.status))
+    .filter(l => !billedLeadIds.has(l.id) && !new Set(['Purchased', ...DATA_CONFIG.getLostStatusLabels()]).has(l.status))
     .reduce((sum, l) => sum + (l.orderValue || 0), 0);
-  const inTransitCount = leads.filter(l => l.status === 'Material Dispatched').length;
-  const validLeads = leads.filter(l => l.status !== 'Invalid Lead').length;
+  const inTransitCount = leads.filter(l => DATA_CONFIG.getStatusGroupStatuses('inTransit').includes(l.status)).length;
+  const validLeads = leads.filter(l => !DATA_CONFIG.getLostStatusLabels().includes(l.status)).length;
   const conversionRate = validLeads ? ((billedLeadIds.size / validLeads) * 100).toFixed(0) : 0;
   const contacted = leads.filter(l => DATA_CONFIG.getContactedStatusLabels().includes(l.status));
   const contactRate = leads.length ? ((contacted.length / leads.length) * 100).toFixed(0) : 0;
@@ -73,7 +73,7 @@ export default function Dashboard() {
     }
 
     // 2. Lost reasons polar
-    const lostLeads = leads.filter(l => l.status === 'Closed Lost');
+    const lostLeads = leads.filter(l => DATA_CONFIG.getLostStatusLabels().includes(l.status));
     const reasonCounts = {};
     lostLeads.forEach(l => { reasonCounts[l.lostReason || 'Unknown'] = (reasonCounts[l.lostReason || 'Unknown'] || 0) + 1; });
     if (canvasRefs.lost.current && lostLeads.length) {
@@ -121,7 +121,7 @@ export default function Dashboard() {
     const funnelData = [
       leads.length,
       leads.filter(l => DATA_CONFIG.getContactedStatusLabels().includes(l.status)).length,
-      leads.filter(l => ['Quotation Sent','Negotiation',...wonLabels].includes(l.status)).length,
+      leads.filter(l => [...DATA_CONFIG.getStatusGroupStatuses('quoted'), ...wonLabels].includes(l.status)).length,
       leads.filter(l => wonLabels.includes(l.status)).length,
       leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).length,
     ];

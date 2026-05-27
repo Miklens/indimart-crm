@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Flame, Eye, EyeOff, LogIn, User, Lock, AlertCircle } from 'lucide-react';
-import { signInWithEmail, isFirebaseConfigured, reinitFirebase } from '../firebase';
+import { signInWithEmail, isFirebaseConfigured } from '../firebase';
 
 // ── Simple local auth helpers ─────────────────────────────────────────────────
 const LS_USERS_KEY = 'indimart_local_users';
@@ -61,38 +61,15 @@ export default function LoginPage({ onLogin }) {
     return map[code] || 'Sign in failed. Try again.';
   };
 
-  const [fbConfigText, setFbConfigText] = useState('');
-  const [showFbConfig, setShowFbConfig] = useState(false);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (!username.trim()) { setError('Enter your username or email.'); return; }
     if (!password) { setError('Enter your password.'); return; }
 
-    // If input looks like an email — use Firebase auth
-    if (isEmail) {
-      // If Firebase not configured yet, need config first
-      if (!fbAvailable && !fbConfigText.trim()) {
-        setShowFbConfig(true);
-        setError('Paste your Firebase config below to sign in with email.');
-        return;
-      }
+    if (isEmail && fbAvailable) {
       setLoading(true);
       try {
-        // If config was pasted, init Firebase first
-        if (!fbAvailable && fbConfigText.trim()) {
-          const pairs = {};
-          const re = /(\w+)\s*:\s*["']([^"']+)["']/g;
-          let m;
-          while ((m = re.exec(fbConfigText)) !== null) pairs[m[1]] = m[2];
-          if (!pairs.apiKey || !pairs.projectId || !pairs.appId) {
-            setError('Invalid Firebase config. Make sure apiKey, projectId and appId are present.');
-            setLoading(false);
-            return;
-          }
-          await reinitFirebase(pairs);
-        }
         const user = await signInWithEmail(username.trim(), password);
         onLogin(user);
       } catch (err) {
@@ -168,27 +145,8 @@ export default function LoginPage({ onLogin }) {
               {loading ? 'Signing in...' : <><LogIn size={16} /> Sign In</>}
             </button>
 
-            {/* Firebase config paste — shown when email entered but no Firebase config in this browser */}
-            {isEmail && !fbAvailable && showFbConfig && (
-              <div style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '0.6rem', padding: '0.85rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 700, color: '#f59e0b', marginBottom: '0.5rem' }}>
-                  <AlertCircle size={13} /> Firebase config not found in this browser
-                </div>
-                <p style={{ fontSize: '0.72rem', color: 'var(--text-dim)', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
-                  Paste your Firebase SDK config (Firebase Console → Project Settings):
-                </p>
-                <textarea
-                  rows={5}
-                  value={fbConfigText}
-                  onChange={e => setFbConfigText(e.target.value)}
-                  placeholder={"const firebaseConfig = {\n  apiKey: \"AIza...\",\n  projectId: \"...\",\n  appId: \"1:...\"\n};"}
-                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.7rem', background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.4rem', padding: '0.5rem', color: 'var(--text-main)', resize: 'vertical', boxSizing: 'border-box' }}
-                />
-                <p style={{ fontSize: '0.68rem', color: 'var(--text-dim)', margin: '0.3rem 0 0', lineHeight: 1.4 }}>
-                  Saved locally in your browser — you won't need to paste it again.
-                </p>
-              </div>
-            )}
+            {/* No Firebase SDK paste is required here.
+                Email login uses Firebase only when config is already available. */}
 
             {!isEmail && (
               <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)', borderRadius: '0.5rem', padding: '0.6rem 0.9rem', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.6 }}>

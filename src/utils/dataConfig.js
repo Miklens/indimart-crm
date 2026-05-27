@@ -41,6 +41,71 @@ export const DATA_CONFIG = {
       .filter(s => s.label !== 'New Enquiry' && s.label !== 'Invalid Lead')
       .map(s => s.label);
   },
+  getSimpleStatusLabel(status) {
+    const map = {
+      'Quotation Requested': 'Quoted',
+      'Quotation Sent': 'Quoted',
+      'Converted': 'Won',
+      'Purchased': 'Won',
+      'Repeat Customer': 'Won',
+      'Material Dispatched': 'In Transit',
+      'Material Reached': 'Delivered',
+      'No Response': 'Lost',
+      'Not Interested': 'Lost',
+      'No Current Requirement': 'Lost',
+      'Invalid Lead': 'Lost',
+      'Closed Lost': 'Lost',
+    };
+    return map[status] || status;
+  },
+  resolveStatusFromSimple(status) {
+    const map = {
+      'Quoted': 'Quotation Sent',
+      'Won': 'Converted',
+      'In Transit': 'Material Dispatched',
+      'Delivered': 'Material Reached',
+      'Lost': 'Closed Lost',
+    };
+    return map[status] || status;
+  },
+  getStatusGroupStatuses(group) {
+    const groups = {
+      all: this.allStatusLabels(),
+      pipeline: ['New Enquiry', 'Contacted', 'Requirement Discussed'],
+      quoted: ['Quotation Requested', 'Quotation Sent', 'Negotiation'],
+      negotiation: ['Negotiation'],
+      won: ['Converted', 'Purchased', 'Repeat Customer'],
+      inTransit: ['Material Dispatched'],
+      delivered: ['Material Reached'],
+      lost: this.getLostStatusLabels(),
+    };
+    return groups[group] || [];
+  },
+  getStatusFilterOptions() {
+    return [
+      { id: 'all', label: 'All Statuses' },
+      { id: 'pipeline', label: 'Pipeline' },
+      { id: 'quoted', label: 'Quoted' },
+      { id: 'negotiation', label: 'Negotiation' },
+      { id: 'won', label: 'Won' },
+      { id: 'inTransit', label: 'In Transit' },
+      { id: 'delivered', label: 'Delivered' },
+      { id: 'lost', label: 'Lost' },
+    ];
+  },
+  getSimpleStatusOptions() {
+    return [
+      { label: 'New Enquiry', value: 'New Enquiry' },
+      { label: 'Contacted', value: 'Contacted' },
+      { label: 'Requirement Discussed', value: 'Requirement Discussed' },
+      { label: 'Quoted', value: 'Quoted' },
+      { label: 'Negotiation', value: 'Negotiation' },
+      { label: 'Won', value: 'Won' },
+      { label: 'In Transit', value: 'In Transit' },
+      { label: 'Delivered', value: 'Delivered' },
+      { label: 'Lost', value: 'Lost' },
+    ];
+  },
   sources: [
     'IndiaMART Direct', 'IndiaMART BuyLead', 'JustDial', 'Website',
     'Referral', 'WhatsApp', 'Email', 'Phone', 'Trade Show', 'Other'

@@ -7,6 +7,24 @@ import {
 
 const STORAGE_KEY = 'indimart_firebase_config';
 
+function getEnvFirebaseConfig() {
+  const cfg = {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  };
+  return cfg.apiKey && cfg.projectId && cfg.appId ? cfg : null;
+}
+
+function getWindowFirebaseConfig() {
+  if (typeof window === 'undefined') return null;
+  const cfg = window.__FIREBASE_CONFIG__ || window.firebaseConfig;
+  return cfg?.apiKey && cfg?.projectId && cfg?.appId ? cfg : null;
+}
+
 export function getStoredFirebaseConfig() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
@@ -23,8 +41,12 @@ export function clearFirebaseConfig() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
+export function getFirebaseConfig() {
+  return getEnvFirebaseConfig() || getWindowFirebaseConfig() || getStoredFirebaseConfig();
+}
+
 export function isFirebaseConfigured() {
-  const cfg = getStoredFirebaseConfig();
+  const cfg = getFirebaseConfig();
   return !!(cfg?.apiKey && cfg?.projectId && cfg?.appId);
 }
 
@@ -33,7 +55,7 @@ let _db = null;
 
 export function getFirebaseApp() {
   if (_app) return _app;
-  const cfg = getStoredFirebaseConfig();
+  const cfg = getFirebaseConfig();
   if (!cfg?.apiKey) return null;
   if (getApps().length > 0) _app = getApps()[0];
   else _app = initializeApp(cfg);

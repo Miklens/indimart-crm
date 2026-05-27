@@ -4,14 +4,9 @@ import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 import LeadModal from '../components/LeadModal';
 
-const STATUS_GROUPS = [
-  { label: 'Pipeline', items: ['New Enquiry','Contacted','Requirement Discussed','Quotation Requested','Quotation Sent','Negotiation'] },
-  { label: 'Won / Shipping', items: ['Converted','Purchased','Repeat Customer','Material Dispatched','Material Reached'] },
-  { label: 'Lost', items: ['No Response','Not Interested','No Current Requirement','Invalid Lead','Closed Lost'] },
-];
-
 export default function FollowUps() {
   const { leads, updateLeadStatus, updateLead, showBanner } = useApp();
+  const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
   const [filter, setFilter] = useState('all');
   const [editId, setEditId] = useState(null);
 
@@ -88,17 +83,13 @@ export default function FollowUps() {
                     <div style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>{task.city || ''}</div>
                   </td>
                   <td style={{ minWidth: 170 }}>
-                    <select className="table-inline-select" value={task.status}
-                      onChange={e => { updateLeadStatus(task.id, e.target.value); showBanner(`✅ ${task.id} → ${e.target.value}`, 'success'); }}>
-                      {STATUS_GROUPS.map(g => (
-                        <optgroup key={g.label} label={g.label}>
-                          {g.items.map(s => <option key={s}>{s}</option>)}
-                        </optgroup>
-                      ))}
+                    <select className="table-inline-select" value={DATA_CONFIG.getSimpleStatusLabel(task.status)}
+                      onChange={e => { updateLeadStatus(task.id, DATA_CONFIG.resolveStatusFromSimple(e.target.value)); showBanner(`✅ ${task.id} → ${e.target.value}`, 'success'); }}>
+                      {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                     <div style={{ marginTop: 3 }}>
                       <span className="status-dot" style={{ background: DATA_CONFIG.getStatusColor(task.status) }} />
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>{task.status}</span>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>{DATA_CONFIG.getSimpleStatusLabel(task.status)}</span>
                     </div>
                   </td>
                   <td style={{ fontSize: '0.83rem' }}>{task.product}</td>

@@ -5,11 +5,7 @@ import { DATA_CONFIG } from '../utils/dataConfig';
 import InvoiceModal from './InvoiceModal';
 import ProductPicker from './ProductPicker';
 
-const STATUS_GROUPS = [
-  { label: 'Pipeline', items: ['New Enquiry','Contacted','Requirement Discussed','Quotation Requested','Quotation Sent','Negotiation'] },
-  { label: 'Won / Shipping', items: ['Converted','Purchased','Repeat Customer','Material Dispatched','Material Reached'] },
-  { label: 'Lost', items: ['No Response','Not Interested','No Current Requirement','Invalid Lead','Closed Lost'] },
-];
+const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
 
 export default function LeadDetails({ leadId, onBack, onEdit }) {
   const { leads, invoiceHistory, updateLeadStatus, updateLead, addLead, setCurrentSection, showBanner } = useApp();
@@ -18,6 +14,7 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [invoiceItems, setInvoiceItems] = useState(null);
   const lead = leads.find(l => l.id === leadId);
+  const currentSimpleStatus = lead ? DATA_CONFIG.getSimpleStatusLabel(lead.status) : 'New Enquiry';
 
   const handleGenerateInvoice = () => {
     const realItems = (lead?.productList || []).filter(it => it.name?.trim());
@@ -55,7 +52,7 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
         <button className="btn btn-secondary" onClick={onBack}><ArrowLeft size={14} /> Back to Leads</button>
         <h2 style={{ fontSize: '1.3rem' }}>{lead.customerName}</h2>
         <span style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>{lead.contact}{lead.city ? ` · ${lead.city}, ${lead.state}` : ''}</span>
-        <span style={{ marginLeft: 'auto', background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44`, borderRadius: 999, padding: '3px 12px', fontSize: '0.75rem', fontWeight: 700 }}>{lead.status}</span>
+        <span style={{ marginLeft: 'auto', background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44`, borderRadius: 999, padding: '3px 12px', fontSize: '0.75rem', fontWeight: 700 }}>{DATA_CONFIG.getSimpleStatusLabel(lead.status)}</span>
       </div>
 
       {/* Quick actions */}
@@ -72,12 +69,12 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
         {/* Inline status update */}
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.75rem' }}>
           <label style={{ fontSize: '0.72rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>Update Status:</label>
-          <select value={lead.status} onChange={e => { updateLeadStatus(leadId, e.target.value); showBanner(`✅ Status → ${e.target.value}`, 'success'); }} style={{ minWidth: 200 }}>
-            {STATUS_GROUPS.map(g => (
-              <optgroup key={g.label} label={g.label}>
-                {g.items.map(s => <option key={s}>{s}</option>)}
-              </optgroup>
-            ))}
+          <select value={currentSimpleStatus} onChange={e => {
+            const nextStatus = DATA_CONFIG.resolveStatusFromSimple(e.target.value);
+            updateLeadStatus(leadId, nextStatus);
+            showBanner(`✅ Status → ${e.target.value}`, 'success');
+          }} style={{ minWidth: 200 }}>
+            {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
           {DATA_CONFIG.getLostStatusLabels().includes(lead.status) && (
             <input
@@ -110,7 +107,7 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
         </div>
         <div className="kpi-card" style={{ borderLeft: '4px solid #f59e0b' }}>
           <div className="kpi-label">Current Stage</div>
-          <div className="kpi-value" style={{ color: '#f59e0b', fontSize: '1.1rem' }}>{lead.status}</div>
+          <div className="kpi-value" style={{ color: '#f59e0b', fontSize: '1.1rem' }}>{DATA_CONFIG.getSimpleStatusLabel(lead.status)}</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 6 }}>
             {lead.history?.length ? `Since ${new Date(lead.history[lead.history.length - 1].timestamp).toLocaleDateString()}` : 'N/A'}
           </div>

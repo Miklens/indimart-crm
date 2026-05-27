@@ -5,9 +5,10 @@ import Sidebar from './components/Sidebar';
 import SyncBanner from './components/SyncBanner';
 import GlobalSearch from './components/GlobalSearch';
 import Customer360 from './components/Customer360';
-import FirebaseSetup from './pages/FirebaseSetup';
+// FirebaseSetup is kept for manual settings only; the app no longer forces first-run setup.
 import LoginPage, { getLocalSession, clearLocalSession } from './pages/LoginPage';
 import { isFirebaseConfigured, onAuthStateChanged, initFirebaseIfConfigured } from './firebase';
+import { DATA_CONFIG } from './utils/dataConfig';
 
 import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
@@ -52,10 +53,6 @@ function AppInner() {
   const [theme, setTheme] = useState(() => localStorage.getItem('indimart_theme') || 'dark');
   const [searchOpen, setSearchOpen] = useState(false);
   const [customer360, setCustomer360] = useState(null);
-  // Show Firebase setup if not yet configured AND user hasn't dismissed it
-  const [showFbSetup, setShowFbSetup] = useState(
-    () => !isFirebaseConfigured() && localStorage.getItem('indimart_fb_setup_skipped') !== '1'
-  );
   // Auth state — null=loading, false=not logged in, object=logged in user
   const [authUser, setAuthUser] = useState(() => {
     // Check local session first (works without Firebase)
@@ -115,20 +112,11 @@ function AppInner() {
     return <LoginPage onLogin={(user) => setAuthUser(user || 'skip')} />;
   }
 
-  // Firebase first-run setup screen (shown after all hooks)
-  if (showFbSetup) {
-    return (
-      <FirebaseSetup
-        onComplete={() => setShowFbSetup(false)}
-        onSkip={() => setShowFbSetup(false)}
-      />
-    );
-  }
 
   const today = new Date().toISOString().split('T')[0];
   const overdueCount = leads.filter(l =>
     l.followUpDate && l.followUpDate <= today &&
-    !['No Response','Not Interested','No Current Requirement','Invalid Lead','Closed Lost'].includes(l.status)
+    !DATA_CONFIG.getDeadStatusLabels().includes(l.status)
   ).length;
 
   const handleMobileNav = (id) => {

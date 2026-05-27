@@ -3,14 +3,6 @@ import { MessageCircle, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 
-const STATUS_GROUPS = [
-  { label: 'Pipeline - Initial', items: ['New Enquiry','Contacted','Requirement Discussed'] },
-  { label: 'Pipeline - Quotation', items: ['Quotation Requested','Quotation Sent','Negotiation'] },
-  { label: 'Won / Success', items: ['Converted','Purchased','Repeat Customer'] },
-  { label: 'Shipping', items: ['Material Dispatched','Material Reached'] },
-  { label: 'Lost / Closed', items: ['No Response','Not Interested','No Current Requirement','Invalid Lead','Closed Lost'] },
-];
-
 export default function BulkTools() {
   const { leads, messageTemplates, companySettings, updateLeadStatus, updateLead, showBanner } = useApp();
   const [selected, setSelected] = useState(new Set());
@@ -20,12 +12,14 @@ export default function BulkTools() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [msgModal, setMsgModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState('');
+  const STATUS_FILTERS = DATA_CONFIG.getStatusFilterOptions();
+  const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
   const [bulkMessage, setBulkMessage] = useState('');
 
   const filtered = leads.filter(l => {
     const s = search.toLowerCase();
     const matchS = !search || l.customerName?.toLowerCase().includes(s) || (l.contact || '').includes(s);
-    const matchF = statusFilter === 'all' || l.status === statusFilter;
+    const matchF = statusFilter === 'all' || DATA_CONFIG.getStatusGroupStatuses(statusFilter).includes(l.status);
     return matchS && matchF;
   });
 
@@ -93,13 +87,9 @@ export default function BulkTools() {
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ flex: 1, minWidth: 180 }}>
             <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: 4 }}>NEW STATUS</label>
-            <select value={newStatus} onChange={e => setNewStatus(e.target.value)}>
+            <select value={newStatus} onChange={e => setNewStatus(DATA_CONFIG.resolveStatusFromSimple(e.target.value))}>
               <option value="">Select status...</option>
-              {STATUS_GROUPS.map(g => (
-                <optgroup key={g.label} label={g.label}>
-                  {g.items.map(s => <option key={s}>{s}</option>)}
-                </optgroup>
-              ))}
+              {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
           </div>
           <button className="btn btn-primary" onClick={bulkUpdateStatus} disabled={!newStatus || !selected.size}>Update Status ({selected.size})</button>
@@ -115,16 +105,13 @@ export default function BulkTools() {
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." style={{ flex: 1, minWidth: 150 }} />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ minWidth: 160 }}>
-          <option value="all">All Statuses</option>
-          {STATUS_GROUPS.map(g => (
-            <optgroup key={g.label} label={g.label}>
-              {g.items.map(s => <option key={s}>{s}</option>)}
-            </optgroup>
+          {STATUS_FILTERS.map(opt => (
+            <option key={opt.id} value={opt.id}>{opt.label}</option>
           ))}
         </select>
         <button className="btn btn-secondary" onClick={selectAll}>Select All ({filtered.length})</button>
-        <button className="btn btn-secondary" onClick={() => selectByStatus('Converted')}>Select Converted</button>
-        <button className="btn btn-secondary" onClick={() => selectByStatus('Quotation Sent')}>Select Quoted</button>
+        <button className="btn btn-secondary" onClick={() => selectByStatus(DATA_CONFIG.resolveStatusFromSimple('Won'))}>Select Won</button>
+        <button className="btn btn-secondary" onClick={() => selectByStatus(DATA_CONFIG.resolveStatusFromSimple('Quoted'))}>Select Quoted</button>
         <button className="btn btn-secondary" onClick={clearAll} style={{ color: '#ef4444' }}>✕ Clear</button>
       </div>
 
@@ -148,7 +135,7 @@ export default function BulkTools() {
                 <td style={{ color: 'var(--text-dim)', fontSize: '0.82rem' }}>{l.contact}</td>
                 <td>
                   <span className="status-dot" style={{ background: DATA_CONFIG.getStatusColor(l.status) }} />
-                  {l.status}
+                  {DATA_CONFIG.getSimpleStatusLabel(l.status)}
                 </td>
                 <td style={{ fontWeight: 600 }}>₹{(l.orderValue || 0).toLocaleString()}</td>
               </tr>

@@ -24,6 +24,9 @@ export default function Leads() {
   const [activeTab, setActiveTab] = useState('all');
   const [modalLeadId, setModalLeadId] = useState(undefined);
   const [showModal, setShowModal] = useState(false);
+
+  const STATUS_FILTERS = DATA_CONFIG.getStatusFilterOptions();
+  const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
   const [detailsLeadId, setDetailsLeadId] = useState(null);
   const [pickerLead, setPickerLead] = useState(null);
   const [invoiceLead, setInvoiceLead] = useState(null);
@@ -103,7 +106,7 @@ export default function Leads() {
   const filtered = leads.filter(l => {
     const s = search.toLowerCase();
     const matchSearch = !search || l.customerName?.toLowerCase().includes(s) || l.product?.toLowerCase().includes(s) || (l.contact || '').includes(s) || l.id?.toLowerCase().includes(s) || l.trackingId?.toLowerCase().includes(s);
-    const matchStatus = statusFilter === 'all' || l.status === statusFilter;
+    const matchStatus = statusFilter === 'all' || DATA_CONFIG.getStatusGroupStatuses(statusFilter).includes(l.status);
     const matchSource = sourceFilter === 'all' || l.source === sourceFilter;
     let matchTab = true;
     if (activeTab === 'payment') matchTab = unpaidBilledLeadIds.has(l.id);
@@ -158,8 +161,9 @@ export default function Leads() {
         <div style={{ position: 'relative', minWidth: 160 }}>
           <Filter size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)', zIndex: 1 }} />
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ paddingLeft: '2rem' }}>
-            <option value="all">All Statuses</option>
-            {DATA_CONFIG.allStatusLabels().map(s => <option key={s}>{s}</option>)}
+            {STATUS_FILTERS.map(opt => (
+              <option key={opt.id} value={opt.id}>{opt.label}</option>
+            ))}
           </select>
         </div>
         <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ minWidth: 140 }}>
@@ -215,25 +219,28 @@ export default function Leads() {
                 </td>
                 <td>
                   <div style={{ minWidth: 155 }}>
-                    <select className="table-inline-select" value={lead.status} onChange={e => { updateLeadStatus(lead.id, e.target.value); showBanner(`✅ ${lead.id} → ${e.target.value}`, 'success'); }}>
-                      <optgroup label="Pipeline">
-                        {['New Enquiry','Contacted','Requirement Discussed','Quotation Requested','Quotation Sent','Negotiation'].map(s => <option key={s}>{s}</option>)}
-                      </optgroup>
-                      <optgroup label="Won">
-                        {['Converted','Purchased','Repeat Customer','Material Dispatched','Material Reached'].map(s => <option key={s}>{s}</option>)}
-                      </optgroup>
-                      <optgroup label="Lost">
-                        {['No Response','Not Interested','No Current Requirement','Invalid Lead','Closed Lost'].map(s => <option key={s}>{s}</option>)}
-                      </optgroup>
-                    </select>
+                    {(() => {
+                      const simpleStatus = DATA_CONFIG.getSimpleStatusLabel(lead.status);
+                      return (
+                        <select className="table-inline-select" value={simpleStatus} onChange={e => {
+                          const resolved = DATA_CONFIG.resolveStatusFromSimple(e.target.value);
+                          updateLeadStatus(lead.id, resolved);
+                          showBanner(`✅ ${lead.id} → ${e.target.value}`, 'success');
+                        }}>
+                          {STATUS_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                     <div style={{ fontSize: '0.68rem', color: payColor(lead.paymentStatus), marginTop: 3 }}>● {lead.paymentStatus || 'Pending'}</div>
-                    {DATA_CONFIG.getLostStatusLabels().includes(lead.status) && (
+                    {DATA_CONFIG.getLostStatusLabels().includes(lead.status) || DATA_CONFIG.getSimpleStatusLabel(lead.status) === 'Lost' ? (
                       <input className="table-inline-input"
                         key={lead.id + '-lr-' + (lead.lostReason || '')}
                         defaultValue={lead.lostReason || ''} placeholder="Lost reason"
                         onBlur={e => { if (e.target.value !== (lead.lostReason || '')) updateLead(lead.id, { lostReason: e.target.value }); }}
                         style={{ marginTop: 3, background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' }} />
-                    )}
+                    ) : null}
                   </div>
                 </td>
                 <td>

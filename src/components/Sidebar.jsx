@@ -64,7 +64,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
     const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `leads_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `indiamart_CRM_REPORT_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     showBanner('📥 Leads exported to CSV', 'success');
   };

@@ -462,7 +462,7 @@ export default function Settings() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Indimart_CRM_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.download = `indiamart_CRM_REPORT_${new Date().toISOString().split('T')[0]}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
       showBanner('✅ Data exported to Excel!', 'success');

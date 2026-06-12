@@ -111,7 +111,7 @@ export default function BulkTools() {
             city: row.city,
             state: row.state,
             source: row.source,
-            gstNo: row.gstNo,
+            gst: row.gstNo,
             status: row.status,
             followUpDate: row.followUpDate,
             lostReason: row.lostReason,

@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 
 export default function BulkTools() {
-  const { leads, messageTemplates, companySettings, updateLeadStatus, updateLead, showBanner } = useApp();
+  const { leads, messageTemplates, companySettings, updateLeadStatus, updateLead, deleteLead, showBanner } = useApp();
   const [selected, setSelected] = useState(new Set());
   const [newStatus, setNewStatus] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
@@ -46,6 +46,14 @@ export default function BulkTools() {
     setSelected(new Set()); setFollowUpDate('');
   };
 
+  const bulkDeleteLeads = () => {
+    if (!selected.size) return;
+    if (!window.confirm(`Are you sure you want to delete ${selected.size} selected leads?`)) return;
+    selected.forEach(id => deleteLead(id));
+    showBanner(`🗑️ Deleted ${selected.size} leads`, 'success');
+    setSelected(new Set());
+  };
+
   const loadTemplate = (tplId) => {
     setSelectedTemplate(tplId);
     const tpl = messageTemplates.find(t => t.id === tplId);
@@ -79,6 +87,7 @@ export default function BulkTools() {
       {/* Quick action buttons */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
         <button className="btn btn-primary" onClick={() => { if (!selected.size) { alert('Select leads first'); return; } setMsgModal(true); }}><MessageCircle size={14} /> Send Messages ({selected.size})</button>
+        <button className="btn btn-danger" onClick={bulkDeleteLeads} disabled={!selected.size} style={{ background: '#ef4444', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>🗑️ Delete Selected ({selected.size})</button>
       </div>
 
       {/* Bulk actions */}

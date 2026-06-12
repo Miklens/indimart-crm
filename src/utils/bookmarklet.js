@@ -4,19 +4,16 @@
 export function generateBookmarkletCode(firebaseConfig) {
   const configStr = JSON.stringify(firebaseConfig);
 
-  /* The code inside this function will run in the user's browser on the IndiaMART page. */
-  /* We stringify the entire function and wrap it in a javascript: URL. */
   const scriptContent = `(function() {
     const config = ${configStr};
     
-    /* 1. Create and inject a beautiful floating panel on the IndiaMART page */
     if (document.getElementById('indimart-sync-panel')) {
       document.getElementById('indimart-sync-panel').remove();
     }
     
     const panel = document.createElement('div');
     panel.id = 'indimart-sync-panel';
-    panel.style.cssText = 'position:fixed; top:20px; right:20px; width:340px; z-index:999999; background:#1e293b; color:#f8fafc; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; border:1px solid #334155; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5); padding:16px; box-sizing:border-box;';
+    panel.style.cssText = 'position:fixed; top:20px; right:20px; width:360px; z-index:999999; background:#1e293b; color:#f8fafc; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; border:1px solid #334155; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5); padding:16px; box-sizing:border-box;';
     
     panel.innerHTML = \`
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid #334155; padding-bottom:8px;">
@@ -27,26 +24,71 @@ export function generateBookmarkletCode(firebaseConfig) {
         <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">START DATE</label>
         <input type="date" id="sync-start-date" style="width:100%; padding:6px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#fff; font-size:13px;" />
       </div>
-      <div style="margin-bottom:16px;">
+      <div style="margin-bottom:12px;">
         <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">END DATE</label>
         <input type="date" id="sync-end-date" style="width:100%; padding:6px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#fff; font-size:13px;" />
       </div>
-      <button id="start-sync-btn" style="width:100%; padding:10px; background:#10b981; border:none; border-radius:6px; color:#fff; font-weight:600; cursor:pointer; font-size:14px; transition:background 0.2s;">
-        Scan & Sync Leads
-      </button>
-      <div id="sync-status" style="margin-top:12px; font-size:12px; color:#94a3b8; line-height:1.4; max-height:120px; overflow-y:auto; border-radius:6px; background:#0f172a; padding:8px; display:none;">
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <button id="start-sync-btn" style="flex:1; padding:10px; background:#10b981; border:none; border-radius:6px; color:#fff; font-weight:600; cursor:pointer; font-size:13px;">
+          Scan & Sync
+        </button>
+        <button id="debug-dom-btn" style="padding:10px; background:#475569; border:none; border-radius:6px; color:#fff; font-weight:600; cursor:pointer; font-size:13px;" title="Analyze Page elements to find target classes">
+          🔍 Inspect Page
+        </button>
+      </div>
+      <div id="sync-status" style="margin-top:12px; font-size:12px; color:#94a3b8; line-height:1.4; max-height:200px; overflow-y:auto; border-radius:6px; background:#0f172a; padding:8px; display:none;">
       </div>
     \`;
     
     document.body.appendChild(panel);
     
-    /* Set default dates (past 7 days) */
     const today = new Date().toISOString().split('T')[0];
     const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     document.getElementById('sync-start-date').value = past7;
     document.getElementById('sync-end-date').value = today;
     
     document.getElementById('close-sync-panel').onclick = () => panel.remove();
+    
+    /* Debug DOM to find the exact selectors on the page */
+    document.getElementById('debug-dom-btn').onclick = () => {
+      const statusDiv = document.getElementById('sync-status');
+      statusDiv.style.display = 'block';
+      statusDiv.innerHTML = '<b>Analyzing page classes...</b><br>';
+      
+      const elements = Array.from(document.querySelectorAll('*'));
+      const classMap = {};
+      elements.forEach(el => {
+        if (el.className && typeof el.className === 'string') {
+          el.className.split(/\\s+/).forEach(cls => {
+            if (cls) classMap[cls] = (classMap[cls] || 0) + 1;
+          });
+        }
+      });
+      
+      /* Print top 20 most common classes */
+      const sortedClasses = Object.entries(classMap).sort((a,b) => b[1] - a[1]).slice(0, 25);
+      statusDiv.innerHTML += '<b>Common Class Names found:</b><br>';
+      sortedClasses.forEach(([cls, count]) => {
+        statusDiv.innerHTML += \`.\${cls} (\${count} times)<br>\`;
+      });
+      
+      /* Look for elements containing contact names and list them */
+      statusDiv.innerHTML += '<br><b>Contact List elements check:</b><br>';
+      const contactContainers = Array.from(document.querySelectorAll('div, li, span')).filter(el => {
+        return el.innerText && (el.innerText.includes('YERR') || el.innerText.includes('PRAV') || el.innerText.includes('Saya'));
+      });
+      
+      if (contactContainers.length > 0) {
+        statusDiv.innerHTML += \`Found \${contactContainers.length} matching text containers.<br>\`;
+        contactContainers.slice(0, 5).forEach((el, idx) => {
+          const tagName = el.tagName.toLowerCase();
+          const className = el.className || 'no class';
+          statusDiv.innerHTML += \`[\${idx}] &lt;\${tagName} class="\${className}"&gt; (text: "\${el.innerText.substring(0, 40)}...")<br>\`;
+        });
+      } else {
+        statusDiv.innerHTML += 'No elements matched contact text names.<br>';
+      }
+    };
     
     document.getElementById('start-sync-btn').onclick = async () => {
       const statusDiv = document.getElementById('sync-status');
@@ -60,23 +102,20 @@ export function generateBookmarkletCode(firebaseConfig) {
       const endLimit = endDateVal ? new Date(endDateVal) : null;
       if (endLimit) endLimit.setHours(23, 59, 59, 999);
       
-      /* 2. Perform intelligent scraping of lead cards */
-      const leadCards = Array.from(document.querySelectorAll([
+      /* Try both standard card selectors and list item elements */
+      const selectors = [
         '.eq-card', '.lead-card', '.enq-card', '.card', '.leads-card',
-        '[class*="LeadCard"]', '[class*="EnquiryCard"]', '[class*="card-enquiry"]'
-      ].join(','))).filter(el => {
-        return el.innerText.match(/\\b\\d{10}\\b/) || el.innerText.match(/\\+91/);
+        'div[class*="contact"]', 'div[class*="item"]', 'li[class*="item"]',
+        'div[class*="thread"]', 'div[class*="chat"]', 'li[class*="chat"]'
+      ];
+      
+      const leadCards = Array.from(document.querySelectorAll(selectors.join(','))).filter(el => {
+        /* Filter out outer wrappers by ensuring it has relatively short text or is a distinct block */
+        const text = el.innerText || '';
+        return text.length > 10 && text.length < 500 && (text.includes('Karnataka') || text.includes('Bengal') || text.includes('Maharashtra') || text.match(/\\b\\d{10}\\b/) || text.match(/\\+91/));
       });
       
-      statusDiv.innerHTML += \`Found \${leadCards.length} potential lead cards on page.<br>\`;
-      
-      if (leadCards.length === 0) {
-        statusDiv.innerHTML += 'Trying fallback page scan...<br>';
-        const bodyText = document.body.innerText;
-        if (!window.location.hostname.includes('indiamart.com')) {
-          statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ Warning: You are not on indiamart.com</span><br>';
-        }
-      }
+      statusDiv.innerHTML += \`Found \${leadCards.length} potential contact items.<br>\`;
       
       let syncedCount = 0;
       let skippedCount = 0;
@@ -86,74 +125,40 @@ export function generateBookmarkletCode(firebaseConfig) {
         try {
           const text = card.innerText;
           
-          /* Parse Phone Number */
+          /* Parse Contact Phone Number or default to empty since they are listed */
           const phoneMatch = text.match(/(\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/);
-          if (!phoneMatch) continue;
-          const contact = phoneMatch[2];
+          const contact = phoneMatch ? phoneMatch[2] : '0000000000';
           
-          /* Parse Customer Name */
           let customerName = 'Unknown Buyer';
-          const nameEl = card.querySelector([
-            'h3', 'h4', '.name', '.buyer-name', '[class*="name"]', '[class*="BuyerName"]'
-          ].join(','));
-          if (nameEl && nameEl.innerText.trim()) {
-            customerName = nameEl.innerText.trim();
-          } else {
-            const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 2);
-            if (lines.length > 0) customerName = lines[0];
-          }
+          const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 1);
+          if (lines.length > 0) customerName = lines[0];
           
-          /* Parse Product Name */
           let product = 'IndiaMART Enquiry';
-          const prodEl = card.querySelector([
-            '.prod-name', '.product', '[class*="product"]', '[class*="ProductName"]', 'a[href*="/proddetail"]'
-          ].join(','));
-          if (prodEl && prodEl.innerText.trim()) {
-            product = prodEl.innerText.trim();
-          } else {
-            const lines = text.split('\\n');
-            const prLine = lines.find(l => l.toLowerCase().includes('requirement for') || l.toLowerCase().includes('interested in'));
-            if (prLine) product = prLine.replace(/requirement for/i, '').replace(/interested in/i, '').trim();
+          /* Check if there is a product text on the card */
+          if (lines.length > 2) {
+            product = lines[2];
+          } else if (lines.length > 1) {
+            product = lines[1];
           }
           
-          /* Parse Location (City/State) */
           let city = '';
           let state = '';
-          const locMatch = text.match(/(?:Location|City|Address|From):?\\s*([a-zA-Z\\s]+),\\s*([a-zA-Z\\s]+)/i);
-          if (locMatch) {
-            city = locMatch[1].trim();
-            state = locMatch[2].trim();
-          } else {
-            const locEl = card.querySelector('[class*="location"], [class*="address"], .city');
-            if (locEl) {
-              const parts = locEl.innerText.split(',');
-              city = parts[0]?.trim() || '';
-              state = parts[1]?.trim() || '';
-            }
+          const locationLine = lines.find(l => l.includes(',') && (l.includes('Karnataka') || l.includes('Bengal') || l.includes('Maharashtra') || l.includes('India')));
+          if (locationLine) {
+            const parts = locationLine.split(',');
+            city = parts[0]?.trim() || '';
+            state = parts[1]?.trim() || '';
           }
           
-          /* Parse Enquiry Date */
           let leadDate = new Date();
-          const dateEl = card.querySelector('[class*="date"], .time, .enq-date');
-          if (dateEl) {
-            const dateStr = dateEl.innerText.trim();
-            const parsed = Date.parse(dateStr);
-            if (!isNaN(parsed)) {
-              leadDate = new Date(parsed);
-            }
-          }
           
-          /* Check date limits */
           if (startLimit && leadDate < startLimit) { skippedCount++; continue; }
           if (endLimit && leadDate > endLimit) { skippedCount++; continue; }
           
           const formattedDate = leadDate.toISOString().split('T')[0];
-          
-          /* Create deterministic document ID to prevent duplicates */
           const cleanProd = product.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
-          const docId = \`IM_\${contact}_\${formattedDate}_\${cleanProd}\`;
+          const docId = \`IM_\${contact || 'nomobile'}_\${formattedDate}_\${cleanProd}\`;
           
-          /* Construct the lead object */
           const leadPayload = {
             id: docId,
             date: formattedDate,
@@ -163,7 +168,7 @@ export function generateBookmarkletCode(firebaseConfig) {
             status: 'New Enquiry',
             followUpDate: '',
             orderValue: 0,
-            remarks: 'Imported via IndiaMART Bookmarklet',
+            remarks: 'Imported via IndiaMART MessageCentre',
             state: state,
             city: city,
             source: 'IndiaMART Direct',
@@ -172,10 +177,8 @@ export function generateBookmarkletCode(firebaseConfig) {
             history: [{ status: 'New Enquiry', timestamp: Date.now() }]
           };
           
-          /* Save directly to Firestore using REST API */
           const url = \`https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads/\${docId}?updateMask.fieldPaths=id&updateMask.fieldPaths=date&updateMask.fieldPaths=customerName&updateMask.fieldPaths=contact&updateMask.fieldPaths=product&updateMask.fieldPaths=status&updateMask.fieldPaths=remarks&updateMask.fieldPaths=state&updateMask.fieldPaths=city&updateMask.fieldPaths=source&updateMask.fieldPaths=timestamp&updateMask.fieldPaths=productList&updateMask.fieldPaths=history\`;
           
-          /* Formulate Firestore Fields */
           const firestoreFields = {};
           Object.keys(leadPayload).forEach(key => {
             const val = leadPayload[key];
@@ -216,18 +219,14 @@ export function generateBookmarkletCode(firebaseConfig) {
             statusDiv.innerHTML += \`✔️ Synced: \${customerName} (\${product})<br>\`;
           } else {
             errorCount++;
-            const errText = await response.text();
-            console.error('Firestore save failed:', errText);
-            statusDiv.innerHTML += \`❌ Failed: \${customerName} (API Error)<br>\`;
           }
           
         } catch (e) {
           errorCount++;
-          console.error(e);
         }
       }
       
-      statusDiv.innerHTML += \`<br><strong style="color:#10b981;">Sync Complete!</strong><br>Synced: \${syncedCount}<br>Skipped (date range): \${skippedCount}<br>Failed: \${errorCount}\`;
+      statusDiv.innerHTML += \`<br><strong style="color:#10b981;">Scan Done!</strong><br>Found: \${leadCards.length}<br>Synced: \${syncedCount}<br>Failed/Skipped: \${errorCount + skippedCount}\`;
     };
   })();`;
 

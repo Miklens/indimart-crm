@@ -76,7 +76,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
       let nextIdNum = 1;
       const existingLeads = [];
       try {
-        const fetchUrl = `https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads?pageSize=1000`;
+        const fetchUrl = \`https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads?pageSize=1000\`;
         const res = await fetch(fetchUrl);
         if (res.ok) {
           const data = await res.json();

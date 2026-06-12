@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Save, Upload, X, Wifi, Download, Upload as UploadIcon, RefreshCw, Trash2, Flame, CheckCircle, AlertCircle, Settings2, Eye, EyeOff, Bookmark } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getStoredFirebaseConfig, saveFirebaseConfig, clearFirebaseConfig, reinitFirebase, isFirebaseConfigured } from '../firebase';
@@ -31,6 +31,13 @@ export default function Settings() {
   }) : null;
 
   const bookmarkletUrl = activeConfig ? generateBookmarkletCode(activeConfig) : '';
+  const bookmarkletLinkRef = useRef(null);
+
+  useEffect(() => {
+    if (bookmarkletLinkRef.current && bookmarkletUrl) {
+      bookmarkletLinkRef.current.setAttribute('href', bookmarkletUrl);
+    }
+  }, [bookmarkletUrl]);
 
   const handleSaveFirebase = async () => {
     if (!fbForm.apiKey || !fbForm.projectId || !fbForm.appId) {
@@ -756,14 +763,14 @@ export default function Settings() {
                 <li>Select your date range and click <strong>"Scan &amp; Sync Leads"</strong>.</li>
               </ol>
 
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <a
-                  href={bookmarkletUrl}
+                  ref={bookmarkletLinkRef}
                   className="btn btn-primary"
                   onClick={e => {
                     // Prevent navigation if clicked directly
                     e.preventDefault();
-                    alert("Drag this button to your Browser's Bookmarks bar instead of clicking it!");
+                    alert("Drag this button to your Browser's Bookmarks bar instead of clicking it! Alternatively, use the Copy Code button.");
                   }}
                   style={{
                     cursor: 'grab',
@@ -782,7 +789,22 @@ export default function Settings() {
                 >
                   <Bookmark size={14} /> Sync to CRM (Drag Me)
                 </a>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>← Drag this button up to your bookmarks bar!</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    if (bookmarkletUrl) {
+                      navigator.clipboard.writeText(bookmarkletUrl);
+                      showBanner('📋 Bookmarklet code copied to clipboard!', 'success');
+                    }
+                  }}
+                  style={{ fontSize: '0.82rem', padding: '0.5rem 1rem' }}
+                >
+                  Copy Code
+                </button>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                  ← Drag to bookmarks bar, or click 'Copy Code' and paste it as the bookmark URL!
+                </span>
               </div>
             </div>
           ) : (

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { MessageCircle, X, Upload, CheckCircle } from 'lucide-react';
+import { MessageCircle, X, Upload, CheckCircle, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 import { fsSetLead } from '../services/firestoreService';
 
 export default function BulkTools() {
-  const { leads, messageTemplates, companySettings, updateLeadStatus, updateLead, deleteLead, showBanner } = useApp();
+  const { leads, messageTemplates, companySettings, updateLeadStatus, updateLead, deleteLead, showBanner, updateInvoiceField, invoiceHistory } = useApp();
   const [selected, setSelected] = useState(new Set());
   const [newStatus, setNewStatus] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
@@ -22,11 +22,112 @@ export default function BulkTools() {
   const [restoreStatus, setRestoreStatus] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
 
+  const [masterSelections, setMasterSelections] = useState({});
+
   const normalizeContact = (raw) => {
     if (!raw) return '';
     const digits = String(raw).replace(/\D/g, '');
     if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
     return digits.slice(-10);
+  };
+
+  // Group leads by normalized contact numbers to find duplicates
+  const groupedContacts = {};
+  leads.forEach(l => {
+    const norm = normalizeContact(l.contact);
+    if (!norm || norm.length < 10) return;
+    if (!groupedContacts[norm]) groupedContacts[norm] = [];
+    groupedContacts[norm].push(l);
+  });
+
+  const duplicateGroups = Object.entries(groupedContacts)
+    .filter(([_, group]) => group.length > 1)
+    .map(([contact, group]) => ({ contact, group }));
+
+  const handleMerge = async (contact, group) => {
+    const masterId = masterSelections[contact] || group[0].id;
+    const masterLead = group.find(l => l.id === masterId);
+    const duplicates = group.filter(l => l.id !== masterId);
+
+    if (!window.confirm(`Are you sure you want to merge these duplicate leads into ${masterLead.customerName} (${masterLead.id})? This will combine products, remarks, and update invoices.`)) {
+      return;
+    }
+
+    try {
+      // 1. Combine product rows
+      const masterProds = masterLead.productList?.length 
+        ? masterLead.productList 
+        : [{ name: masterLead.product, qty: 1, price: masterLead.orderValue, gst: '5', hsn: '' }];
+      
+      let mergedProducts = [...masterProds];
+      duplicates.forEach(d => {
+        const dProds = d.productList?.length 
+          ? d.productList 
+          : [{ name: d.product, qty: 1, price: d.orderValue, gst: '5', hsn: '' }];
+        mergedProducts = [...mergedProducts, ...dProds];
+      });
+
+      // Remove empty or placeholder items
+      mergedProducts = mergedProducts.filter(p => p.name?.trim());
+
+      // 2. Recalculate combined order value
+      const newOrderValue = mergedProducts.reduce((sum, p) => {
+        const base = (parseFloat(p.price) || 0) * (parseFloat(p.qty) || 0);
+        const tax = base * ((parseFloat(p.gst) || 0) / 100);
+        return sum + base + tax;
+      }, 0);
+
+      // 3. Combine remarks
+      const combinedRemarks = [
+        masterLead.remarks,
+        ...duplicates.map(d => d.remarks)
+      ].filter(Boolean).join('\n---\n');
+
+      // 4. Combine history logs chronologically
+      let combinedHistory = [...(masterLead.history || [])];
+      duplicates.forEach(d => {
+        combinedHistory = [...combinedHistory, ...(d.history || [])];
+      });
+      combinedHistory.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      combinedHistory.push({
+        status: masterLead.status,
+        timestamp: Date.now(),
+        note: `Merged duplicate leads: ${duplicates.map(d => d.id).join(', ')}`
+      });
+
+      // 5. Fallback fields (if master doesn't have it, but one of duplicates does)
+      const updates = {
+        productList: mergedProducts,
+        product: mergedProducts.map(p => p.name).join(', '),
+        orderValue: parseFloat(newOrderValue.toFixed(2)),
+        remarks: combinedRemarks,
+        history: combinedHistory,
+        city: masterLead.city || duplicates.find(d => d.city)?.city || '',
+        state: masterLead.state || duplicates.find(d => d.state)?.state || '',
+        gst: masterLead.gst || duplicates.find(d => d.gst)?.gst || '',
+        source: masterLead.source || duplicates.find(d => d.source)?.source || 'Other',
+      };
+
+      // 6. Update master lead
+      await updateLead(masterLead.id, updates);
+
+      // 7. Update any invoices pointing to deleted duplicates
+      const deletedIds = new Set(duplicates.map(d => d.id));
+      const linkedInvoices = invoiceHistory.filter(inv => deletedIds.has(inv.leadId));
+      for (const inv of linkedInvoices) {
+        await updateInvoiceField(inv.invoiceNumber, 'leadId', masterLead.id);
+      }
+
+      // 8. Delete duplicate leads
+      for (const d of duplicates) {
+        await deleteLead(d.id);
+      }
+
+      showBanner(`✅ Merged duplicate group into ${masterLead.id}!`, 'success');
+    } catch (err) {
+      console.error(err);
+      showBanner(`❌ Merge failed: ${err.message}`, 'error');
+    }
   };
 
   const parseExcelDate = (val) => {
@@ -339,6 +440,95 @@ export default function BulkTools() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* 👯‍♂️ Duplicate Lead Merging */}
+      <div className="glass-card" style={{ marginBottom: '1.25rem', border: '1px solid rgba(139,92,246,0.3)' }}>
+        <h4 style={{ marginBottom: '0.5rem', color: '#8b5cf6', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          👯‍♂️ Duplicate Lead Merging &amp; Deduplication
+        </h4>
+        <p style={{ margin: '0 0 1rem 0', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+          Identify leads sharing the same normalized contact number. Merge them to consolidate product lists, order values, chronological histories, and update invoice links.
+        </p>
+
+        {duplicateGroups.length === 0 ? (
+          <div style={{ fontSize: '0.78rem', color: '#10b981', padding: '0.5rem 0', fontWeight: 600 }}>
+            ✓ No duplicate leads detected in your current database.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {duplicateGroups.map(({ contact, group }) => {
+              const currentMasterId = masterSelections[contact] || group[0].id;
+              return (
+                <div key={contact} style={{ border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.75rem', background: 'rgba(255,255,255,0.01)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem', borderBottom: '1px dashed var(--glass-border)', paddingBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+                      📞 Group: {contact} <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>({group.length} duplicates)</span>
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Master Lead:</span>
+                      <select 
+                        value={currentMasterId} 
+                        onChange={e => setMasterSelections(prev => ({ ...prev, [contact]: e.target.value }))}
+                        style={{ fontSize: '0.75rem', padding: '2px 8px', minWidth: 120 }}
+                      >
+                        {group.map(l => (
+                          <option key={l.id} value={l.id}>{l.id} - {l.customerName}</option>
+                        ))}
+                      </select>
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ padding: '0.3rem 0.8rem', fontSize: '0.75rem', background: 'linear-gradient(135deg,#8b5cf6,#6366f1)', border: 'none' }}
+                        onClick={() => handleMerge(contact, group)}
+                      >
+                        Merge Group
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ margin: 0, fontSize: '0.72rem' }}>
+                      <thead>
+                        <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+                          <th style={{ width: 60 }}>Role</th>
+                          <th>Lead ID</th>
+                          <th>Date</th>
+                          <th>Customer Name</th>
+                          <th>Product(s)</th>
+                          <th>Status</th>
+                          <th>Value</th>
+                          <th>Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.map(lead => {
+                          const isMaster = lead.id === currentMasterId;
+                          return (
+                            <tr key={lead.id} style={{ background: isMaster ? 'rgba(139,92,246,0.05)' : undefined }}>
+                              <td style={{ fontWeight: 700, color: isMaster ? '#8b5cf6' : 'var(--text-dim)' }}>
+                                {isMaster ? '★ MASTER' : 'DUPLICATE'}
+                              </td>
+                              <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{lead.id}</td>
+                              <td>{lead.date}</td>
+                              <td style={{ fontWeight: 600 }}>{lead.customerName}</td>
+                              <td>{lead.product || lead.productList?.map(p => p.name).join(', ')}</td>
+                              <td>
+                                <span className="status-dot" style={{ background: DATA_CONFIG.getStatusColor(lead.status), marginRight: 4 }} />
+                                {DATA_CONFIG.getSimpleStatusLabel(lead.status)}
+                              </td>
+                              <td style={{ fontWeight: 600 }}>₹{(lead.orderValue || 0).toLocaleString()}</td>
+                              <td style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={lead.remarks}>{lead.remarks}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

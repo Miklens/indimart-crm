@@ -668,3 +668,170 @@ tr:hover td { background: var(--row-hover); }
   border-radius: 3px; padding: 1px 5px; font-size: 0.62rem;
   color: var(--text-dim); font-family: inherit; margin-right: 2px;
 }
+
+/* ═══════════════════════════════════════════════════════
+   CALENDAR VIEW
+   ═══════════════════════════════════════════════════════ */
+.calendar-view {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.calendar-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calendar-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-input);
+  border: 1px solid var(--glass-border);
+  border-radius: 0.5rem;
+  color: var(--text-main);
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.calendar-nav-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--glass-border);
+  border-bottom-left-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.calendar-day {
+  background: var(--bg-card);
+  min-height: 110px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: background-color 0.2s ease;
+}
+
+.calendar-day.outside-month {
+  background: var(--bg-card2);
+  opacity: 0.45;
+}
+
+.calendar-day.today-day {
+  background: var(--primary-light);
+}
+
+.calendar-day.today-day::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--primary);
+}
+
+.calendar-day.drag-over {
+  background: rgba(16, 185, 129, 0.15);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.calendar-day-number {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 0.25rem;
+  align-self: flex-end;
+}
+
+.calendar-day.outside-month .calendar-day-number {
+  color: var(--text-muted);
+}
+
+.calendar-day-tasks {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 95px;
+  padding-right: 2px;
+}
+
+/* Custom Scrollbar for tasks list */
+.calendar-day-tasks::-webkit-scrollbar {
+  width: 3px;
+}
+.calendar-day-tasks::-webkit-scrollbar-track {
+  background: transparent;
+}
+.calendar-day-tasks::-webkit-scrollbar-thumb {
+  background: var(--glass-border-strong);
+  border-radius: 10px;
+}
+
+.calendar-task-badge {
+  font-size: 0.72rem;
+  padding: 4px 6px;
+  border-radius: 0.25rem;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: grab;
+  user-select: none;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.calendar-task-badge:active {
+  cursor: grabbing;
+  transform: scale(0.96);
+}
+
+.calendar-task-badge:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  filter: brightness(1.08);
+}
+

@@ -405,7 +405,7 @@ export function AppProvider({ children }) {
         if (inv.invoiceNumber !== invoiceNumber) return inv;
         const versions = [...(inv.versions || [])];
         if (versions.length > 0) versions[versions.length - 1] = { ...versions[versions.length - 1], [field]: value };
-        return { ...inv, versions };
+        return { ...inv, [field]: value, versions };
       });
       persist('indimart_invoice_history', updated);
       syncPaymentToLead(updated, invoiceNumber);

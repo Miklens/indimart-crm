@@ -175,8 +175,16 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
           }
           
           /* Check date range */
-          if (startLimit && leadDate < startLimit) { skippedCount++; continue; }
-          if (endLimit && leadDate > endLimit) { skippedCount++; continue; }
+          if (startLimit && leadDate < startLimit) {
+            statusDiv.innerHTML += \`  [Skip] Date (\${leadDate.toISOString().split('T')[0]}) is before Start Date (\${startLimit.toISOString().split('T')[0]})<br>\`;
+            skippedCount++;
+            continue;
+          }
+          if (endLimit && leadDate > endLimit) {
+            statusDiv.innerHTML += \`  [Skip] Date (\${leadDate.toISOString().split('T')[0]}) is after End Date (\${endLimit.toISOString().split('T')[0]})<br>\`;
+            skippedCount++;
+            continue;
+          }
           
           const formattedDate = leadDate.toISOString().split('T')[0];
           

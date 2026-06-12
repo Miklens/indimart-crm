@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Save, Upload, X, Wifi, Download, Upload as UploadIcon, RefreshCw, Trash2, Flame, CheckCircle, AlertCircle, Settings2, Eye, EyeOff, Bookmark } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { getStoredFirebaseConfig, saveFirebaseConfig, clearFirebaseConfig, reinitFirebase, isFirebaseConfigured } from '../firebase';
+import { getStoredFirebaseConfig, saveFirebaseConfig, clearFirebaseConfig, reinitFirebase, isFirebaseConfigured, getFirebaseConfig } from '../firebase';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
 import MigrationWizard from '../components/MigrationWizard';
 import { generateBookmarkletCode } from '../utils/bookmarklet';
@@ -21,15 +21,7 @@ export default function Settings() {
   const [fbSecrets, setFbSecrets] = useState({});
   const [fbSaving, setFbSaving] = useState(false);
 
-  const envConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  };
-  const activeConfig = fbConfigured ? { ...envConfig, ...(getStoredFirebaseConfig() || {}) } : null;
+  const activeConfig = fbConfigured ? getFirebaseConfig() : null;
 
   const bookmarkletUrl = activeConfig ? generateBookmarkletCode(activeConfig) : '';
   const bookmarkletLinkRef = useRef(null);

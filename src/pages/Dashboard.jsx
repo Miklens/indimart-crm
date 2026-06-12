@@ -154,11 +154,15 @@ export default function Dashboard() {
     return () => { Object.values(chartsRef.current).forEach(c => c?.destroy()); };
   }, [leads, invoiceHistory]);
 
-  const ChartCard = ({ title, canvasKey, height = 200 }) => (
+  const ChartCard = ({ title, canvasKey, height = 200, hasData = true }) => (
     <div className="glass-card" style={{ padding: '1rem' }}>
       <h4 style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</h4>
-      <div style={{ height }}>
-        <canvas ref={canvasRefs[canvasKey]} />
+      <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {hasData ? (
+          <canvas ref={canvasRefs[canvasKey]} />
+        ) : (
+          <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', textAlign: 'center' }}>No data available</div>
+        )}
       </div>
     </div>
   );
@@ -241,12 +245,12 @@ export default function Dashboard() {
 
       {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-        <ChartCard title="Lead Status Distribution" canvasKey="dist" />
-        <ChartCard title="Lost Reason Analysis" canvasKey="lost" />
-        <ChartCard title="Top Products by Revenue" canvasKey="product" />
-        <ChartCard title="City-wise Revenue" canvasKey="city" />
-        <ChartCard title="Sales Funnel" canvasKey="funnel" />
-        <ChartCard title="Monthly Revenue Trend" canvasKey="trend" />
+        <ChartCard title="Lead Status Distribution" canvasKey="dist" hasData={leads.length > 0} />
+        <ChartCard title="Lost Reason Analysis" canvasKey="lost" hasData={leads.filter(l => DATA_CONFIG.getLostStatusLabels().includes(l.status)).length > 0} />
+        <ChartCard title="Top Products by Revenue" canvasKey="product" hasData={leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).length > 0} />
+        <ChartCard title="City-wise Revenue" canvasKey="city" hasData={leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).length > 0} />
+        <ChartCard title="Sales Funnel" canvasKey="funnel" hasData={leads.length > 0} />
+        <ChartCard title="Monthly Revenue Trend" canvasKey="trend" hasData={leads.filter(l => l.date).length > 0} />
       </div>
 
       {leads.length === 0 && (

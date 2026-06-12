@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react';
-import { Save, Upload, X, Wifi, Download, Upload as UploadIcon, RefreshCw, Trash2, Flame, CheckCircle, AlertCircle, Settings2, Eye, EyeOff } from 'lucide-react';
+import { Save, Upload, X, Wifi, Download, Upload as UploadIcon, RefreshCw, Trash2, Flame, CheckCircle, AlertCircle, Settings2, Eye, EyeOff, Bookmark } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getStoredFirebaseConfig, saveFirebaseConfig, clearFirebaseConfig, reinitFirebase, isFirebaseConfigured } from '../firebase';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
 import MigrationWizard from '../components/MigrationWizard';
+import { generateBookmarkletCode } from '../utils/bookmarklet';
 
 export default function Settings() {
   const { companySettings, saveSettings, gsUrl, saveGsUrl, autoSyncEnabled, toggleAutoSync, testConnection, pullFromSheets, pushToSheets, fullSync, clearLocalCache, isSyncing, showBanner, leads, invoiceHistory } = useApp();
@@ -19,6 +20,17 @@ export default function Settings() {
   const [fbForm, setFbForm] = useState(() => getStoredFirebaseConfig() || { apiKey: '', authDomain: '', projectId: '', storageBucket: '', messagingSenderId: '', appId: '' });
   const [fbSecrets, setFbSecrets] = useState({});
   const [fbSaving, setFbSaving] = useState(false);
+
+  const activeConfig = fbConfigured ? (getStoredFirebaseConfig() || {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  }) : null;
+
+  const bookmarkletUrl = activeConfig ? generateBookmarkletCode(activeConfig) : '';
 
   const handleSaveFirebase = async () => {
     if (!fbForm.apiKey || !fbForm.projectId || !fbForm.appId) {
@@ -722,6 +734,61 @@ export default function Settings() {
                 <span><strong>Auto-backup on save</strong> — {autoSyncEnabled ? 'every save silently mirrors to Sheets' : 'OFF — use manual Push button above'}</span>
               </label>
             </>
+          )}
+        </div>
+
+        {/* IndiaMART Bookmarklet Sync */}
+        <div className="glass-card" style={{ gridColumn: '1 / -1', border: fbConfigured ? '1px solid rgba(16,185,129,0.3)' : '1px solid var(--glass-border)' }}>
+          <h3 style={{ marginBottom: '0.75rem', fontSize: '1rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Bookmark size={16} /> IndiaMART Bookmarklet Sync
+          </h3>
+          <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+            Directly sync leads from your IndiaMART Seller Panel without needing API access or manual copy-pasting. Drag the green button below to your bookmarks bar, log into IndiaMART, and click it to scan.
+          </p>
+
+          {fbConfigured ? (
+            <div style={{ background: 'rgba(0,0,0,0.15)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)' }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', color: '#10b981' }}>How to setup:</h4>
+              <ol style={{ fontSize: '0.75rem', color: 'var(--text-dim)', paddingLeft: '1.25rem', margin: '0 0 1rem 0', lineHeight: 1.5 }}>
+                <li>Drag the <strong>"Sync to CRM"</strong> button below to your Bookmarks Bar (Ctrl+Shift+B / Cmd+Shift+B to show bookmarks bar).</li>
+                <li>Open and log into your <a href="https://seller.indiamart.com/" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>IndiaMART Seller Panel</a>.</li>
+                <li>On the Seller Panel, click the saved <strong>"Sync to CRM"</strong> bookmark.</li>
+                <li>Select your date range and click <strong>"Scan &amp; Sync Leads"</strong>.</li>
+              </ol>
+
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                <a
+                  href={bookmarkletUrl}
+                  className="btn btn-primary"
+                  onClick={e => {
+                    // Prevent navigation if clicked directly
+                    e.preventDefault();
+                    alert("Drag this button to your Browser's Bookmarks bar instead of clicking it!");
+                  }}
+                  style={{
+                    cursor: 'grab',
+                    background: 'linear-gradient(135deg,#10b981,#059669)',
+                    border: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.6rem 1.25rem',
+                    borderRadius: '0.5rem',
+                    color: '#fff',
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  <Bookmark size={14} /> Sync to CRM (Drag Me)
+                </a>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>← Drag this button up to your bookmarks bar!</span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '1rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.5rem', fontSize: '0.8rem', color: '#fca5a5' }}>
+              ⚠️ Please configure and connect your **Firebase Database** above first to enable the IndiaMART Bookmarklet generator.
+            </div>
           )}
         </div>
 

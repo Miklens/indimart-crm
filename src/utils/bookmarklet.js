@@ -1,8 +1,8 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  */
-export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = []) {
-  const configStr = JSON.stringify(firebaseConfig);
+export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
+  const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
   const catalogStr = JSON.stringify(catalogProducts);
   
   const mappedLeads = (crmLeads || []).map(l => ({
@@ -24,6 +24,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
   const scriptContent = `(function() {
     const config = ${configStr};
+    const sellerMobileDigits = String(config.sellerMobile || '').replace(/[^0-9]/g, '').slice(-10);
     const catalogProducts = ${catalogStr};
     const existingLeads = ${existingLeadsStr};
     let nextIdNum = ${calculatedNextIdNum};
@@ -153,7 +154,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             const cleanDigits = line.replace(/[^0-9]/g, '');
             if (cleanDigits.length >= 10) {
               const last10 = cleanDigits.slice(-10);
-              if (last10[0] >= '6' && last10[0] <= '9' && last10 !== config.sellerMobile) {
+              if (last10[0] >= '6' && last10[0] <= '9' && last10 !== sellerMobileDigits) {
                 contact = last10;
                 break;
               }
@@ -168,7 +169,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             const searchArea = rightCol ? rightCol.innerText : bodyText;
             const matches = [];
             while ((phoneMatch = phoneRegex.exec(searchArea)) !== null) {
-              if (phoneMatch[1] !== config.sellerMobile) {
+              if (phoneMatch[1] !== sellerMobileDigits) {
                 matches.push(phoneMatch[1]);
               }
             }
@@ -178,7 +179,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             } else {
               const globalMatches = [];
               while ((phoneMatch = phoneRegex.exec(bodyText)) !== null) {
-                if (phoneMatch[1] !== config.sellerMobile) {
+                if (phoneMatch[1] !== sellerMobileDigits) {
                   globalMatches.push(phoneMatch[1]);
                 }
               }

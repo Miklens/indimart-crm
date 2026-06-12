@@ -114,8 +114,24 @@ export default function Leads() {
     if (activeTab === 'delivered') matchTab = l.status === 'Material Reached';
     return matchSearch && matchStatus && matchSource && matchTab;
   }).sort((a, b) => {
-    const d = new Date(b.date) - new Date(a.date);
-    return d !== 0 ? d : (b.timestamp || 0) - (a.timestamp || 0);
+    const toDate = (str) => {
+      if (!str) return new Date(0);
+      if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+        const [d, m, y] = str.split('-');
+        return new Date(`${y}-${m}-${d}`);
+      }
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? new Date(0) : d;
+    };
+    const dateDiff = toDate(b.date) - toDate(a.date);
+    if (dateDiff !== 0) return dateDiff;
+    
+    const getNum = (id) => {
+      const match = String(id || '').match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+    const idDiff = getNum(b.id) - getNum(a.id);
+    return idDiff !== 0 ? idDiff : (b.timestamp || 0) - (a.timestamp || 0);
   });
 
   const handleDelete = (id) => {

@@ -73,6 +73,19 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       statusDiv.style.display = 'block';
       statusDiv.innerHTML = 'Initializing sync...<br>';
       
+      // Scroll list container to top first
+      const firstCard = document.querySelector('.lftcntctnew');
+      if (firstCard) {
+        firstCard.scrollIntoView({ block: 'start' });
+        let p = firstCard.parentElement;
+        while (p && p !== document.body) {
+          p.scrollTop = 0;
+          p.dispatchEvent(new Event('scroll', { bubbles: true }));
+          p = p.parentElement;
+        }
+      }
+      await new Promise(r => setTimeout(r, 1000));
+      
       const startDateVal = document.getElementById('sync-start-date').value;
       const endDateVal = document.getElementById('sync-end-date').value;
       const startLimit = startDateVal ? new Date(startDateVal) : null;

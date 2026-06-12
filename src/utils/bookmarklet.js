@@ -51,9 +51,7 @@ export function generateBookmarkletCode(firebaseConfig) {
       statusDiv.style.display = 'block';
       statusDiv.innerHTML = 'Finding contacts on page...<br>';
       
-      /* Get all contacts in the sidebar matching the targeted class .lftcntctnew */
       const leadCards = Array.from(document.querySelectorAll('.lftcntctnew'));
-      
       statusDiv.innerHTML += \`Found \${leadCards.length} contacts on left panel.<br>\`;
       
       if (leadCards.length === 0) {
@@ -71,31 +69,25 @@ export function generateBookmarkletCode(firebaseConfig) {
       let skippedCount = 0;
       let errorCount = 0;
       
-      statusDiv.innerHTML += '<b>Starting auto-click sync loop...</b><br>';
+      statusDiv.innerHTML += '<b>Starting sync loop...</b><br>';
       
       for (let i = 0; i < leadCards.length; i++) {
         const card = leadCards[i];
         try {
-          /* Extract Name from the card */
           const nameEl = card.querySelector('.fs14.fwb');
           const customerName = nameEl ? nameEl.innerText.trim() : 'Unknown Buyer';
           
           statusDiv.innerHTML += \`Scanning [\${i+1}/\${leadCards.length}]: \${customerName}...<br>\`;
           statusDiv.scrollTop = statusDiv.scrollHeight;
           
-          /* Click the contact to load details on the right panel */
           card.click();
-          await new Promise(r => setTimeout(r, 700)); /* Wait for detail panel to render */
+          await new Promise(r => setTimeout(r, 750));
           
-          /* Now scan the right side of the page (details pane) for the phone number */
-          /* Find all phone numbers matching 10 digits or +91 pattern */
           const bodyText = document.body.innerText;
           const phoneRegex = /(?:\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/g;
           let phoneMatch;
           let contact = '';
           
-          /* We collect phone numbers and try to get the active one (usually in the chat details) */
-          /* Let's search inside elements that belong to the right column / details pane */
           const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
           const searchArea = rightCol ? rightCol.innerText : bodyText;
           
@@ -105,31 +97,18 @@ export function generateBookmarkletCode(firebaseConfig) {
           }
           
           if (matches.length > 0) {
-            contact = matches[0]; /* Grab the first matching number in the detail view */
+            contact = matches[0];
           } else {
-            /* Fallback to global search if right column was not distinct */
             const globalMatches = [];
             while ((phoneMatch = phoneRegex.exec(bodyText)) !== null) {
               globalMatches.push(phoneMatch[1]);
             }
-            /* Exclude typical seller number if we can, or just take the first */
             contact = globalMatches.find(num => num !== config.sellerMobile) || globalMatches[0] || '0000000000';
           }
           
-          /* Extract Product from the card text */
-          let product = 'IndiaMART Enquiry';
+          /* Read raw lines from card to parse product, location and date */
           const cardText = card.innerText;
           const lines = cardText.split('\\n').map(l => l.trim()).filter(l => l.length > 1);
-          
-          /* Check if there is product label or enquiry text */
-          const prodLine = lines.find(l => l.toLowerCase().includes('viewed') || l.toLowerCase().includes('enquiry') || l.toLowerCase().includes('kg') || l.toLowerCase().includes('liter') || l.toLowerCase().includes('pack'));
-          if (prodLine) {
-            product = prodLine;
-          } else if (lines.length > 2) {
-            product = lines[2];
-          } else if (lines.length > 1) {
-            product = lines[1];
-          }
           
           /* Extract Location (City/State) */
           let city = '';
@@ -141,13 +120,49 @@ export function generateBookmarkletCode(firebaseConfig) {
             state = parts[1]?.trim() || '';
           }
           
+          /* Extract Enquiry Date */
           let leadDate = new Date();
+          const dateLine = lines[lines.length - 1] || '';
+          if (dateLine) {
+            const dLower = dateLine.toLowerCase();
+            if (dLower.includes('yesterday')) {
+              leadDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            } else if (dLower.includes('am') || dLower.includes('pm') || dLower.includes(':')) {
+              /* Time format like "11:49 AM" means today */
+              leadDate = new Date();
+            } else {
+              /* Format like "10-Jun" or "10 Jun" */
+              const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+              const parts = dLower.replace(/-/g, ' ').split(' ');
+              const day = parseInt(parts[0]);
+              const monthIndex = months.findIndex(m => parts[1]?.includes(m));
+              if (!isNaN(day) && monthIndex !== -1) {
+                leadDate = new Date(new Date().getFullYear(), monthIndex, day);
+              }
+            }
+          }
           
           /* Check date range */
           if (startLimit && leadDate < startLimit) { skippedCount++; continue; }
           if (endLimit && leadDate > endLimit) { skippedCount++; continue; }
           
           const formattedDate = leadDate.toISOString().split('T')[0];
+          
+          /* Extract Product Name by filtering out Name, Location, Time, and Preview Messages */
+          let product = 'IndiaMART Enquiry';
+          const candidateLines = lines.filter(line => {
+            const l = line.toLowerCase();
+            const isName = l === customerName.toLowerCase();
+            const isLoc = line.includes(',') && (l.includes('karnataka') || l.includes('bengal') || l.includes('maharashtra') || l.includes('india') || l.includes('delhi'));
+            const isTime = l.match(/\\b\\d{1,2}:\\d{2}\\s*(am|pm)\\b/i) || l.match(/^\\d{1,2}\\s+[a-z]{3}$/i);
+            const isPreview = l.startsWith('hi ') || l.startsWith('hello') || l.includes('thanks') || l.includes('viewed') || l.includes('enquiry to') || l.includes('interested in');
+            return !isName && !isLoc && !isTime && !isPreview;
+          });
+          
+          if (candidateLines.length > 0) {
+            product = candidateLines[0];
+          }
+          
           const cleanProd = product.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
           const docId = \`IM_\${contact}_\${formattedDate}_\${cleanProd}\`;
           

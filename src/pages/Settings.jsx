@@ -7,7 +7,7 @@ import MigrationWizard from '../components/MigrationWizard';
 import { generateBookmarkletCode } from '../utils/bookmarklet';
 
 export default function Settings() {
-  const { companySettings, saveSettings, gsUrl, saveGsUrl, autoSyncEnabled, toggleAutoSync, testConnection, pullFromSheets, pushToSheets, fullSync, clearLocalCache, isSyncing, showBanner, leads, invoiceHistory } = useApp();
+  const { companySettings, saveSettings, gsUrl, saveGsUrl, autoSyncEnabled, toggleAutoSync, testConnection, pullFromSheets, pushToSheets, fullSync, clearLocalCache, isSyncing, showBanner, leads, invoiceHistory, products } = useApp();
   const [form, setForm] = useState({ ...companySettings });
   const [testingConn, setTestingConn] = useState(false);
   const [localGsUrl, setLocalGsUrl] = useState(gsUrl);
@@ -23,7 +23,7 @@ export default function Settings() {
 
   const activeConfig = fbConfigured ? getFirebaseConfig() : null;
 
-  const bookmarkletUrl = activeConfig ? generateBookmarkletCode(activeConfig) : '';
+  const bookmarkletUrl = activeConfig ? generateBookmarkletCode(activeConfig, products) : '';
   const bookmarkletLinkRef = useRef(null);
 
   useEffect(() => {

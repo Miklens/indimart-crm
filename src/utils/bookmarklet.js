@@ -1,11 +1,13 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  */
-export function generateBookmarkletCode(firebaseConfig) {
+export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
   const configStr = JSON.stringify(firebaseConfig);
+  const catalogStr = JSON.stringify(catalogProducts);
 
   const scriptContent = `(function() {
     const config = ${configStr};
+    const catalogProducts = ${catalogStr};
     
     if (document.getElementById('indimart-sync-panel')) {
       document.getElementById('indimart-sync-panel').remove();
@@ -150,20 +152,93 @@ export function generateBookmarkletCode(firebaseConfig) {
           
           /* Extract Product Name by filtering out Name, Location, Time, and Preview Messages */
           let product = 'IndiaMART Enquiry';
-          const candidateLines = lines.filter(line => {
-            const l = line.toLowerCase();
-            const isName = l === customerName.toLowerCase();
-            const isLoc = line.includes(',') && (l.includes('karnataka') || l.includes('bengal') || l.includes('maharashtra') || l.includes('india') || l.includes('delhi'));
-            const isTime = l.match(/\\b\\d{1,2}:\\d{2}\\s*(am|pm)\\b/i) || l.match(/^\\d{1,2}\\s+[a-z]{3}$/i);
-            const isPreview = l.startsWith('hi ') || l.startsWith('hello') || l.includes('thanks') || l.includes('viewed') || l.includes('enquiry to') || l.includes('interested in');
-            return !isName && !isLoc && !isTime && !isPreview;
-          });
           
-          if (candidateLines.length > 0) {
-            product = candidateLines[0];
+          // 1. Try to extract from right column details since it's the most accurate
+          const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
+          if (rightCol) {
+            // A. Look for product detail link
+            const prodLink = rightCol.querySelector('a[href*="proddetail"], a[href*="product"]');
+            if (prodLink && prodLink.innerText.trim()) {
+              product = prodLink.innerText.trim();
+            } else {
+              // B. Look for common product name classes/elements
+              const prodEl = rightCol.querySelector('.m-pname, .prod-name, .product-name, [class*="prod-name"], [class*="product-name"], [class*="pname"], [class*="prd-name"]');
+              if (prodEl && prodEl.innerText.trim()) {
+                product = prodEl.innerText.trim();
+              }
+            }
           }
           
-          const cleanProd = product.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
+          // 2. If product is still default/empty or generic, try extracting from the card lines
+          if (product === 'IndiaMART Enquiry' || !product) {
+            const candidateLines = lines.filter(line => {
+              const l = line.toLowerCase();
+              const isName = l === customerName.toLowerCase();
+              const isLoc = line.includes(',') && (l.includes('karnataka') || l.includes('bengal') || l.includes('maharashtra') || l.includes('india') || l.includes('delhi'));
+              const isTime = l.match(/\\b\\d{1,2}:\\d{2}\\s*(am|pm)\\b/i) || l.match(/^\\d{1,2}\\s+[a-z]{3}$/i);
+              const isPreview = /^(hi|hello|dear|good\\s+day|good\\s+morning|good\\s+afternoon|good\\s+evening)\\b/i.test(l) ||
+                                l.includes('thank') ||
+                                l.includes('enquir') ||
+                                l.includes('interest') ||
+                                l.includes('viewed') ||
+                                l.includes('message') ||
+                                l.includes('reply') ||
+                                l.includes('contact') ||
+                                l.includes('requirements') ||
+                                l.includes('looking for') ||
+                                l.includes('additional details');
+              return !isName && !isLoc && !isTime && !isPreview;
+            });
+            
+            if (candidateLines.length > 0) {
+              product = candidateLines[0];
+            }
+          }
+          
+          // Match against catalog products
+          let matched = null;
+          if (Array.isArray(catalogProducts) && catalogProducts.length > 0) {
+            const cleanStr = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const scrapedClean = cleanStr(product);
+            
+            // 1. Exact clean match
+            matched = catalogProducts.find(p => cleanStr(p.name) === scrapedClean);
+            
+            // 2. Substring match (catalog name in scraped name)
+            if (!matched) {
+              matched = catalogProducts.find(p => {
+                const cClean = cleanStr(p.name);
+                return cClean.length > 3 && scrapedClean.includes(cClean);
+              });
+            }
+            
+            // 3. Substring match (scraped name in catalog name)
+            if (!matched) {
+              matched = catalogProducts.find(p => {
+                const cClean = cleanStr(p.name);
+                return scrapedClean.length > 3 && cClean.includes(scrapedClean);
+              });
+            }
+          }
+          
+          let displayProduct = product;
+          let productPrice = 0;
+          let productGst = '5';
+          let productHsn = '';
+          
+          if (matched) {
+            displayProduct = matched.name;
+            productPrice = parseFloat(matched.price) || 0;
+            productGst = matched.gst || '5';
+            productHsn = matched.hsn || '';
+          } else {
+            // Mark as new item if it is a valid name and not already marked
+            if (displayProduct && displayProduct !== 'IndiaMART Enquiry' && !displayProduct.startsWith('[NEW]')) {
+              displayProduct = '[NEW] ' + displayProduct;
+            }
+          }
+          
+          const cleanProd = displayProduct.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
           const docId = \`IM_\${contact}_\${formattedDate}_\${cleanProd}\`;
           
           const leadPayload = {
@@ -171,16 +246,16 @@ export function generateBookmarkletCode(firebaseConfig) {
             date: formattedDate,
             customerName: customerName,
             contact: contact,
-            product: product,
+            product: displayProduct,
             status: 'New Enquiry',
             followUpDate: '',
-            orderValue: 0,
+            orderValue: productPrice,
             remarks: 'Imported via IndiaMART Auto-Clicker',
             state: state,
             city: city,
             source: 'IndiaMART Direct',
             timestamp: leadDate.getTime(),
-            productList: [{ name: product, qty: 1, price: 0, gst: '5', hsn: '' }],
+            productList: [{ name: displayProduct, qty: 1, price: productPrice, gst: productGst, hsn: productHsn }],
             history: [{ status: 'New Enquiry', timestamp: Date.now() }]
           };
           

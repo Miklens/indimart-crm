@@ -72,6 +72,36 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
       let errorCount = 0;
       
       statusDiv.innerHTML += '<b>Starting sync loop...</b><br>';
+
+      let nextIdNum = 1;
+      const existingLeads = [];
+      try {
+        const fetchUrl = `https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads?pageSize=1000`;
+        const res = await fetch(fetchUrl);
+        if (res.ok) {
+          const data = await res.json();
+          const docs = data.documents || [];
+          docs.forEach(d => {
+            const nameParts = d.name.split('/');
+            const docId = nameParts[nameParts.length - 1];
+            
+            const fields = d.fields || {};
+            const contactVal = fields.contact?.stringValue || '';
+            const dateVal = fields.date?.stringValue || '';
+            
+            existingLeads.push({ id: docId, contact: contactVal, date: dateVal });
+            
+            if (/^IM\d+$/.test(docId)) {
+              const num = parseInt(docId.replace('IM', ''), 10);
+              if (!isNaN(num) && num >= nextIdNum) {
+                nextIdNum = num + 1;
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.error("Failed to fetch existing leads", e);
+      }
       
       for (let i = 0; i < leadCards.length; i++) {
         const card = leadCards[i];
@@ -238,8 +268,17 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
             }
           }
           
-          const cleanProd = displayProduct.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
-          const docId = \`IM_\${contact}_\${formattedDate}_\${cleanProd}\`;
+          /* Check if this contact has already been synced on this formattedDate */
+          const existing = existingLeads.find(l => l.contact === contact && l.date === formattedDate);
+          
+          let docId = '';
+          if (existing) {
+            docId = existing.id;
+          } else {
+            docId = 'IM' + String(nextIdNum).padStart(3, '0');
+            nextIdNum++;
+            existingLeads.push({ id: docId, contact: contact, date: formattedDate });
+          }
           
           const leadPayload = {
             id: docId,

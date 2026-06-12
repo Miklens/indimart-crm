@@ -7,11 +7,12 @@ import MigrationWizard from '../components/MigrationWizard';
 import { generateBookmarkletCode } from '../utils/bookmarklet';
 
 export default function Settings() {
-  const { companySettings, saveSettings, gsUrl, saveGsUrl, autoSyncEnabled, toggleAutoSync, testConnection, pullFromSheets, pushToSheets, fullSync, clearLocalCache, isSyncing, showBanner, leads, invoiceHistory, products } = useApp();
+  const { companySettings, saveSettings, gsUrl, saveGsUrl, autoSyncEnabled, toggleAutoSync, testConnection, pullFromSheets, pushToSheets, fullSync, clearLocalCache, isSyncing, showBanner, leads, invoiceHistory, products, importCompleteData, messageTemplates } = useApp();
   const [form, setForm] = useState({ ...companySettings });
   const [testingConn, setTestingConn] = useState(false);
   const [localGsUrl, setLocalGsUrl] = useState(gsUrl);
   const sealRef = useRef(null);
+  const importBackupRef = useRef(null);
   const [showMigration, setShowMigration] = useState(false);
 
   // Firebase config state
@@ -471,6 +472,49 @@ export default function Settings() {
     }
   };
 
+  const exportBackup = () => {
+    try {
+      const dataStr = JSON.stringify({
+        leads,
+        products,
+        invoiceHistory,
+        companySettings,
+        messageTemplates,
+        gsUrl
+      }, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `indiamart_CRM_FULL_BACKUP_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showBanner('✅ Complete app backup downloaded!', 'success');
+    } catch (err) {
+      showBanner('❌ Backup failed: ' + err.message, 'error');
+    }
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!window.confirm('WARNING: Restoring a complete backup will overwrite all current leads, catalog products, invoices, and settings. Are you sure you want to proceed?')) {
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        await importCompleteData(data);
+        e.target.value = '';
+      } catch (err) {
+        showBanner('❌ Failed to parse backup file: ' + err.message, 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // Data source summary
   const dataSource = fbConfigured
     ? (gsUrl ? 'Firebase (primary) + Google Sheets (backup)' : 'Firebase only')
@@ -810,8 +854,28 @@ export default function Settings() {
         {/* Data Management */}
         <div className="glass-card" style={{ gridColumn: '1 / -1' }}>
           <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--primary)' }}>Data Management</h3>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={exportData}><Download size={14} /> Export All Data (Excel)</button>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button className="btn btn-secondary" onClick={exportData}><Download size={14} /> Export Excel Report</button>
+            
+            <span style={{ borderLeft: '1px solid var(--glass-border)', height: '24px', margin: '0 0.25rem' }} />
+            
+            <button className="btn btn-primary" onClick={exportBackup} style={{ background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none' }}>
+              📥 Export Complete Backup (JSON)
+            </button>
+            
+            <input 
+              ref={importBackupRef} 
+              type="file" 
+              accept=".json" 
+              style={{ display: 'none' }} 
+              onChange={handleImportBackup} 
+            />
+            <button className="btn btn-secondary" onClick={() => importBackupRef.current?.click()}>
+              📤 Import Complete Backup (JSON)
+            </button>
+            
+            <span style={{ borderLeft: '1px solid var(--glass-border)', height: '24px', margin: '0 0.25rem' }} />
+            
             <button className="btn btn-danger" onClick={clearLocalCache}><Trash2 size={14} /> Clear All Local Data</button>
           </div>
         </div>

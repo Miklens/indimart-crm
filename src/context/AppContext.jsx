@@ -605,6 +605,72 @@ export function AppProvider({ children }) {
     showBanner('🗑️ Local cache cleared.', 'info');
   }, [showBanner]);
 
+  const importCompleteData = useCallback(async (data) => {
+    if (!data) throw new Error('No data provided');
+    
+    // 1. Update local state and persist to localStorage
+    if (Array.isArray(data.leads)) {
+      setLeads(data.leads);
+      persist('indimart_leads', data.leads);
+    }
+    if (Array.isArray(data.products)) {
+      setProducts(data.products);
+      persist('indimart_products', data.products);
+    }
+    if (data.companySettings) {
+      setCompanySettings(data.companySettings);
+      persist('indimart_settings', data.companySettings);
+    }
+    if (Array.isArray(data.messageTemplates)) {
+      setMessageTemplates(data.messageTemplates);
+      persist('indimart_templates', data.messageTemplates);
+    }
+    if (Array.isArray(data.invoiceHistory)) {
+      const mapped = sanitizeInvoiceNumbers(data.invoiceHistory);
+      setInvoiceHistory(mapped);
+      persist('indimart_invoice_history', mapped);
+    }
+    if (data.gsUrl !== undefined) {
+      setGsUrl(data.gsUrl);
+      localStorage.setItem('indimart_gsUrl', data.gsUrl);
+    }
+
+    // 2. If Firebase is active, sync all imported data to Firestore
+    if (fbEnabled) {
+      showBanner('Syncing imported data to Firebase...', 'info');
+      try {
+        if (data.companySettings) {
+          await fsSetSettings(data.companySettings);
+        }
+        if (Array.isArray(data.leads)) {
+          for (const l of data.leads) {
+            await fsSetLead(l);
+          }
+        }
+        if (Array.isArray(data.products)) {
+          for (const p of data.products) {
+            await fsSetProduct(p);
+          }
+        }
+        if (Array.isArray(data.messageTemplates)) {
+          for (const t of data.messageTemplates) {
+            await fsSetTemplate(t);
+          }
+        }
+        if (Array.isArray(data.invoiceHistory)) {
+          for (const inv of data.invoiceHistory) {
+            await fsSetInvoice(inv);
+          }
+        }
+        showBanner('✅ Backup restored & synced to Firebase!', 'success');
+      } catch (err) {
+        showBanner('⚠️ Local restore succeeded, but Firebase sync failed: ' + err.message, 'warning');
+      }
+    } else {
+      showBanner('✅ Backup restored locally!', 'success');
+    }
+  }, [fbEnabled, persist, showBanner]);
+
   // ── Auto GS backup when data changes (if GS URL set) ─────────────────────
   useEffect(() => {
     if (!autoSyncEnabled || !gsUrl) return;
@@ -621,6 +687,7 @@ export function AppProvider({ children }) {
     saveInvoiceToHistory, updateInvoiceField, updateInvoicePayment, deleteInvoice, deleteInvoiceVersion,
     saveSettings, saveGsUrl, toggleAutoSync, getNextInvoiceNumber,
     testConnection, pullFromSheets, pushToSheets, fullSync, clearLocalCache,
+    importCompleteData,
     showBanner,
   };
 

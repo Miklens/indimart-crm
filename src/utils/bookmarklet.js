@@ -36,7 +36,7 @@ export function generateBookmarkletCode(firebaseConfig) {
           🔍 Inspect Page
         </button>
       </div>
-      <div id="sync-status" style="margin-top:12px; font-size:12px; color:#94a3b8; line-height:1.4; max-height:200px; overflow-y:auto; border-radius:6px; background:#0f172a; padding:8px; display:none;">
+      <div id="sync-status" style="margin-top:12px; font-size:12px; color:#94a3b8; line-height:1.4; max-height:220px; overflow-y:auto; border-radius:6px; background:#0f172a; padding:8px; display:none;">
       </div>
     \`;
     
@@ -49,45 +49,46 @@ export function generateBookmarkletCode(firebaseConfig) {
     
     document.getElementById('close-sync-panel').onclick = () => panel.remove();
     
-    /* Debug DOM to find the exact selectors on the page */
     document.getElementById('debug-dom-btn').onclick = () => {
       const statusDiv = document.getElementById('sync-status');
       statusDiv.style.display = 'block';
-      statusDiv.innerHTML = '<b>Analyzing page classes...</b><br>';
+      statusDiv.innerHTML = '<b>Deep Inspecting Contact elements...</b><br>';
       
-      const elements = Array.from(document.querySelectorAll('*'));
-      const classMap = {};
-      elements.forEach(el => {
-        if (el.className && typeof el.className === 'string') {
-          el.className.split(/\\s+/).forEach(cls => {
-            if (cls) classMap[cls] = (classMap[cls] || 0) + 1;
+      /* 1. Inspect elements with class .cp and .cpo */
+      const cpElements = Array.from(document.querySelectorAll('.cp, .cpo'));
+      statusDiv.innerHTML += \`Found \${cpElements.length} elements with class .cp or .cpo.<br>\`;
+      
+      cpElements.slice(0, 10).forEach((el, idx) => {
+        const tagName = el.tagName.toLowerCase();
+        const text = (el.innerText || '').replace(/\\s+/g, ' ').trim();
+        statusDiv.innerHTML += \`cp[\${idx}]: &lt;\${tagName} class="\${el.className}"&gt; (text: "\${text.substring(0, 50)}")<br>\`;
+      });
+      
+      /* 2. Find the smallest elements containing contact names like "YERR" or "PRAV" */
+      const names = ['YERR', 'PRAV', 'Saya'];
+      statusDiv.innerHTML += '<br><b>Leaf element search for names:</b><br>';
+      names.forEach(name => {
+        const matches = Array.from(document.querySelectorAll('*')).filter(el => {
+          return el.innerText && el.innerText.includes(name) && el.children.length === 0;
+        });
+        if (matches.length > 0) {
+          statusDiv.innerHTML += \`Matches for "\${name}": \${matches.length}<br>\`;
+          matches.forEach((el, i) => {
+            let parentInfo = '';
+            if (el.parentElement) {
+              parentInfo = \`parent: &lt;\${el.parentElement.tagName.toLowerCase()} class="\${el.parentElement.className}"&gt;\`;
+              if (el.parentElement.parentElement) {
+                parentInfo += \` &gt; grandparent: &lt;\${el.parentElement.parentElement.tagName.toLowerCase()} class="\${el.parentElement.parentElement.className}"&gt;\`;
+              }
+            }
+            statusDiv.innerHTML += \`  [\${i}] &lt;\${el.tagName.toLowerCase()} class="\${el.className}"&gt; text: "\${el.innerText}"<br>   \${parentInfo}<br>\`;
           });
+        } else {
+          statusDiv.innerHTML += \`No leaf matches for "\${name}". Checking parents...<br>\`;
+          const allMatches = Array.from(document.querySelectorAll('*')).filter(el => el.innerText && el.innerText.includes(name));
+          statusDiv.innerHTML += \`  All elements containing "\${name}": \${allMatches.length}<br>\`;
         }
       });
-      
-      /* Print top 20 most common classes */
-      const sortedClasses = Object.entries(classMap).sort((a,b) => b[1] - a[1]).slice(0, 25);
-      statusDiv.innerHTML += '<b>Common Class Names found:</b><br>';
-      sortedClasses.forEach(([cls, count]) => {
-        statusDiv.innerHTML += \`.\${cls} (\${count} times)<br>\`;
-      });
-      
-      /* Look for elements containing contact names and list them */
-      statusDiv.innerHTML += '<br><b>Contact List elements check:</b><br>';
-      const contactContainers = Array.from(document.querySelectorAll('div, li, span')).filter(el => {
-        return el.innerText && (el.innerText.includes('YERR') || el.innerText.includes('PRAV') || el.innerText.includes('Saya'));
-      });
-      
-      if (contactContainers.length > 0) {
-        statusDiv.innerHTML += \`Found \${contactContainers.length} matching text containers.<br>\`;
-        contactContainers.slice(0, 5).forEach((el, idx) => {
-          const tagName = el.tagName.toLowerCase();
-          const className = el.className || 'no class';
-          statusDiv.innerHTML += \`[\${idx}] &lt;\${tagName} class="\${className}"&gt; (text: "\${el.innerText.substring(0, 40)}...")<br>\`;
-        });
-      } else {
-        statusDiv.innerHTML += 'No elements matched contact text names.<br>';
-      }
     };
     
     document.getElementById('start-sync-btn').onclick = async () => {
@@ -95,138 +96,8 @@ export function generateBookmarkletCode(firebaseConfig) {
       statusDiv.style.display = 'block';
       statusDiv.innerHTML = 'Starting scan...<br>';
       
-      const startDateVal = document.getElementById('sync-start-date').value;
-      const endDateVal = document.getElementById('sync-end-date').value;
-      
-      const startLimit = startDateVal ? new Date(startDateVal) : null;
-      const endLimit = endDateVal ? new Date(endDateVal) : null;
-      if (endLimit) endLimit.setHours(23, 59, 59, 999);
-      
-      /* Try both standard card selectors and list item elements */
-      const selectors = [
-        '.eq-card', '.lead-card', '.enq-card', '.card', '.leads-card',
-        'div[class*="contact"]', 'div[class*="item"]', 'li[class*="item"]',
-        'div[class*="thread"]', 'div[class*="chat"]', 'li[class*="chat"]'
-      ];
-      
-      const leadCards = Array.from(document.querySelectorAll(selectors.join(','))).filter(el => {
-        /* Filter out outer wrappers by ensuring it has relatively short text or is a distinct block */
-        const text = el.innerText || '';
-        return text.length > 10 && text.length < 500 && (text.includes('Karnataka') || text.includes('Bengal') || text.includes('Maharashtra') || text.match(/\\b\\d{10}\\b/) || text.match(/\\+91/));
-      });
-      
-      statusDiv.innerHTML += \`Found \${leadCards.length} potential contact items.<br>\`;
-      
-      let syncedCount = 0;
-      let skippedCount = 0;
-      let errorCount = 0;
-      
-      for (const card of leadCards) {
-        try {
-          const text = card.innerText;
-          
-          /* Parse Contact Phone Number or default to empty since they are listed */
-          const phoneMatch = text.match(/(\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/);
-          const contact = phoneMatch ? phoneMatch[2] : '0000000000';
-          
-          let customerName = 'Unknown Buyer';
-          const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 1);
-          if (lines.length > 0) customerName = lines[0];
-          
-          let product = 'IndiaMART Enquiry';
-          /* Check if there is a product text on the card */
-          if (lines.length > 2) {
-            product = lines[2];
-          } else if (lines.length > 1) {
-            product = lines[1];
-          }
-          
-          let city = '';
-          let state = '';
-          const locationLine = lines.find(l => l.includes(',') && (l.includes('Karnataka') || l.includes('Bengal') || l.includes('Maharashtra') || l.includes('India')));
-          if (locationLine) {
-            const parts = locationLine.split(',');
-            city = parts[0]?.trim() || '';
-            state = parts[1]?.trim() || '';
-          }
-          
-          let leadDate = new Date();
-          
-          if (startLimit && leadDate < startLimit) { skippedCount++; continue; }
-          if (endLimit && leadDate > endLimit) { skippedCount++; continue; }
-          
-          const formattedDate = leadDate.toISOString().split('T')[0];
-          const cleanProd = product.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
-          const docId = \`IM_\${contact || 'nomobile'}_\${formattedDate}_\${cleanProd}\`;
-          
-          const leadPayload = {
-            id: docId,
-            date: formattedDate,
-            customerName: customerName,
-            contact: contact,
-            product: product,
-            status: 'New Enquiry',
-            followUpDate: '',
-            orderValue: 0,
-            remarks: 'Imported via IndiaMART MessageCentre',
-            state: state,
-            city: city,
-            source: 'IndiaMART Direct',
-            timestamp: leadDate.getTime(),
-            productList: [{ name: product, qty: 1, price: 0, gst: '5', hsn: '' }],
-            history: [{ status: 'New Enquiry', timestamp: Date.now() }]
-          };
-          
-          const url = \`https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads/\${docId}?updateMask.fieldPaths=id&updateMask.fieldPaths=date&updateMask.fieldPaths=customerName&updateMask.fieldPaths=contact&updateMask.fieldPaths=product&updateMask.fieldPaths=status&updateMask.fieldPaths=remarks&updateMask.fieldPaths=state&updateMask.fieldPaths=city&updateMask.fieldPaths=source&updateMask.fieldPaths=timestamp&updateMask.fieldPaths=productList&updateMask.fieldPaths=history\`;
-          
-          const firestoreFields = {};
-          Object.keys(leadPayload).forEach(key => {
-            const val = leadPayload[key];
-            if (typeof val === 'string') {
-              firestoreFields[key] = { stringValue: val };
-            } else if (typeof val === 'number') {
-              firestoreFields[key] = { doubleValue: val };
-            } else if (Array.isArray(val)) {
-              firestoreFields[key] = {
-                arrayValue: {
-                  values: val.map(item => ({
-                    mapValue: {
-                      fields: Object.keys(item).reduce((acc, itemKey) => {
-                        const v = item[itemKey];
-                        acc[itemKey] = typeof v === 'number' ? { doubleValue: v } : { stringValue: String(v) };
-                        return acc;
-                      }, {})
-                    }
-                  }))
-                }
-              };
-            }
-          });
-          
-          const response = await fetch(url, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              name: \`projects/\${config.projectId}/databases/(default)/documents/leads/\${docId}\`,
-              fields: firestoreFields
-            })
-          });
-          
-          if (response.ok) {
-            syncedCount++;
-            statusDiv.innerHTML += \`✔️ Synced: \${customerName} (\${product})<br>\`;
-          } else {
-            errorCount++;
-          }
-          
-        } catch (e) {
-          errorCount++;
-        }
-      }
-      
-      statusDiv.innerHTML += \`<br><strong style="color:#10b981;">Scan Done!</strong><br>Found: \${leadCards.length}<br>Synced: \${syncedCount}<br>Failed/Skipped: \${errorCount + skippedCount}\`;
+      /* We will dynamically adjust the scanner once the user sends the inspect results! */
+      statusDiv.innerHTML += 'Please run "Inspect Page" first and share the logs so we can configure the target selectors.';
     };
   })();`;
 

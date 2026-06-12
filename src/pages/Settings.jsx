@@ -23,7 +23,7 @@ export default function Settings() {
 
   const activeConfig = fbConfigured ? getFirebaseConfig() : null;
 
-  const bookmarkletUrl = activeConfig ? generateBookmarkletCode(activeConfig, products) : '';
+  const bookmarkletUrl = activeConfig ? generateBookmarkletCode(activeConfig, products, leads) : '';
   const bookmarkletLinkRef = useRef(null);
 
   useEffect(() => {

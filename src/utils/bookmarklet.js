@@ -1,13 +1,32 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  */
-export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
+export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = []) {
   const configStr = JSON.stringify(firebaseConfig);
   const catalogStr = JSON.stringify(catalogProducts);
+  
+  const mappedLeads = (crmLeads || []).map(l => ({
+    id: l.id,
+    contact: l.contact || '',
+    date: l.date || ''
+  }));
+  const existingLeadsStr = JSON.stringify(mappedLeads);
+  
+  let calculatedNextIdNum = 1;
+  (crmLeads || []).forEach(l => {
+    if (/^IM\d+$/.test(l.id)) {
+      const num = parseInt(l.id.replace('IM', ''), 10);
+      if (!isNaN(num) && num >= calculatedNextIdNum) {
+        calculatedNextIdNum = num + 1;
+      }
+    }
+  });
 
   const scriptContent = `(function() {
     const config = ${configStr};
     const catalogProducts = ${catalogStr};
+    const existingLeads = ${existingLeadsStr};
+    let nextIdNum = ${calculatedNextIdNum};
     
     if (document.getElementById('indimart-sync-panel')) {
       document.getElementById('indimart-sync-panel').remove();
@@ -64,32 +83,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
       let errorCount = 0;
       
       const processedContacts = new Set();
-      
-      statusDiv.innerHTML += '<b>Fetching existing leads...</b><br>';
-      let nextIdNum = 1;
-      const existingLeads = [];
-      try {
-        const fetchUrl = \`https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads?pageSize=1000\`;
-        const res = await fetch(fetchUrl);
-        if (res.ok) {
-          const data = await res.json();
-          const docs = data.documents || [];
-          docs.forEach(d => {
-            const nameParts = d.name.split('/');
-            const docId = nameParts[nameParts.length - 1];
-            const fields = d.fields || {};
-            const contactVal = fields.contact?.stringValue || '';
-            const dateVal = fields.date?.stringValue || '';
-            existingLeads.push({ id: docId, contact: contactVal, date: dateVal });
-            if (/^IM\d+$/.test(docId)) {
-              const num = parseInt(docId.replace('IM', ''), 10);
-              if (!isNaN(num) && num >= nextIdNum) nextIdNum = num + 1;
-            }
-          });
-        }
-      } catch (e) {
-        console.error("Failed to fetch existing leads", e);
-      }
       
       statusDiv.innerHTML += '<b>Starting scroll & scan loop...</b><br>';
       let scrollAttempts = 0;

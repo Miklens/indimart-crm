@@ -62,7 +62,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
       const firstCard = document.querySelector('.lftcntctnew');
       const cardContainer = firstCard ? (firstCard.closest('.lft_scrol') || firstCard.closest('[class*="scroll"]') || firstCard.closest('[style*="overflow"]') || firstCard.parentElement) : null;
       
-      if (cardContainer) {
+      if (firstCard) {
         statusDiv.innerHTML += 'Loading leads from list...<br>';
         let prevCount = 0;
         let scrollAttempts = 0;
@@ -103,7 +103,11 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
             }
           }
           
-          cardContainer.scrollTop = cardContainer.scrollHeight;
+          let p = firstCard.parentElement;
+          while (p && p !== document.body) {
+            p.scrollTop = p.scrollHeight;
+            p = p.parentElement;
+          }
           statusDiv.innerHTML = \`Loading leads... Found \${prevCount} contacts.<br>\`;
           statusDiv.scrollTop = statusDiv.scrollHeight;
           await new Promise(r => setTimeout(r, 800));

@@ -8,7 +8,7 @@ const CATEGORIES = [
   'Fulvic Acids', 'Chemical Pesticides', 'Herbicides', 'Micronutrients', 'Macronutrients'
 ];
 
-function ProductModal({ product, onClose, onSave }) {
+function ProductModal({ product, onClose, onSave, companySettings }) {
   const [form, setForm] = useState({ 
     name: product?.name || '', 
     price: product?.price || '', 
@@ -16,7 +16,24 @@ function ProductModal({ product, onClose, onSave }) {
     gst: product?.gst || '5',
     category: product?.category || '' 
   });
-  const handle = (e) => { e.preventDefault(); onSave({ ...form, price: parseFloat(form.price) || 0 }); };
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
+
+  const allCategories = [
+    ...CATEGORIES,
+    ...(companySettings?.customCategories || [])
+  ];
+
+  const handle = (e) => {
+    e.preventDefault();
+    const finalCategory = showCustomInput ? customCategoryName.trim() : form.category;
+    onSave({ 
+      ...form, 
+      category: finalCategory,
+      price: parseFloat(form.price) || 0 
+    }, showCustomInput ? finalCategory : null);
+  };
+
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-content" style={{ maxWidth: 440 }}>
@@ -28,11 +45,49 @@ function ProductModal({ product, onClose, onSave }) {
           <div className="form-group"><label>Product Name</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></div>
           
           <div className="form-group"><label>Category / Group</label>
-            <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+            <select 
+              value={showCustomInput ? '__custom__' : form.category} 
+              onChange={e => {
+                if (e.target.value === '__custom__') {
+                  setShowCustomInput(true);
+                  setForm(f => ({ ...f, category: '' }));
+                } else {
+                  setShowCustomInput(false);
+                  setForm(f => ({ ...f, category: e.target.value }));
+                }
+              }}
+            >
               <option value="">Select category...</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="__custom__" style={{ fontWeight: 'bold', color: 'var(--primary)' }}>+ Add Custom Category...</option>
             </select>
           </div>
+
+          {showCustomInput && (
+            <div className="form-group animate-fade-in" style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: '0.4rem', border: '1px solid var(--glass-border)' }}>
+              <label style={{ fontSize: '0.72rem' }}>Custom Category Name</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input 
+                  value={customCategoryName} 
+                  onChange={e => setCustomCategoryName(e.target.value)} 
+                  placeholder="e.g. Organic Soil"
+                  required
+                  style={{ flex: 1 }}
+                />
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => {
+                    setShowCustomInput(false);
+                    setCustomCategoryName('');
+                  }}
+                  style={{ padding: '0 0.75rem', fontSize: '0.75rem' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="form-row">
             <div className="form-group"><label>Price (₹)</label><input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} min="0" step="any" required /></div>
@@ -54,11 +109,20 @@ function ProductModal({ product, onClose, onSave }) {
 }
 
 export default function Catalog() {
-  const { products, leads, addProduct, updateProduct, deleteProduct, showBanner } = useApp();
+  const { products, leads, addProduct, updateProduct, deleteProduct, showBanner, companySettings, saveSettings } = useApp();
   const [editProduct, setEditProduct] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
 
-  const handleSave = (data) => {
+  const handleSave = (data, newCustomCategory) => {
+    if (newCustomCategory) {
+      const currentCustom = companySettings.customCategories || [];
+      if (!currentCustom.includes(newCustomCategory)) {
+        saveSettings({
+          ...companySettings,
+          customCategories: [...currentCustom, newCustomCategory]
+        });
+      }
+    }
     if (editProduct) { updateProduct(editProduct.id, data); showBanner('Product updated.', 'success'); setEditProduct(null); }
     else { addProduct(data); showBanner('Product added.', 'success'); setShowAdd(false); }
   };
@@ -136,6 +200,7 @@ export default function Catalog() {
           product={editProduct}
           onClose={() => { setShowAdd(false); setEditProduct(null); }}
           onSave={handleSave}
+          companySettings={companySettings}
         />
       )}
     </div>

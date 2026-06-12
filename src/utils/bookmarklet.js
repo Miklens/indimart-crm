@@ -73,7 +73,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       statusDiv.style.display = 'block';
       statusDiv.innerHTML = 'Initializing sync...<br>';
       
-      // Scroll list container to top first
+      /* Scroll list container to top first */
       const firstCard = document.querySelector('.lftcntctnew');
       if (firstCard) {
         firstCard.scrollIntoView({ block: 'start' });

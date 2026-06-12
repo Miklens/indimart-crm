@@ -184,7 +184,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
           let product = 'IndiaMART Enquiry';
            
           /* 1. Try to extract from right column details since it's the most accurate */
-          const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
           if (rightCol) {
             /* A. Look for product detail link */
             const prodLink = rightCol.querySelector('a[href*="proddetail"], a[href*="product"]');

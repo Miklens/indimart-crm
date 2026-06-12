@@ -152,21 +152,45 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
           
           card.click();
           await new Promise(r => setTimeout(r, 750));
-          
           const bodyText = document.body.innerText;
-          const phoneRegex = /(?:\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/g;
-          let phoneMatch;
           let contact = '';
-          const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
-          const searchArea = rightCol ? rightCol.innerText : bodyText;
-          const matches = [];
-          while ((phoneMatch = phoneRegex.exec(searchArea)) !== null) matches.push(phoneMatch[1]);
-          if (matches.length > 0) {
-            contact = matches[0];
-          } else {
-            const globalMatches = [];
-            while ((phoneMatch = phoneRegex.exec(bodyText)) !== null) globalMatches.push(phoneMatch[1]);
-            contact = globalMatches.find(num => num !== config.sellerMobile) || globalMatches[0] || '0000000000';
+          
+          /* 1. Try to find 10-digit mobile number directly from card lines first */
+          for (const line of lines) {
+            const cleanDigits = line.replace(/[^0-9]/g, '');
+            if (cleanDigits.length >= 10) {
+              const last10 = cleanDigits.slice(-10);
+              if (last10[0] >= '6' && last10[0] <= '9' && last10 !== config.sellerMobile) {
+                contact = last10;
+                break;
+              }
+            }
+          }
+          
+          /* 2. If not found on card, try rightCol or bodyText */
+          if (!contact) {
+            const phoneRegex = /(?:\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/g;
+            let phoneMatch;
+            const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
+            const searchArea = rightCol ? rightCol.innerText : bodyText;
+            const matches = [];
+            while ((phoneMatch = phoneRegex.exec(searchArea)) !== null) {
+              if (phoneMatch[1] !== config.sellerMobile) {
+                matches.push(phoneMatch[1]);
+              }
+            }
+            
+            if (matches.length > 0) {
+              contact = matches[0];
+            } else {
+              const globalMatches = [];
+              while ((phoneMatch = phoneRegex.exec(bodyText)) !== null) {
+                if (phoneMatch[1] !== config.sellerMobile) {
+                  globalMatches.push(phoneMatch[1]);
+                }
+              }
+              contact = globalMatches[0] || '0000000000';
+            }
           }
           
           let city = '';
@@ -180,22 +204,43 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
           
           const formattedDate = leadDate.toISOString().split('T')[0];
           let product = 'IndiaMART Enquiry';
+          const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
           if (rightCol) {
             const prodLink = rightCol.querySelector('a[href*="proddetail"], a[href*="product"]');
-            if (prodLink && prodLink.innerText.trim()) product = prodLink.innerText.trim();
-            else {
+            if (prodLink && prodLink.innerText.trim()) {
+              product = prodLink.innerText.trim();
+            } else {
               const prodEl = rightCol.querySelector('.m-pname, .prod-name, .product-name, [class*="prod-name"], [class*="product-name"], [class*="pname"], [class*="prd-name"]');
-              if (prodEl && prodEl.innerText.trim()) product = prodEl.innerText.trim();
+              if (prodEl && prodEl.innerText.trim()) {
+                product = prodEl.innerText.trim();
+              }
             }
           }
           
           if (product === 'IndiaMART Enquiry' || !product) {
             const candidateLines = lines.filter(line => {
               const l = line.toLowerCase();
-              const isName = l === customerName.toLowerCase();
+              const isName = l.includes(customerName.toLowerCase()) || customerName.toLowerCase().includes(l);
               const isLoc = line.includes(',') && (l.includes('karnataka') || l.includes('bengal') || l.includes('maharashtra') || l.includes('india') || l.includes('delhi'));
               const isTime = l.match(/\\b\\d{1,2}:\\d{2}\\s*(am|pm)\\b/i) || l.match(/^\\d{1,2}\\s+[a-z]{3}$/i);
-              const isPreview = /^(hi|hello|dear|good\\s+day|good\\s+morning|good\\s+afternoon|good\\s+evening)\\b/i.test(l) || l.includes('thank') || l.includes('enquir') || l.includes('interest') || l.includes('viewed') || l.includes('message') || l.includes('reply') || l.includes('contact') || l.includes('requirements') || l.includes('looking for') || l.includes('additional details');
+              const isPreview = /^(hi|hello|dear|good\\s+day|good\\s+morning|good\\s+afternoon|good\\s+evening)\\b/i.test(l) || 
+                                l.includes('thank') || 
+                                l.includes('enquir') || 
+                                l.includes('interest') || 
+                                l.includes('viewed') || 
+                                l.includes('message') || 
+                                l.includes('reply') || 
+                                l.includes('contact') || 
+                                l.includes('requirements') || 
+                                l.includes('looking for') || 
+                                l.includes('additional details') ||
+                                l.includes('call attempted') ||
+                                l.includes('call received') ||
+                                l.includes('missed call') ||
+                                l.includes('duration:') ||
+                                l === 'gst' ||
+                                l.includes('outgoing') ||
+                                l.includes('incoming');
               return !isName && !isLoc && !isTime && !isPreview;
             });
             if (candidateLines.length > 0) product = candidateLines[0];
@@ -214,19 +259,41 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
           let productPrice = 0;
           let productGst = '5';
           let productHsn = '';
+          let syncStatus = 'New Enquiry';
+          
           if (matched) {
             displayProduct = matched.name;
             productPrice = parseFloat(matched.price) || 0;
             productGst = matched.gst || '5';
             productHsn = matched.hsn || '';
-          } else if (displayProduct && displayProduct !== 'IndiaMART Enquiry' && !displayProduct.startsWith('[NEW]')) {
-            displayProduct = '[NEW] ' + displayProduct;
+            syncStatus = 'Contacted';
+          } else {
+            if (displayProduct && displayProduct !== 'IndiaMART Enquiry' && !displayProduct.startsWith('[NEW]')) {
+              displayProduct = '[NEW] ' + displayProduct;
+            }
+            syncStatus = 'New Enquiry';
           }
           
           const existing = existingLeads.find(l => l.contact === contact && l.date === formattedDate);
           let docId = existing ? existing.id : 'IM' + String(nextIdNum++).padStart(3, '0');
           
-          const leadPayload = { id: docId, date: formattedDate, customerName: customerName, contact: contact, product: displayProduct, status: 'New Enquiry', followUpDate: '', orderValue: productPrice, remarks: 'Imported via IndiaMART Auto-Clicker', state: state, city: city, source: 'IndiaMART Direct', timestamp: leadDate.getTime(), productList: [{ name: displayProduct, qty: 1, price: productPrice, gst: productGst, hsn: productHsn }], history: [{ status: 'New Enquiry', timestamp: Date.now() }] };
+          const leadPayload = { 
+            id: docId, 
+            date: formattedDate, 
+            customerName: customerName, 
+            contact: contact, 
+            product: displayProduct, 
+            status: syncStatus, 
+            followUpDate: '', 
+            orderValue: productPrice, 
+            remarks: '', 
+            state: state, 
+            city: city, 
+            source: 'IndiaMART Direct', 
+            timestamp: leadDate.getTime(), 
+            productList: [{ name: displayProduct, qty: 1, price: productPrice, gst: productGst, hsn: productHsn }], 
+            history: [{ status: syncStatus, timestamp: Date.now() }] 
+          };
           const firestoreFields = {};
           Object.keys(leadPayload).forEach(key => {
             const val = leadPayload[key];

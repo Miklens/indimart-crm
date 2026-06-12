@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { MessageCircle, X } from 'lucide-react';
+import { MessageCircle, X, Upload, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
+import { fsSetLead } from '../services/firestoreService';
 
 export default function BulkTools() {
   const { leads, messageTemplates, companySettings, updateLeadStatus, updateLead, deleteLead, showBanner } = useApp();
@@ -15,6 +16,153 @@ export default function BulkTools() {
   const STATUS_FILTERS = DATA_CONFIG.getStatusFilterOptions();
   const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
   const [bulkMessage, setBulkMessage] = useState('');
+
+  // Excel Recovery States
+  const [fileLeads, setFileLeads] = useState([]);
+  const [restoreStatus, setRestoreStatus] = useState('');
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const normalizeContact = (raw) => {
+    if (!raw) return '';
+    const digits = String(raw).replace(/\D/g, '');
+    if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+    return digits.slice(-10);
+  };
+
+  const parseExcelDate = (val) => {
+    if (!val) return '';
+    if (val instanceof Date) {
+      const day = String(val.getDate()).padStart(2, '0');
+      const month = String(val.getMonth() + 1).padStart(2, '0');
+      const year = val.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+    const str = String(val).trim();
+    const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (ymdMatch) {
+      return `${ymdMatch[3].padStart(2, '0')}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[1]}`;
+    }
+    return str;
+  };
+
+  const handleExcelUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setRestoreStatus('Reading Excel file...');
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
+      
+      const worksheet = workbook.worksheets.find(w => w.name === 'Leads') || workbook.worksheets[0];
+      if (!worksheet) {
+        setRestoreStatus('❌ Error: No worksheets found in Excel file');
+        return;
+      }
+
+      setRestoreStatus(`Parsing sheet "${worksheet.name}"...`);
+      
+      const parsedRows = [];
+      worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        if (rowNumber === 1) return; // skip header row
+        const values = row.values;
+        if (!values || values.length < 3) return;
+        
+        parsedRows.push({
+          date: parseExcelDate(values[1]),
+          id: String(values[2] || '').trim(),
+          customerName: String(values[3] || '').trim(),
+          contact: normalizeContact(values[4]),
+          city: String(values[5] || '').trim(),
+          state: String(values[6] || '').trim(),
+          source: String(values[7] || 'IndiaMART Direct').trim(),
+          gstNo: String(values[8] || '').trim(),
+          productName: String(values[9] || '').trim(),
+          qty: parseFloat(values[10]) || 1,
+          unitPrice: parseFloat(values[11]) || 0,
+          subtotal: parseFloat(values[12]) || 0,
+          totalValue: parseFloat(values[13]) || 0,
+          status: String(values[14] || 'New Enquiry').trim(),
+          followUpDate: parseExcelDate(values[15]),
+          lostReason: String(values[16] || '').trim(),
+          remarks: String(values[17] || '').trim()
+        });
+      });
+
+      if (parsedRows.length === 0) {
+        setRestoreStatus('❌ Error: No lead rows found in the sheet');
+        return;
+      }
+
+      // Group by ID
+      const groupedLeads = {};
+      parsedRows.forEach(row => {
+        if (!row.id) return;
+        if (!groupedLeads[row.id]) {
+          groupedLeads[row.id] = {
+            id: row.id,
+            date: row.date,
+            customerName: row.customerName,
+            contact: row.contact,
+            city: row.city,
+            state: row.state,
+            source: row.source,
+            gstNo: row.gstNo,
+            status: row.status,
+            followUpDate: row.followUpDate,
+            lostReason: row.lostReason,
+            remarks: row.remarks,
+            orderValue: 0,
+            timestamp: Date.now(),
+            productList: []
+          };
+        }
+        
+        groupedLeads[row.id].productList.push({
+          name: row.productName || 'IndiaMART Enquiry',
+          qty: row.qty,
+          price: row.unitPrice,
+          gst: '5',
+          hsn: ''
+        });
+        groupedLeads[row.id].orderValue += row.subtotal || (row.qty * row.unitPrice) || 0;
+      });
+
+      const finalLeads = Object.values(groupedLeads);
+      setFileLeads(finalLeads);
+      setRestoreStatus(`✔️ Successfully loaded ${finalLeads.length} leads from Excel file. Review the preview below and click "Restore Leads" to save.`);
+    } catch (err) {
+      console.error(err);
+      setRestoreStatus(`❌ Error parsing Excel: ${err.message}`);
+    }
+  };
+
+  const handleRestoreSubmit = async () => {
+    if (fileLeads.length === 0) return;
+    setIsRestoring(true);
+    setRestoreStatus(`Restoring ${fileLeads.length} leads to database...`);
+    try {
+      let successCount = 0;
+      for (const lead of fileLeads) {
+        await fsSetLead({
+          ...lead,
+          history: [{ status: lead.status, timestamp: Date.now(), note: 'Restored from Excel' }]
+        });
+        successCount++;
+        setRestoreStatus(`Restoring leads... (${successCount}/${fileLeads.length})`);
+      }
+      setRestoreStatus(`✅ Successfully restored ${successCount} leads into your database!`);
+      showBanner(`Restored ${successCount} leads from Excel backup!`, 'success');
+      setFileLeads([]);
+    } catch (err) {
+      console.error(err);
+      setRestoreStatus(`❌ Error writing to database: ${err.message}`);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
 
   const filtered = leads.filter(l => {
     const s = search.toLowerCase();
@@ -108,6 +256,88 @@ export default function BulkTools() {
           </div>
           <button className="btn btn-secondary" onClick={bulkUpdateFollowUp} disabled={!followUpDate || !selected.size}>Set Follow-up ({selected.size})</button>
         </div>
+      </div>
+
+      {/* Excel Restore & Recovery Tool */}
+      <div className="glass-card" style={{ marginBottom: '1.25rem', border: '1px solid rgba(16,185,129,0.3)' }}>
+        <h4 style={{ marginBottom: '0.5rem', color: '#10b981', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          📂 Restore & Recover Leads from Excel
+        </h4>
+        <p style={{ margin: '0 0 1rem 0', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+          Restore and merge historical leads directly from an Excel report (e.g. <code>Indimart_CRM_Report_2026-05-27.xlsx</code>) using their original Lead IDs.
+        </p>
+        
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          <input 
+            type="file" 
+            accept=".xlsx" 
+            onChange={handleExcelUpload} 
+            style={{ display: 'none' }} 
+            id="excel-restore-input" 
+          />
+          <label 
+            htmlFor="excel-restore-input" 
+            className="btn btn-secondary" 
+            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            <Upload size={14} /> Select Excel Report
+          </label>
+          
+          {fileLeads.length > 0 && (
+            <button 
+              className="btn btn-primary" 
+              onClick={handleRestoreSubmit} 
+              disabled={isRestoring}
+              style={{ background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none' }}
+            >
+              <CheckCircle size={14} /> {isRestoring ? 'Restoring...' : `Restore ${fileLeads.length} Leads`}
+            </button>
+          )}
+        </div>
+
+        {restoreStatus && (
+          <div style={{ 
+            fontSize: '0.78rem', 
+            background: 'rgba(0,0,0,0.15)', 
+            padding: '0.75rem', 
+            borderRadius: '0.4rem', 
+            border: '1px solid var(--glass-border)',
+            color: restoreStatus.startsWith('❌') ? '#fca5a5' : restoreStatus.startsWith('✅') || restoreStatus.startsWith('✔️') ? '#a7f3d0' : 'var(--text-dim)'
+          }}>
+            {restoreStatus}
+          </div>
+        )}
+
+        {fileLeads.length > 0 && (
+          <div style={{ marginTop: '1rem', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '0.4rem' }}>
+            <table style={{ margin: 0, fontSize: '0.75rem' }}>
+              <thead>
+                <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <th>Lead ID</th>
+                  <th>Date</th>
+                  <th>Customer</th>
+                  <th>Contact</th>
+                  <th>Status</th>
+                  <th>Products</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fileLeads.map(lead => (
+                  <tr key={lead.id}>
+                    <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{lead.id}</td>
+                    <td>{lead.date}</td>
+                    <td style={{ fontWeight: 600 }}>{lead.customerName}</td>
+                    <td>{lead.contact}</td>
+                    <td>{lead.status}</td>
+                    <td>{lead.productList.map(p => `${p.name} (x${p.qty})`).join(', ')}</td>
+                    <td style={{ fontWeight: 600 }}>₹{lead.orderValue.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Filters + quick select */}

@@ -130,7 +130,7 @@ function AppInner() {
 
   return (
     <AppUIContext.Provider value={{ openCustomer360: setCustomer360 }}>
-    <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+    <div style={{ display: 'flex', flex: 1, height: '100vh', height: '100dvh', overflow: 'hidden', position: 'relative' }}>
       <Sidebar
         mobileOpen={drawerOpen}
         onMobileClose={() => setDrawerOpen(false)}

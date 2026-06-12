@@ -101,18 +101,20 @@ body {
   background: radial-gradient(circle at top, rgba(16,185,129,0.08), transparent 25%), var(--bg-main);
   color: var(--text-main);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   overscroll-behavior: none;
   touch-action: manipulation;
 }
 
 #root {
   display: flex;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   width: 100%;
   text-align: left;
+  overflow: hidden;
 }
 
 main {

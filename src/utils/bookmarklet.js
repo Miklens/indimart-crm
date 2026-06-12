@@ -66,12 +66,20 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
         statusDiv.innerHTML += 'Loading leads from list...<br>';
         let prevCount = 0;
         let scrollAttempts = 0;
-        while (scrollAttempts < 50) {
+        let noChangeCount = 0;
+        
+        while (scrollAttempts < 100) {
           const cards = document.querySelectorAll('.lftcntctnew');
+          
           if (cards.length === prevCount) {
-            await new Promise(r => setTimeout(r, 1000));
-            const recheckCards = document.querySelectorAll('.lftcntctnew');
-            if (recheckCards.length === prevCount) break;
+            noChangeCount++;
+            if (noChangeCount >= 4) {
+              statusDiv.innerHTML += 'No more new leads loaded. Starting sync...<br>';
+              break;
+            }
+            await new Promise(r => setTimeout(r, 1200));
+          } else {
+            noChangeCount = 0;
           }
           prevCount = cards.length;
           
@@ -103,11 +111,18 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
             }
           }
           
-          let p = firstCard.parentElement;
-          while (p && p !== document.body) {
-            p.scrollTop = p.scrollHeight;
-            p = p.parentElement;
+          if (cards.length > 0) {
+            const lastCard = cards[cards.length - 1];
+            lastCard.scrollIntoView({ block: 'end' });
+            
+            let p = lastCard.parentElement;
+            while (p && p !== document.body) {
+              p.scrollTop = p.scrollHeight;
+              p.dispatchEvent(new Event('scroll', { bubbles: true }));
+              p = p.parentElement;
+            }
           }
+          
           statusDiv.innerHTML = \`Loading leads... Found \${prevCount} contacts.<br>\`;
           statusDiv.scrollTop = statusDiv.scrollHeight;
           await new Promise(r => setTimeout(r, 800));

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, RefreshCw, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { signOutUser, isFirebaseConfigured, getCurrentUser } from '../firebase';
-import { DATA_CONFIG } from '../utils/dataConfig';
+import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,7 +19,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onThemeToggle }) {
-  const { currentSection, setCurrentSection, leads, syncStatus, isSyncing, autoSyncEnabled, toggleAutoSync, gsUrl, addLead, invoiceHistory, showBanner } = useApp();
+  const { currentSection, setCurrentSection, leads, syncStatus, isSyncing, autoSyncEnabled, toggleAutoSync, gsUrl, addLead, invoiceHistory, showBanner, companySettings, products } = useApp();
   const [collapsed, setCollapsed] = useState(false);
   const csvRef = useRef(null);
 
@@ -58,15 +58,399 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
     reader.readAsText(file);
   };
 
-  const handleExportCSV = () => {
-    const header = ['ID','Date','Customer','Contact','City','State','Product','Value','Status','Follow-up','Remarks'];
-    const rows = leads.map(l => [l.id, l.date, l.customerName, l.contact, l.city||'', l.state||'', l.product||'', l.orderValue||0, l.status, l.followUpDate||'', (l.remarks||'').replace(/,/g,' ')]);
-    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `indiamart_CRM_REPORT_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    showBanner('📥 Leads exported to CSV', 'success');
+  const handleExportCSV = async () => {
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+
+      // ── 1. Dashboard Sheet (added first so it appears as tab #1) ──────────
+      const ds = wb.addWorksheet('Dashboard');
+      ds.getColumn(1).width = 32;
+      ds.getColumn(2).width = 22;
+      ds.getColumn(3).width = 22;
+      ds.getColumn(4).width = 11;
+      ds.getColumn(5).width = 11;
+
+      const dsCenter = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      const dsLeft   = { horizontal: 'left',   vertical: 'middle', wrapText: true };
+      const dsThin   = { style: 'thin' };
+      const dsBord   = { top: dsThin, left: dsThin, bottom: dsThin, right: dsThin };
+      const greenFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+      const blueFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      const purpleFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } };
+      const amberFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } };
+      const redFill    = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF4444' } };
+      const darkFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+      const whiteBold  = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
+
+      const dsSection = (label, fill) => {
+        const r = ds.addRow([label, '', '', '', '']);
+        ds.mergeCells(r.number, 1, r.number, 5);
+        r.getCell(1).fill = fill; r.getCell(1).font = whiteBold;
+        r.getCell(1).alignment = dsCenter; r.getCell(1).border = dsBord;
+        r.height = 22;
+      };
+      const dsColHead = (c1, c2, c3) => {
+        const r = ds.addRow([c1, c2, c3, '', '']);
+        ds.mergeCells(r.number, 4, r.number, 5);
+        [1,2,3].forEach(col => {
+          r.getCell(col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          r.getCell(col).fill = darkFill; r.getCell(col).alignment = dsCenter; r.getCell(col).border = dsBord;
+        });
+      };
+      const dsDataRow = (c1, c2, c3, extraFn) => {
+        const r = ds.addRow([c1, c2, c3, '', '']);
+        ds.mergeCells(r.number, 4, r.number, 5);
+        r.getCell(1).alignment = dsLeft; r.getCell(2).alignment = dsCenter; r.getCell(3).alignment = dsCenter;
+        r.eachCell(c => { c.border = dsBord; });
+        if (extraFn) extraFn(r);
+        return r;
+      };
+
+      // Title
+      const titleR = ds.addRow([`IndiaMART CRM — Dashboard Report  |  ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`, '', '', '', '']);
+      ds.mergeCells(titleR.number, 1, titleR.number, 5);
+      titleR.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+      titleR.getCell(1).fill = darkFill; titleR.getCell(1).alignment = dsCenter; titleR.height = 28;
+
+      // KPI calculations — only invoices with actual payment received count as "billed"
+      const dsPaidInv = invoiceHistory.filter(inv => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return (parseFloat(v.receivedAmount)||0) > 0; });
+      const dsConfirmedRev = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.totalAmount)||0); }, 0);
+      const dsTotalReceived = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.receivedAmount)||0); }, 0);
+      const dsBilledIds = new Set(dsPaidInv.map(inv => inv.leadId).filter(Boolean));
+      const dsValidLeads = leads.filter(l => !DATA_CONFIG.getLostStatusLabels().includes(l.status)).length;
+      const dsConvRate = dsValidLeads ? ((dsBilledIds.size / dsValidLeads) * 100).toFixed(1) : '0';
+      const dsContactedCount = leads.filter(l => DATA_CONFIG.getContactedStatusLabels().includes(l.status)).length;
+      const dsContactRate = leads.length ? ((dsContactedCount / leads.length) * 100).toFixed(1) : '0';
+      const dsPending = Math.max(0, dsConfirmedRev - dsTotalReceived);
+      const dsInTransit = leads.filter(l => DATA_CONFIG.getStatusGroupStatuses('inTransit').includes(l.status)).length;
+      const dsWonAll = DATA_CONFIG.getWonStatusLabels();
+      const dsProjectedRev = leads.filter(l => !dsBilledIds.has(l.id) && !new Set(['Purchased', ...DATA_CONFIG.getLostStatusLabels()]).has(l.status)).reduce((s,l) => s+(l.orderValue||0), 0);
+
+      // KPI section
+      dsSection('📊  KEY PERFORMANCE INDICATORS', greenFill);
+      dsColHead('KPI', 'Value', 'Notes');
+      [
+        ['Pipeline Enquiries',    leads.length,      `${dsContactRate}% Contacted`,                    false],
+        ['Actual Sales (Billed)', dsConfirmedRev,    `From ${dsPaidInv.length} orders`,                true],
+        ['Outstanding Payments',  dsPending,         `Collected: ₹${dsTotalReceived.toLocaleString('en-IN')}`, true],
+        ['In-Transit Orders',     dsInTransit,       'Material Dispatched',                            false],
+        ['Projected Revenue',     dsProjectedRev,    'Unbilled Enquiries',                             true],
+        ['Conversion Rate',       `${dsConvRate}%`,  `${dsBilledIds.size} Billed / ${dsValidLeads} Valid`, false],
+      ].forEach(([kpi, val, note, isCurrency]) => {
+        dsDataRow(kpi, val, note, r => {
+          r.getCell(1).font = { bold: true };
+          r.getCell(2).font = { bold: true, size: 12, color: { argb: 'FF10B981' } };
+          r.getCell(3).font = { size: 10, color: { argb: 'FF64748B' } };
+          if (isCurrency) r.getCell(2).numFmt = '"₹"#,##0';
+        });
+      });
+      ds.addRow([]);
+
+      // Status Distribution
+      dsSection('🎯  LEAD STATUS DISTRIBUTION', blueFill);
+      dsColHead('Status', 'Count', '% of Total');
+      const dsStatusCounts = {};
+      leads.forEach(l => { dsStatusCounts[l.status] = (dsStatusCounts[l.status]||0) + 1; });
+      const dsWonOnes  = DATA_CONFIG.getWonStatusLabels();
+      const dsLostOnes = DATA_CONFIG.getLostStatusLabels();
+      Object.entries(dsStatusCounts).sort((a,b) => b[1]-a[1]).forEach(([status, count]) => {
+        dsDataRow(status, count, leads.length ? `${((count/leads.length)*100).toFixed(1)}%` : '0%', r => {
+          if (dsWonOnes.includes(status)) { r.getCell(1).fill = { type:'pattern',pattern:'solid',fgColor:{argb:'FFD1FAE5'} }; r.getCell(1).font = { bold:true, color:{argb:'FF065F46'} }; }
+          else if (dsLostOnes.includes(status)) { r.getCell(1).fill = { type:'pattern',pattern:'solid',fgColor:{argb:'FFFEE2E2'} }; r.getCell(1).font = { color:{argb:'FF991B1B'} }; }
+        });
+      });
+      ds.addRow([]);
+
+      // Top Products — use invoices first, fall back to won leads
+      dsSection('🏆  TOP PRODUCTS BY REVENUE', purpleFill);
+      dsColHead('Product', 'Revenue (₹)', 'Share %');
+      const dsProdRev = {};
+      if (dsPaidInv.length) {
+        dsPaidInv.forEach(inv => {
+          const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv;
+          (v.items||[]).forEach(p => { if (!p.name) return; dsProdRev[p.name] = (dsProdRev[p.name]||0)+((parseFloat(p.price)||0)*(parseFloat(p.qty)||1)); });
+        });
+      } else {
+        leads.filter(l => dsWonAll.includes(l.status)).forEach(l => {
+          (l.productList||[{name:l.product,price:l.orderValue,qty:1}]).forEach(p => { if (!p.name) return; dsProdRev[p.name] = (dsProdRev[p.name]||0)+((parseFloat(p.price)||0)*(parseFloat(p.qty)||1)); });
+        });
+      }
+      const dsTopProds = Object.entries(dsProdRev).sort((a,b)=>b[1]-a[1]).slice(0,10);
+      const dsTotalProdRev = dsTopProds.reduce((s,[,v])=>s+v, 0);
+      dsTopProds.forEach(([name,rev],i) => {
+        dsDataRow(`${i+1}. ${name}`, rev, dsTotalProdRev ? `${((rev/dsTotalProdRev)*100).toFixed(1)}%` : '0%', r => {
+          r.getCell(2).numFmt = '"₹"#,##0';
+          if (i===0) r.eachCell(c => { c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFEF3C7'}}; c.font={bold:true,color:{argb:'FF92400E'}}; });
+        });
+      });
+      ds.addRow([]);
+
+      // City-wise Revenue — use invoices for accuracy
+      dsSection('🗺️  CITY-WISE REVENUE', amberFill);
+      dsColHead('City', 'Revenue (₹)', 'Share %');
+      const dsCityRev = {};
+      if (dsPaidInv.length) {
+        dsPaidInv.forEach(inv => {
+          const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv;
+          const raw = (inv.customerCity||'Other').trim() || 'Other';
+          const city = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+          dsCityRev[city] = (dsCityRev[city]||0) + (parseFloat(v.totalAmount)||0);
+        });
+      } else {
+        leads.filter(l => dsWonAll.includes(l.status)).forEach(l => { const city=l.city||'Other'; dsCityRev[city]=(dsCityRev[city]||0)+(parseFloat(l.orderValue)||0); });
+      }
+      const dsTopCities = Object.entries(dsCityRev).sort((a,b)=>b[1]-a[1]).slice(0,10);
+      const dsTotalCityRev = dsTopCities.reduce((s,[,v])=>s+v, 0);
+      dsTopCities.forEach(([city,rev]) => {
+        dsDataRow(city, rev, dsTotalCityRev ? `${((rev/dsTotalCityRev)*100).toFixed(1)}%` : '0%', r => { r.getCell(2).numFmt = '"₹"#,##0'; });
+      });
+      ds.addRow([]);
+
+      // Sales Funnel
+      dsSection('🔽  SALES FUNNEL', redFill);
+      dsColHead('Stage', 'Count', 'Conversion %');
+      const dsQuotedSt = ['Quotation Sent','Negotiation',...dsWonAll];
+      const pct100 = n => leads.length ? `${((n/leads.length)*100).toFixed(1)}%` : '0%';
+      [
+        ['Total Leads',          leads.length,                                                       '100%'],
+        ['Contacted',            dsContactedCount,                                                   pct100(dsContactedCount)],
+        ['Quoted / Negotiation', leads.filter(l=>dsQuotedSt.includes(l.status)).length,             pct100(leads.filter(l=>dsQuotedSt.includes(l.status)).length)],
+        ['Converted / Billed',   dsBilledIds.size,                                                   dsValidLeads ? `${((dsBilledIds.size/dsValidLeads)*100).toFixed(1)}%` : '0%'],
+        ['Won (All Stages)',      leads.filter(l=>dsWonAll.includes(l.status)).length,               pct100(leads.filter(l=>dsWonAll.includes(l.status)).length)],
+      ].forEach(([stage,cnt,p]) => dsDataRow(stage, cnt, p));
+      ds.addRow([]);
+
+      // Monthly Trend — revenue from invoices (matches Actual Sales total exactly)
+      dsSection('📈  MONTHLY REVENUE TREND', greenFill);
+      dsColHead('Month', 'Received (₹)', 'Leads Added');
+      const dsMonthly = {};
+      leads.forEach(l => {
+        const month = (l.date||'').substring(0,7); if (!month) return;
+        if (!dsMonthly[month]) dsMonthly[month] = { revenue:0, count:0 };
+        dsMonthly[month].count++;
+      });
+      dsPaidInv.forEach(inv => {
+        const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv;
+        const dateStr = String(v.invoiceDate || inv.createdAt || '');
+        let month = '';
+        if (/^\d{4}-\d{2}/.test(dateStr)) {
+          month = dateStr.substring(0, 7); // YYYY-MM-DD → YYYY-MM
+        } else if (/^\d{2}-\d{2}-\d{4}/.test(dateStr)) {
+          const parts = dateStr.split('-');
+          month = `${parts[2]}-${parts[1]}`; // DD-MM-YYYY → YYYY-MM
+        } else if (/^\d{2}\/\d{2}\/\d{4}/.test(dateStr)) {
+          const parts = dateStr.split('/');
+          month = `${parts[2]}-${parts[1]}`; // DD/MM/YYYY → YYYY-MM
+        }
+        if (!month) return;
+        if (!dsMonthly[month]) dsMonthly[month] = { revenue:0, count:0 };
+        dsMonthly[month].revenue += (parseFloat(v.receivedAmount)||0);
+      });
+      Object.keys(dsMonthly).sort().forEach(month => {
+        dsDataRow(month, dsMonthly[month].revenue, dsMonthly[month].count, r => { r.getCell(2).numFmt = '"₹"#,##0'; });
+      });
+
+      // ── 2. Leads Sheet ────────────────────────────────────────────────────
+      const ws = wb.addWorksheet('Leads');
+      ws.columns = [
+        { header: 'Date', width: 15 },
+        { header: 'Lead ID', width: 12 },
+        { header: 'Customer Name', width: 25 },
+        { header: 'Mobile Number', width: 18 },
+        { header: 'City', width: 15 },
+        { header: 'State', width: 15 },
+        { header: 'Source', width: 18 },
+        { header: 'GST No.', width: 18 },
+        { header: 'Product Name', width: 30 },
+        { header: 'Qty', width: 8 },
+        { header: 'Unit Price', width: 12 },
+        { header: 'Subtotal', width: 12 },
+        { header: 'Total Value', width: 15 },
+        { header: 'Current Status', width: 20 },
+        { header: 'Follow-up', width: 15 },
+        { header: 'Lost Reason', width: 20 },
+        { header: 'Remarks', width: 35 },
+      ];
+
+      const headerRow = ws.getRow(1);
+      headerRow.height = 30;
+      headerRow.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 12 };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF059669' } },
+          left: { style: 'thin', color: { argb: 'FF059669' } },
+          bottom: { style: 'thin', color: { argb: 'FF059669' } },
+          right: { style: 'thin', color: { argb: 'FF059669' } },
+        };
+      });
+
+      let currentRow = 2;
+      leads.forEach(l => {
+        const productList = l.productList && l.productList.length
+          ? l.productList
+          : [{ name: l.product, qty: 1, price: l.orderValue }];
+        const rowCount = productList.length;
+
+        productList.forEach((p, idx) => {
+          const rowData = [
+            idx === 0 ? normalizeDisplayDate(l.date) : '',
+            idx === 0 ? l.id : '',
+            idx === 0 ? l.customerName : '',
+            idx === 0 ? l.contact : '',
+            idx === 0 ? l.city : '',
+            idx === 0 ? l.state : '',
+            idx === 0 ? (l.source || '') : '',
+            idx === 0 ? (l.gst || '') : '',
+            p.name || '',
+            p.qty || 0,
+            p.price || 0,
+            (p.price || 0) * (p.qty || 0),
+            idx === 0 ? (l.orderValue || 0) : '',
+            idx === 0 ? l.status : '',
+            idx === 0 ? normalizeDisplayDate(l.followUpDate) : '',
+            idx === 0 ? (l.lostReason || '') : '',
+            idx === 0 ? (l.remarks || '') : '',
+          ];
+
+          const row = ws.addRow(rowData);
+          row.getCell(11).numFmt = '"₹"#,##0';
+          row.getCell(12).numFmt = '"₹"#,##0';
+          row.getCell(13).numFmt = '"₹"#,##0';
+
+          if (idx === 0) {
+            const statusCell = row.getCell(14);
+            const wonStatuses = ['Converted', 'Purchased', 'Repeat Customer', 'Material Dispatched', 'Material Reached'];
+            const lostStatuses = ['Closed Lost', 'Invalid Lead', 'Not Interested', 'No Response', 'No Current Requirement'];
+            if (wonStatuses.includes(l.status)) {
+              statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+              statusCell.font = { color: { argb: 'FF065F46' }, bold: true };
+            } else if (lostStatuses.includes(l.status)) {
+              statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+              statusCell.font = { color: { argb: 'FF991B1B' } };
+            }
+          }
+
+          row.eachCell(cell => {
+            cell.alignment = { vertical: 'top', wrapText: true };
+          });
+        });
+
+        if (rowCount > 1) {
+          const mergeCols = [1, 2, 3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 17];
+          mergeCols.forEach(col => {
+            ws.mergeCells(currentRow, col, currentRow + rowCount - 1, col);
+          });
+        }
+        currentRow += rowCount;
+      });
+
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+      // ── 3. Summary Sheet ──────────────────────────────────────────────────
+      const ss = wb.addWorksheet('Summary');
+      const totalLeads = leads.length;
+      const totalValue = leads.reduce((s, l) => s + (l.orderValue || 0), 0);
+      const ssPaidInv = invoiceHistory.filter(inv => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return (parseFloat(v.receivedAmount)||0) > 0; });
+      const ssBilledIds = new Set(ssPaidInv.map(inv => inv.leadId).filter(Boolean));
+      const ssValidLeads = leads.filter(l => l.status !== 'Invalid Lead').length;
+      const convertedLeads = ssBilledIds.size;
+      const conversionRate = ssValidLeads > 0 ? ((convertedLeads / ssValidLeads) * 100).toFixed(2) : 0;
+      const statusCounts = {};
+      leads.forEach(l => { statusCounts[l.status] = (statusCounts[l.status] || 0) + 1; });
+
+      ss.addRow(['Metric', 'Value', 'Percentage']);
+      ss.getRow(1).eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 12 };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+      ss.addRow(['Total Leads', totalLeads, '100%']);
+      ss.addRow(['Total Value', totalValue, '-']);
+      ss.getRow(3).getCell(2).numFmt = '"₹"#,##0';
+      const convRate = parseFloat(conversionRate);
+      ss.addRow(['Converted / Billed', convertedLeads, `${convRate.toFixed(2)}% of Valid`]);
+      ss.addRow(['Pending (Valid, Unbilled)', ssValidLeads - convertedLeads, `${(100 - convRate).toFixed(2)}% of Valid`]);
+      ss.addRow([]);
+      ss.addRow(['Status Breakdown', 'Count', 'Percentage']);
+      ss.getRow(ss.lastRow.number).eachCell(cell => {
+        cell.font = { bold: true };
+      });
+      Object.keys(statusCounts).sort((a, b) => statusCounts[b] - statusCounts[a]).forEach(status => {
+        const count = statusCounts[status];
+        const pct = ((count / totalLeads) * 100).toFixed(2);
+        ss.addRow([status, count, `${pct}%`]);
+      });
+      ss.getColumn(1).width = 25;
+      ss.getColumn(2).width = 15;
+      ss.getColumn(3).width = 15;
+      ss.eachRow((row, rowNum) => {
+        if (rowNum > 1) {
+          row.eachCell(cell => {
+            cell.alignment = { vertical: 'middle', horizontal: 'left' };
+            if (rowNum <= 5) cell.font = { ...cell.font, bold: true, size: 11 };
+          });
+        }
+      });
+
+      // ── 4. Invoices Sheet ─────────────────────────────────────────────────
+      if (invoiceHistory.length) {
+        const is = wb.addWorksheet('Invoices');
+        is.columns = [
+          { header: 'Invoice No.', width: 20 },
+          { header: 'Date', width: 15 },
+          { header: 'Customer', width: 25 },
+          { header: 'Contact', width: 18 },
+          { header: 'City', width: 15 },
+          { header: 'State', width: 15 },
+          { header: 'Amount (₹)', width: 15 },
+          { header: 'Received (₹)', width: 15 },
+          { header: 'Payment Status', width: 15 },
+          { header: 'Invoice Status', width: 15 },
+        ];
+        const invHeader = is.getRow(1);
+        invHeader.height = 30;
+        invHeader.eachCell(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } };
+          cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 12 };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+        invoiceHistory.forEach(inv => {
+          const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+          const row = is.addRow([
+            inv.invoiceNumber,
+            latest.invoiceDate,
+            inv.customerName,
+            inv.customerContact,
+            inv.customerCity,
+            inv.customerState,
+            latest.totalAmount || 0,
+            latest.receivedAmount || 0,
+            latest.paymentStatus || 'Pending',
+            latest.status || '-',
+          ]);
+          row.getCell(7).numFmt = '"₹"#,##0';
+          row.getCell(8).numFmt = '"₹"#,##0';
+          row.eachCell(cell => { cell.alignment = { vertical: 'middle', horizontal: 'left' }; });
+        });
+        is.views = [{ state: 'frozen', ySplit: 1 }];
+      }
+
+      // ── 5. Download ───────────────────────────────────────────────────────
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `indiamart_CRM_REPORT_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showBanner('✅ Data exported to Excel!', 'success');
+    } catch (err) {
+      showBanner('❌ Export failed: ' + err.message, 'error');
+    }
   };
 
   const today = new Date().toISOString().split('T')[0];

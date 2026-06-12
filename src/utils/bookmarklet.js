@@ -152,24 +152,24 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
           
           /* Extract Product Name by filtering out Name, Location, Time, and Preview Messages */
           let product = 'IndiaMART Enquiry';
-          
-          // 1. Try to extract from right column details since it's the most accurate
+           
+          /* 1. Try to extract from right column details since it's the most accurate */
           const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
           if (rightCol) {
-            // A. Look for product detail link
+            /* A. Look for product detail link */
             const prodLink = rightCol.querySelector('a[href*="proddetail"], a[href*="product"]');
             if (prodLink && prodLink.innerText.trim()) {
               product = prodLink.innerText.trim();
             } else {
-              // B. Look for common product name classes/elements
+              /* B. Look for common product name classes/elements */
               const prodEl = rightCol.querySelector('.m-pname, .prod-name, .product-name, [class*="prod-name"], [class*="product-name"], [class*="pname"], [class*="prd-name"]');
               if (prodEl && prodEl.innerText.trim()) {
                 product = prodEl.innerText.trim();
               }
             }
           }
-          
-          // 2. If product is still default/empty or generic, try extracting from the card lines
+           
+          /* 2. If product is still default/empty or generic, try extracting from the card lines */
           if (product === 'IndiaMART Enquiry' || !product) {
             const candidateLines = lines.filter(line => {
               const l = line.toLowerCase();
@@ -194,25 +194,25 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
               product = candidateLines[0];
             }
           }
-          
-          // Match against catalog products
+           
+          /* Match against catalog products */
           let matched = null;
           if (Array.isArray(catalogProducts) && catalogProducts.length > 0) {
             const cleanStr = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
             const scrapedClean = cleanStr(product);
-            
-            // 1. Exact clean match
+             
+            /* 1. Exact clean match */
             matched = catalogProducts.find(p => cleanStr(p.name) === scrapedClean);
-            
-            // 2. Substring match (catalog name in scraped name)
+             
+            /* 2. Substring match (catalog name in scraped name) */
             if (!matched) {
               matched = catalogProducts.find(p => {
                 const cClean = cleanStr(p.name);
                 return cClean.length > 3 && scrapedClean.includes(cClean);
               });
             }
-            
-            // 3. Substring match (scraped name in catalog name)
+             
+            /* 3. Substring match (scraped name in catalog name) */
             if (!matched) {
               matched = catalogProducts.find(p => {
                 const cClean = cleanStr(p.name);
@@ -220,19 +220,19 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
               });
             }
           }
-          
+           
           let displayProduct = product;
           let productPrice = 0;
           let productGst = '5';
           let productHsn = '';
-          
+           
           if (matched) {
             displayProduct = matched.name;
             productPrice = parseFloat(matched.price) || 0;
             productGst = matched.gst || '5';
             productHsn = matched.hsn || '';
           } else {
-            // Mark as new item if it is a valid name and not already marked
+            /* Mark as new item if it is a valid name and not already marked */
             if (displayProduct && displayProduct !== 'IndiaMART Enquiry' && !displayProduct.startsWith('[NEW]')) {
               displayProduct = '[NEW] ' + displayProduct;
             }

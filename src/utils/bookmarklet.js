@@ -30,10 +30,7 @@ export function generateBookmarkletCode(firebaseConfig) {
       </div>
       <div style="display:flex; gap:8px; margin-bottom:12px;">
         <button id="start-sync-btn" style="flex:1; padding:10px; background:#10b981; border:none; border-radius:6px; color:#fff; font-weight:600; cursor:pointer; font-size:13px;">
-          Scan & Sync
-        </button>
-        <button id="debug-dom-btn" style="padding:10px; background:#475569; border:none; border-radius:6px; color:#fff; font-weight:600; cursor:pointer; font-size:13px;" title="Analyze Page elements to find target classes">
-          🔍 Inspect Page
+          Scan & Sync Leads
         </button>
       </div>
       <div id="sync-status" style="margin-top:12px; font-size:12px; color:#94a3b8; line-height:1.4; max-height:220px; overflow-y:auto; border-radius:6px; background:#0f172a; padding:8px; display:none;">
@@ -49,55 +46,182 @@ export function generateBookmarkletCode(firebaseConfig) {
     
     document.getElementById('close-sync-panel').onclick = () => panel.remove();
     
-    document.getElementById('debug-dom-btn').onclick = () => {
-      const statusDiv = document.getElementById('sync-status');
-      statusDiv.style.display = 'block';
-      statusDiv.innerHTML = '<b>Deep Inspecting Contact elements...</b><br>';
-      
-      /* 1. Inspect elements with class .cp and .cpo */
-      const cpElements = Array.from(document.querySelectorAll('.cp, .cpo'));
-      statusDiv.innerHTML += \`Found \${cpElements.length} elements with class .cp or .cpo.<br>\`;
-      
-      cpElements.slice(0, 10).forEach((el, idx) => {
-        const tagName = el.tagName.toLowerCase();
-        const text = (el.innerText || '').replace(/\\s+/g, ' ').trim();
-        statusDiv.innerHTML += \`cp[\${idx}]: &lt;\${tagName} class="\${el.className}"&gt; (text: "\${text.substring(0, 50)}")<br>\`;
-      });
-      
-      /* 2. Find the smallest elements containing contact names like "YERR" or "PRAV" */
-      const names = ['YERR', 'PRAV', 'Saya'];
-      statusDiv.innerHTML += '<br><b>Leaf element search for names:</b><br>';
-      names.forEach(name => {
-        const matches = Array.from(document.querySelectorAll('*')).filter(el => {
-          return el.innerText && el.innerText.includes(name) && el.children.length === 0;
-        });
-        if (matches.length > 0) {
-          statusDiv.innerHTML += \`Matches for "\${name}": \${matches.length}<br>\`;
-          matches.forEach((el, i) => {
-            let parentInfo = '';
-            if (el.parentElement) {
-              parentInfo = \`parent: &lt;\${el.parentElement.tagName.toLowerCase()} class="\${el.parentElement.className}"&gt;\`;
-              if (el.parentElement.parentElement) {
-                parentInfo += \` &gt; grandparent: &lt;\${el.parentElement.parentElement.tagName.toLowerCase()} class="\${el.parentElement.parentElement.className}"&gt;\`;
-              }
-            }
-            statusDiv.innerHTML += \`  [\${i}] &lt;\${el.tagName.toLowerCase()} class="\${el.className}"&gt; text: "\${el.innerText}"<br>   \${parentInfo}<br>\`;
-          });
-        } else {
-          statusDiv.innerHTML += \`No leaf matches for "\${name}". Checking parents...<br>\`;
-          const allMatches = Array.from(document.querySelectorAll('*')).filter(el => el.innerText && el.innerText.includes(name));
-          statusDiv.innerHTML += \`  All elements containing "\${name}": \${allMatches.length}<br>\`;
-        }
-      });
-    };
-    
     document.getElementById('start-sync-btn').onclick = async () => {
       const statusDiv = document.getElementById('sync-status');
       statusDiv.style.display = 'block';
-      statusDiv.innerHTML = 'Starting scan...<br>';
+      statusDiv.innerHTML = 'Finding contacts on page...<br>';
       
-      /* We will dynamically adjust the scanner once the user sends the inspect results! */
-      statusDiv.innerHTML += 'Please run "Inspect Page" first and share the logs so we can configure the target selectors.';
+      /* Get all contacts in the sidebar matching the targeted class .lftcntctnew */
+      const leadCards = Array.from(document.querySelectorAll('.lftcntctnew'));
+      
+      statusDiv.innerHTML += \`Found \${leadCards.length} contacts on left panel.<br>\`;
+      
+      if (leadCards.length === 0) {
+        statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ No contacts found. Please make sure you are on the Lead Manager / Message Centre page.</span>';
+        return;
+      }
+      
+      const startDateVal = document.getElementById('sync-start-date').value;
+      const endDateVal = document.getElementById('sync-end-date').value;
+      const startLimit = startDateVal ? new Date(startDateVal) : null;
+      const endLimit = endDateVal ? new Date(endDateVal) : null;
+      if (endLimit) endLimit.setHours(23, 59, 59, 999);
+      
+      let syncedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      
+      statusDiv.innerHTML += '<b>Starting auto-click sync loop...</b><br>';
+      
+      for (let i = 0; i < leadCards.length; i++) {
+        const card = leadCards[i];
+        try {
+          /* Extract Name from the card */
+          const nameEl = card.querySelector('.fs14.fwb');
+          const customerName = nameEl ? nameEl.innerText.trim() : 'Unknown Buyer';
+          
+          statusDiv.innerHTML += \`Scanning [\${i+1}/\${leadCards.length}]: \${customerName}...<br>\`;
+          statusDiv.scrollTop = statusDiv.scrollHeight;
+          
+          /* Click the contact to load details on the right panel */
+          card.click();
+          await new Promise(r => setTimeout(r, 700)); /* Wait for detail panel to render */
+          
+          /* Now scan the right side of the page (details pane) for the phone number */
+          /* Find all phone numbers matching 10 digits or +91 pattern */
+          const bodyText = document.body.innerText;
+          const phoneRegex = /(?:\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/g;
+          let phoneMatch;
+          let contact = '';
+          
+          /* We collect phone numbers and try to get the active one (usually in the chat details) */
+          /* Let's search inside elements that belong to the right column / details pane */
+          const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
+          const searchArea = rightCol ? rightCol.innerText : bodyText;
+          
+          const matches = [];
+          while ((phoneMatch = phoneRegex.exec(searchArea)) !== null) {
+            matches.push(phoneMatch[1]);
+          }
+          
+          if (matches.length > 0) {
+            contact = matches[0]; /* Grab the first matching number in the detail view */
+          } else {
+            /* Fallback to global search if right column was not distinct */
+            const globalMatches = [];
+            while ((phoneMatch = phoneRegex.exec(bodyText)) !== null) {
+              globalMatches.push(phoneMatch[1]);
+            }
+            /* Exclude typical seller number if we can, or just take the first */
+            contact = globalMatches.find(num => num !== config.sellerMobile) || globalMatches[0] || '0000000000';
+          }
+          
+          /* Extract Product from the card text */
+          let product = 'IndiaMART Enquiry';
+          const cardText = card.innerText;
+          const lines = cardText.split('\\n').map(l => l.trim()).filter(l => l.length > 1);
+          
+          /* Check if there is product label or enquiry text */
+          const prodLine = lines.find(l => l.toLowerCase().includes('viewed') || l.toLowerCase().includes('enquiry') || l.toLowerCase().includes('kg') || l.toLowerCase().includes('liter') || l.toLowerCase().includes('pack'));
+          if (prodLine) {
+            product = prodLine;
+          } else if (lines.length > 2) {
+            product = lines[2];
+          } else if (lines.length > 1) {
+            product = lines[1];
+          }
+          
+          /* Extract Location (City/State) */
+          let city = '';
+          let state = '';
+          const locationLine = lines.find(l => l.includes(','));
+          if (locationLine) {
+            const parts = locationLine.split(',');
+            city = parts[0]?.trim() || '';
+            state = parts[1]?.trim() || '';
+          }
+          
+          let leadDate = new Date();
+          
+          /* Check date range */
+          if (startLimit && leadDate < startLimit) { skippedCount++; continue; }
+          if (endLimit && leadDate > endLimit) { skippedCount++; continue; }
+          
+          const formattedDate = leadDate.toISOString().split('T')[0];
+          const cleanProd = product.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
+          const docId = \`IM_\${contact}_\${formattedDate}_\${cleanProd}\`;
+          
+          const leadPayload = {
+            id: docId,
+            date: formattedDate,
+            customerName: customerName,
+            contact: contact,
+            product: product,
+            status: 'New Enquiry',
+            followUpDate: '',
+            orderValue: 0,
+            remarks: 'Imported via IndiaMART Auto-Clicker',
+            state: state,
+            city: city,
+            source: 'IndiaMART Direct',
+            timestamp: leadDate.getTime(),
+            productList: [{ name: product, qty: 1, price: 0, gst: '5', hsn: '' }],
+            history: [{ status: 'New Enquiry', timestamp: Date.now() }]
+          };
+          
+          const url = \`https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads/\${docId}?updateMask.fieldPaths=id&updateMask.fieldPaths=date&updateMask.fieldPaths=customerName&updateMask.fieldPaths=contact&updateMask.fieldPaths=product&updateMask.fieldPaths=status&updateMask.fieldPaths=remarks&updateMask.fieldPaths=state&updateMask.fieldPaths=city&updateMask.fieldPaths=source&updateMask.fieldPaths=timestamp&updateMask.fieldPaths=productList&updateMask.fieldPaths=history\`;
+          
+          const firestoreFields = {};
+          Object.keys(leadPayload).forEach(key => {
+            const val = leadPayload[key];
+            if (typeof val === 'string') {
+              firestoreFields[key] = { stringValue: val };
+            } else if (typeof val === 'number') {
+              firestoreFields[key] = { doubleValue: val };
+            } else if (Array.isArray(val)) {
+              firestoreFields[key] = {
+                arrayValue: {
+                  values: val.map(item => ({
+                    mapValue: {
+                      fields: Object.keys(item).reduce((acc, itemKey) => {
+                        const v = item[itemKey];
+                        acc[itemKey] = typeof v === 'number' ? { doubleValue: v } : { stringValue: String(v) };
+                        return acc;
+                      }, {})
+                    }
+                  }))
+                }
+              };
+            }
+          });
+          
+          const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              name: \`projects/\${config.projectId}/databases/(default)/documents/leads/\${docId}\`,
+              fields: firestoreFields
+            })
+          });
+          
+          if (response.ok) {
+            syncedCount++;
+            statusDiv.innerHTML += \`<span style="color:#10b981;">✔️ Synced: \${customerName} (\${contact})</span><br>\`;
+          } else {
+            errorCount++;
+            statusDiv.innerHTML += \`<span style="color:#f43f5e;">❌ Failed to upload \${customerName}</span><br>\`;
+          }
+          
+        } catch (e) {
+          errorCount++;
+          console.error(e);
+        }
+      }
+      
+      statusDiv.innerHTML += \`<br><strong style="color:#10b981;">Sync Complete!</strong><br>Synced: \${syncedCount}<br>Failed/Skipped: \${errorCount + skippedCount}\`;
+      statusDiv.scrollTop = statusDiv.scrollHeight;
     };
   })();`;
 

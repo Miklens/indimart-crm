@@ -7,7 +7,7 @@ import { DATA_CONFIG } from '../utils/dataConfig';
 Chart.register(...registerables);
 
 export default function Dashboard() {
-  const { leads, invoiceHistory, setCurrentSection } = useApp();
+  const { leads, invoiceHistory, setCurrentSection, products } = useApp();
   const [monthlyCost, setMonthlyCost] = useState(() => parseFloat(localStorage.getItem('indimart_monthlyCost') || '0'));
   const dashboardRef = useRef(null);
   const [exporting, setExporting] = useState(false);
@@ -84,19 +84,28 @@ export default function Dashboard() {
       });
     }
 
-    // 3. Top products bar
-    const productRevenue = {};
+    // 3. Top product categories bar
+    const categoryRevenue = {};
     leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).forEach(l => {
       (l.productList || [{ name: l.product, price: l.orderValue, qty: 1 }]).forEach(item => {
         if (!item.name) return;
-        productRevenue[item.name] = (productRevenue[item.name] || 0) + ((parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1));
+        
+        // Find product category
+        const clean = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const itemClean = clean(item.name.replace('[NEW] ', ''));
+        const catProduct = products.find(p => clean(p.name) === itemClean) || 
+                           products.find(p => itemClean.includes(clean(p.name))) || 
+                           products.find(p => clean(p.name).includes(itemClean));
+        const category = catProduct?.category || 'Uncategorized';
+        
+        categoryRevenue[category] = (categoryRevenue[category] || 0) + ((parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1));
       });
     });
-    const sortedProds = Object.entries(productRevenue).sort((a,b) => b[1]-a[1]).slice(0,5);
-    if (canvasRefs.product.current && sortedProds.length) {
+    const sortedCats = Object.entries(categoryRevenue).sort((a,b) => b[1]-a[1]).slice(0,5);
+    if (canvasRefs.product.current && sortedCats.length) {
       chartsRef.current.product = new Chart(canvasRefs.product.current, {
         type: 'bar',
-        data: { labels: sortedProds.map(p=>p[0]), datasets: [{ label: 'Revenue (₹)', data: sortedProds.map(p=>p[1]), backgroundColor: '#10b981', borderRadius: 5 }] },
+        data: { labels: sortedCats.map(p=>p[0]), datasets: [{ label: 'Revenue (₹)', data: sortedCats.map(p=>p[1]), backgroundColor: '#10b981', borderRadius: 5 }] },
         options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: chartColor.text } }, y: { grid: { display: false }, ticks: { color: chartColor.text } } } },
       });
     }
@@ -247,7 +256,7 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
         <ChartCard title="Lead Status Distribution" canvasKey="dist" hasData={leads.length > 0} />
         <ChartCard title="Lost Reason Analysis" canvasKey="lost" hasData={leads.filter(l => DATA_CONFIG.getLostStatusLabels().includes(l.status)).length > 0} />
-        <ChartCard title="Top Products by Revenue" canvasKey="product" hasData={leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).length > 0} />
+        <ChartCard title="Top Categories by Revenue" canvasKey="product" hasData={leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).length > 0} />
         <ChartCard title="City-wise Revenue" canvasKey="city" hasData={leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).length > 0} />
         <ChartCard title="Sales Funnel" canvasKey="funnel" hasData={leads.length > 0} />
         <ChartCard title="Monthly Revenue Trend" canvasKey="trend" hasData={leads.filter(l => l.date).length > 0} />

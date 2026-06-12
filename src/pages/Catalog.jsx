@@ -3,8 +3,19 @@ import { Plus, Edit3, Trash2, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 
+const CATEGORIES = [
+  'Biofertilizers', 'Biopesticides', 'Biostimulants', 'Humic Acid', 
+  'Fulvic Acids', 'Chemical Pesticides', 'Herbicides', 'Micronutrients', 'Macronutrients'
+];
+
 function ProductModal({ product, onClose, onSave }) {
-  const [form, setForm] = useState({ name: product?.name || '', price: product?.price || '', hsn: product?.hsn || '', gst: product?.gst || '5' });
+  const [form, setForm] = useState({ 
+    name: product?.name || '', 
+    price: product?.price || '', 
+    hsn: product?.hsn || '', 
+    gst: product?.gst || '5',
+    category: product?.category || '' 
+  });
   const handle = (e) => { e.preventDefault(); onSave({ ...form, price: parseFloat(form.price) || 0 }); };
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -15,6 +26,14 @@ function ProductModal({ product, onClose, onSave }) {
         </div>
         <form onSubmit={handle}>
           <div className="form-group"><label>Product Name</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required /></div>
+          
+          <div className="form-group"><label>Category / Group</label>
+            <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+              <option value="">Select category...</option>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
           <div className="form-row">
             <div className="form-group"><label>Price (₹)</label><input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} min="0" step="any" required /></div>
             <div className="form-group"><label>HSN Code</label><input value={form.hsn} onChange={e => setForm(f => ({ ...f, hsn: e.target.value }))} /></div>
@@ -66,14 +85,15 @@ export default function Catalog() {
 
       <div className="table-wrapper" style={{ marginBottom: '1.5rem' }}>
         <table>
-          <thead><tr><th>Product Name</th><th>HSN</th><th>GST</th><th>Price</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Product Name</th><th>Category</th><th>HSN</th><th>GST</th><th>Price</th><th>Actions</th></tr></thead>
           <tbody>
             {products.length === 0 && (
-              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>No products yet. Add products to auto-fill in lead forms.</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>No products yet. Add products to auto-fill in lead forms.</td></tr>
             )}
             {products.map(p => (
               <tr key={p.id}>
                 <td style={{ fontWeight: 600 }}>{p.name}</td>
+                <td style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>{p.category || '-'}</td>
                 <td>{p.hsn || '-'}</td>
                 <td>{p.gst || '5'}%</td>
                 <td style={{ fontWeight: 700, color: 'var(--primary)' }}>₹{(p.price || 0).toLocaleString()}</td>

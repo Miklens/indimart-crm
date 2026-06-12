@@ -29,9 +29,9 @@ const SAMPLE_LEADS = [
 ];
 
 const SAMPLE_PRODUCTS = [
-  { id: 'P001', name: 'Bio NPK 11:6:6', price: 1200, hsn: '31010099', gst: '5' },
-  { id: 'P002', name: 'Amino Zinc', price: 850, hsn: '', gst: '5' },
-  { id: 'P003', name: 'Organic Potash', price: 950, hsn: '', gst: '12' }
+  { id: 'P001', name: 'Bio NPK 11:6:6', price: 1200, hsn: '31010099', gst: '5', category: 'Biofertilizers' },
+  { id: 'P002', name: 'Amino Zinc', price: 850, hsn: '', gst: '5', category: 'Micronutrients' },
+  { id: 'P003', name: 'Organic Potash', price: 950, hsn: '', gst: '12', category: 'Biofertilizers' }
 ];
 
 // Normalize a phone/contact to digits-only (last 10 digits) for consistent matching

@@ -255,11 +255,32 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           
           let matched = null;
           if (Array.isArray(catalogProducts) && catalogProducts.length > 0) {
-            const cleanStr = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const scrapedClean = cleanStr(product);
-            matched = catalogProducts.find(p => cleanStr(p.name) === scrapedClean);
-            if (!matched) matched = catalogProducts.find(p => { const cClean = cleanStr(p.name); return cClean.length > 3 && scrapedClean.includes(cClean); });
-            if (!matched) matched = catalogProducts.find(p => { const cClean = cleanStr(p.name); return scrapedClean.length > 3 && cClean.includes(scrapedClean); });
+            const clean = s => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+            const scrapedTokens = clean(product);
+            
+            let bestScore = 0;
+            for (const p of catalogProducts) {
+              const catalogTokens = clean(p.name);
+              
+              const intersection = scrapedTokens.filter(t => catalogTokens.includes(t));
+              const unionSize = new Set([...scrapedTokens, ...catalogTokens]).size;
+              const jaccard = unionSize > 0 ? (intersection.length / unionSize) : 0;
+              
+              const cleanScraped = String(product || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const cleanCatalog = String(p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              let contain = 0;
+              if (cleanScraped && cleanCatalog) {
+                if (cleanScraped.includes(cleanCatalog) || cleanCatalog.includes(cleanScraped)) {
+                  contain = 0.6;
+                }
+              }
+              
+              const finalScore = Math.max(jaccard, contain);
+              if (finalScore >= 0.4 && finalScore > bestScore) {
+                bestScore = finalScore;
+                matched = p;
+              }
+            }
           }
           
           let displayProduct = product;

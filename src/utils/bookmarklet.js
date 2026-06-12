@@ -4,12 +4,12 @@
 export function generateBookmarkletCode(firebaseConfig) {
   const configStr = JSON.stringify(firebaseConfig);
 
-  // The code inside this function will run in the user's browser on the IndiaMART page.
-  // We stringify the entire function and wrap it in a javascript: URL.
+  /* The code inside this function will run in the user's browser on the IndiaMART page. */
+  /* We stringify the entire function and wrap it in a javascript: URL. */
   const scriptContent = `(function() {
     const config = ${configStr};
     
-    // 1. Create and inject a beautiful floating panel on the IndiaMART page
+    /* 1. Create and inject a beautiful floating panel on the IndiaMART page */
     if (document.getElementById('indimart-sync-panel')) {
       document.getElementById('indimart-sync-panel').remove();
     }
@@ -40,7 +40,7 @@ export function generateBookmarkletCode(firebaseConfig) {
     
     document.body.appendChild(panel);
     
-    // Set default dates (past 7 days)
+    /* Set default dates (past 7 days) */
     const today = new Date().toISOString().split('T')[0];
     const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     document.getElementById('sync-start-date').value = past7;
@@ -58,25 +58,21 @@ export function generateBookmarkletCode(firebaseConfig) {
       
       const startLimit = startDateVal ? new Date(startDateVal) : null;
       const endLimit = endDateVal ? new Date(endDateVal) : null;
-      if (endLimit) endLimit.setHours(23, 59, 59, 999); // include full end day
+      if (endLimit) endLimit.setHours(23, 59, 59, 999);
       
-      // 2. Perform intelligent scraping of lead cards
-      // IndiaMART Lead Manager selectors can vary, we use multiple selectors & heuristics
+      /* 2. Perform intelligent scraping of lead cards */
       const leadCards = Array.from(document.querySelectorAll([
         '.eq-card', '.lead-card', '.enq-card', '.card', '.leads-card',
         '[class*="LeadCard"]', '[class*="EnquiryCard"]', '[class*="card-enquiry"]'
       ].join(','))).filter(el => {
-        // Must contain a phone number or contact-like structure
         return el.innerText.match(/\\b\\d{10}\\b/) || el.innerText.match(/\\+91/);
       });
       
       statusDiv.innerHTML += \`Found \${leadCards.length} potential lead cards on page.<br>\`;
       
       if (leadCards.length === 0) {
-        // Fallback: search for blocks containing phone numbers
         statusDiv.innerHTML += 'Trying fallback page scan...<br>';
         const bodyText = document.body.innerText;
-        // Let user know if they are on the wrong page
         if (!window.location.hostname.includes('indiamart.com')) {
           statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ Warning: You are not on indiamart.com</span><br>';
         }
@@ -90,12 +86,12 @@ export function generateBookmarkletCode(firebaseConfig) {
         try {
           const text = card.innerText;
           
-          // Parse Phone Number
+          /* Parse Phone Number */
           const phoneMatch = text.match(/(\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/);
           if (!phoneMatch) continue;
-          const contact = phoneMatch[2]; // Clean 10-digit number
+          const contact = phoneMatch[2];
           
-          // Parse Customer Name (Usually the first line or bold heading)
+          /* Parse Customer Name */
           let customerName = 'Unknown Buyer';
           const nameEl = card.querySelector([
             'h3', 'h4', '.name', '.buyer-name', '[class*="name"]', '[class*="BuyerName"]'
@@ -103,12 +99,11 @@ export function generateBookmarkletCode(firebaseConfig) {
           if (nameEl && nameEl.innerText.trim()) {
             customerName = nameEl.innerText.trim();
           } else {
-            // Heuristic fallback: get first non-empty line of text in card
             const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 2);
             if (lines.length > 0) customerName = lines[0];
           }
           
-          // Parse Product Name
+          /* Parse Product Name */
           let product = 'IndiaMART Enquiry';
           const prodEl = card.querySelector([
             '.prod-name', '.product', '[class*="product"]', '[class*="ProductName"]', 'a[href*="/proddetail"]'
@@ -116,13 +111,12 @@ export function generateBookmarkletCode(firebaseConfig) {
           if (prodEl && prodEl.innerText.trim()) {
             product = prodEl.innerText.trim();
           } else {
-            // Find lines mentioning product or search keywords
             const lines = text.split('\\n');
             const prLine = lines.find(l => l.toLowerCase().includes('requirement for') || l.toLowerCase().includes('interested in'));
             if (prLine) product = prLine.replace(/requirement for/i, '').replace(/interested in/i, '').trim();
           }
           
-          // Parse Location (City/State)
+          /* Parse Location (City/State) */
           let city = '';
           let state = '';
           const locMatch = text.match(/(?:Location|City|Address|From):?\\s*([a-zA-Z\\s]+),\\s*([a-zA-Z\\s]+)/i);
@@ -130,7 +124,6 @@ export function generateBookmarkletCode(firebaseConfig) {
             city = locMatch[1].trim();
             state = locMatch[2].trim();
           } else {
-            // Extract from common location text elements
             const locEl = card.querySelector('[class*="location"], [class*="address"], .city');
             if (locEl) {
               const parts = locEl.innerText.split(',');
@@ -139,7 +132,7 @@ export function generateBookmarkletCode(firebaseConfig) {
             }
           }
           
-          // Parse Enquiry Date
+          /* Parse Enquiry Date */
           let leadDate = new Date();
           const dateEl = card.querySelector('[class*="date"], .time, .enq-date');
           if (dateEl) {
@@ -150,17 +143,17 @@ export function generateBookmarkletCode(firebaseConfig) {
             }
           }
           
-          // Check date limits
+          /* Check date limits */
           if (startLimit && leadDate < startLimit) { skippedCount++; continue; }
           if (endLimit && leadDate > endLimit) { skippedCount++; continue; }
           
           const formattedDate = leadDate.toISOString().split('T')[0];
           
-          // Create deterministic document ID to prevent duplicates
+          /* Create deterministic document ID to prevent duplicates */
           const cleanProd = product.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
           const docId = \`IM_\${contact}_\${formattedDate}_\${cleanProd}\`;
           
-          // Construct the lead object
+          /* Construct the lead object */
           const leadPayload = {
             id: docId,
             date: formattedDate,
@@ -179,10 +172,10 @@ export function generateBookmarkletCode(firebaseConfig) {
             history: [{ status: 'New Enquiry', timestamp: Date.now() }]
           };
           
-          // Save directly to Firestore using REST API
+          /* Save directly to Firestore using REST API */
           const url = \`https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads/\${docId}?updateMask.fieldPaths=id&updateMask.fieldPaths=date&updateMask.fieldPaths=customerName&updateMask.fieldPaths=contact&updateMask.fieldPaths=product&updateMask.fieldPaths=status&updateMask.fieldPaths=remarks&updateMask.fieldPaths=state&updateMask.fieldPaths=city&updateMask.fieldPaths=source&updateMask.fieldPaths=timestamp&updateMask.fieldPaths=productList&updateMask.fieldPaths=history\`;
           
-          // Formulate Firestore Fields
+          /* Formulate Firestore Fields */
           const firestoreFields = {};
           Object.keys(leadPayload).forEach(key => {
             const val = leadPayload[key];
@@ -191,7 +184,6 @@ export function generateBookmarkletCode(firebaseConfig) {
             } else if (typeof val === 'number') {
               firestoreFields[key] = { doubleValue: val };
             } else if (Array.isArray(val)) {
-              // Convert array to arrayValue
               firestoreFields[key] = {
                 arrayValue: {
                   values: val.map(item => ({
@@ -209,7 +201,7 @@ export function generateBookmarkletCode(firebaseConfig) {
           });
           
           const response = await fetch(url, {
-            method: 'PATCH', // PATCH with updateMask creates or merges document fields
+            method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
             },

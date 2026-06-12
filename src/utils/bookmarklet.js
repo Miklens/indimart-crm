@@ -51,7 +51,65 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
     document.getElementById('start-sync-btn').onclick = async () => {
       const statusDiv = document.getElementById('sync-status');
       statusDiv.style.display = 'block';
-      statusDiv.innerHTML = 'Finding contacts on page...<br>';
+      statusDiv.innerHTML = 'Initializing sync...<br>';
+      
+      const startDateVal = document.getElementById('sync-start-date').value;
+      const endDateVal = document.getElementById('sync-end-date').value;
+      const startLimit = startDateVal ? new Date(startDateVal) : null;
+      const endLimit = endDateVal ? new Date(endDateVal) : null;
+      if (endLimit) endLimit.setHours(23, 59, 59, 999);
+      
+      const firstCard = document.querySelector('.lftcntctnew');
+      const cardContainer = firstCard ? (firstCard.closest('.lft_scrol') || firstCard.closest('[class*="scroll"]') || firstCard.closest('[style*="overflow"]') || firstCard.parentElement) : null;
+      
+      if (cardContainer) {
+        statusDiv.innerHTML += 'Loading leads from list...<br>';
+        let prevCount = 0;
+        let scrollAttempts = 0;
+        while (scrollAttempts < 50) {
+          const cards = document.querySelectorAll('.lftcntctnew');
+          if (cards.length === prevCount) {
+            await new Promise(r => setTimeout(r, 1000));
+            const recheckCards = document.querySelectorAll('.lftcntctnew');
+            if (recheckCards.length === prevCount) break;
+          }
+          prevCount = cards.length;
+          
+          if (startLimit && cards.length > 0) {
+            const lastCard = cards[cards.length - 1];
+            const lastCardText = lastCard.innerText;
+            const lastCardLines = lastCardText.split('\\n').map(l => l.trim()).filter(l => l.length > 1);
+            let lastCardDate = new Date();
+            const dateLine = lastCardLines[lastCardLines.length - 1] || '';
+            if (dateLine) {
+              const dLower = dateLine.toLowerCase();
+              if (dLower.includes('yesterday')) {
+                lastCardDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+              } else if (dLower.includes('am') || dLower.includes('pm') || dLower.includes(':')) {
+                lastCardDate = new Date();
+              } else {
+                const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+                const parts = dLower.replace(/-/g, ' ').split(' ');
+                const day = parseInt(parts[0]);
+                const monthIndex = months.findIndex(m => parts[1]?.includes(m));
+                if (!isNaN(day) && monthIndex !== -1) {
+                  lastCardDate = new Date(new Date().getFullYear(), monthIndex, day);
+                }
+              }
+            }
+            if (lastCardDate < startLimit) {
+              statusDiv.innerHTML += \`Reached leads older than Start Date (\${lastCardDate.toISOString().split('T')[0]}). Stopped loading.<br>\`;
+              break;
+            }
+          }
+          
+          cardContainer.scrollTop = cardContainer.scrollHeight;
+          statusDiv.innerHTML = \`Loading leads... Found \${prevCount} contacts.<br>\`;
+          statusDiv.scrollTop = statusDiv.scrollHeight;
+          await new Promise(r => setTimeout(r, 800));
+          scrollAttempts++;
+        }
+      }
       
       const leadCards = Array.from(document.querySelectorAll('.lftcntctnew'));
       statusDiv.innerHTML += \`Found \${leadCards.length} contacts on left panel.<br>\`;
@@ -60,12 +118,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = []) {
         statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ No contacts found. Please make sure you are on the Lead Manager / Message Centre page.</span>';
         return;
       }
-      
-      const startDateVal = document.getElementById('sync-start-date').value;
-      const endDateVal = document.getElementById('sync-end-date').value;
-      const startLimit = startDateVal ? new Date(startDateVal) : null;
-      const endLimit = endDateVal ? new Date(endDateVal) : null;
-      if (endLimit) endLimit.setHours(23, 59, 59, 999);
       
       let syncedCount = 0;
       let skippedCount = 0;

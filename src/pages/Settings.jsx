@@ -177,7 +177,7 @@ export default function Settings() {
       const dsConfirmedRev = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.totalAmount)||0); }, 0);
       const dsTotalReceived = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.receivedAmount)||0); }, 0);
       const dsBilledIds = new Set(dsPaidInv.map(inv => inv.leadId).filter(Boolean));
-      const dsValidLeads = leads.filter(l => DATA_CONFIG.getSimpleStatusLabel(l.status) !== 'Lost').length;
+      const dsValidLeads = leads.filter(l => !DATA_CONFIG.getLostStatusLabels().includes(l.status)).length;
       const dsConvRate = dsValidLeads ? ((dsBilledIds.size / dsValidLeads) * 100).toFixed(1) : '0';
       const dsContactedCount = leads.filter(l => ['Contacted', 'Quoted', 'Won'].includes(DATA_CONFIG.getSimpleStatusLabel(l.status))).length;
       const dsContactRate = leads.length ? ((dsContactedCount / leads.length) * 100).toFixed(1) : '0';

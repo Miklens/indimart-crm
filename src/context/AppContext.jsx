@@ -213,6 +213,68 @@ export function AppProvider({ children }) {
     };
   }, [fbEnabled]); // eslint-disable-line
 
+  // Retroactive sync of lead statuses based on invoice payment history to ensure all counts match perfectly
+  useEffect(() => {
+    if (!invoiceHistory.length) return;
+    setLeads(prevLeads => {
+      if (!prevLeads.length) return prevLeads;
+      let needsUpdate = false;
+      const updated = prevLeads.map(l => {
+        const leadInvoices = invoiceHistory.filter(inv => inv.leadId === l.id);
+        if (!leadInvoices.length) return l;
+        
+        const totalReceived = leadInvoices.reduce((sum, inv) => {
+          const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+          return sum + (parseFloat(v.receivedAmount) || 0);
+        }, 0);
+        const totalValue = leadInvoices.reduce((sum, inv) => {
+          const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+          return sum + (parseFloat(v.totalAmount) || 0);
+        }, 0);
+        const paymentStatus = totalReceived >= totalValue && totalValue > 0 ? 'Paid' : totalReceived > 0 ? 'Partial' : 'Pending';
+        
+        let newStatus = l.status;
+        if (totalReceived > 0 && !DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+          newStatus = 'Won';
+        }
+        
+        const statusDiff = newStatus !== l.status;
+        const amountDiff = l.paymentReceivedAmount !== totalReceived;
+        const statusPayDiff = l.paymentStatus !== paymentStatus;
+        
+        if (statusDiff || amountDiff || statusPayDiff) {
+          needsUpdate = true;
+          const history = [...(l.history || [])];
+          if (statusDiff) {
+            history.push({ status: newStatus, timestamp: Date.now(), note: 'Status auto-synced to Won based on invoice payments' });
+          }
+          const updatedLead = {
+            ...l,
+            paymentReceivedAmount: totalReceived,
+            paymentStatus: paymentStatus,
+            status: newStatus,
+            history
+          };
+          if (fbEnabled) {
+            fsUpdateLead(l.id, {
+              status: updatedLead.status,
+              paymentReceivedAmount: updatedLead.paymentReceivedAmount,
+              paymentStatus: updatedLead.paymentStatus,
+              history: updatedLead.history
+            }).catch(console.error);
+          }
+          return updatedLead;
+        }
+        return l;
+      });
+      if (needsUpdate) {
+        persist('indimart_leads', updated);
+        return updated;
+      }
+      return prevLeads;
+    });
+  }, [invoiceHistory, fbEnabled, persist]);
+
   // ── Lead operations ───────────────────────────────────────────────────────
   const addLead = useCallback((leadData) => {
     setLeads(prev => {
@@ -404,10 +466,10 @@ export function AppProvider({ children }) {
             const newPayStatus = invoiceData.paymentStatus || 'Pending';
             let newStatus = l.status;
             
-            if (newPayStatus === 'Paid') {
-              newStatus = 'Converted';
+            if (['Paid', 'Partial'].includes(newPayStatus)) {
+              newStatus = 'Won';
             } else if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
-              newStatus = 'Quotation Sent';
+              newStatus = 'Quoted';
             }
             
             const history = [...(l.history || [])];
@@ -481,13 +543,13 @@ export function AppProvider({ children }) {
         if (l.id !== inv.leadId) return l;
         
         let newStatus = l.status;
-        if (newPayStatus === 'Paid' && !['Converted', 'Purchased', 'Repeat Customer', 'Material Dispatched', 'Material Reached'].includes(l.status)) {
-          newStatus = 'Converted';
+        if (['Paid', 'Partial'].includes(newPayStatus) && !DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+          newStatus = 'Won';
         }
         
         const history = [...(l.history || [])];
         if (newStatus !== l.status) {
-          history.push({ status: newStatus, timestamp: Date.now(), note: 'Status auto-updated to Converted via payment sync' });
+          history.push({ status: newStatus, timestamp: Date.now(), note: 'Status auto-updated to Won via payment sync' });
         }
         
         return { ...l, paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus, status: newStatus, history };

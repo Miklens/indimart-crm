@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, X } from 'lucide-react';
+import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, Link, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../App';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
@@ -32,6 +32,7 @@ export default function Leads() {
   const [invoiceLead, setInvoiceLead] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState(null);
   const [quickAddProduct, setQuickAddProduct] = useState(null);
+  const [linkProductContext, setLinkProductContext] = useState(null);
   const csvRef = useRef(null);
 
   const handleQuickAddProduct = (name, price = 0, hsn = '', gst = '5') => {
@@ -51,6 +52,22 @@ export default function Leads() {
     addProduct(productData);
     showBanner(`Product "${productData.name}" added to catalog.`, 'success');
     setQuickAddProduct(null);
+  };
+
+  const handleLinkProductConfirm = (leadId, itemIdx, selectedProductName) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+    if (itemIdx === -1) {
+      updateLead(leadId, { product: selectedProductName });
+    } else {
+      const newList = [...(lead.productList || [])];
+      if (newList[itemIdx]) {
+        newList[itemIdx] = { ...newList[itemIdx], name: selectedProductName };
+      }
+      updateLead(leadId, { productList: newList });
+    }
+    showBanner('Enquiry product mapped to catalog successfully.', 'success');
+    setLinkProductContext(null);
   };
 
   const openAdd = () => { setModalLeadId(undefined); setShowModal(true); };
@@ -237,15 +254,26 @@ export default function Leads() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{lead.product}</span>
                     {!lead.productList?.length && lead.product && !products.some(p => p.name === lead.product.trim()) && (
-                      <button 
-                        type="button"
-                        className="btn-icon" 
-                        style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
-                        title="Add to Product Catalog"
-                        onClick={() => handleQuickAddProduct(lead.product)}
-                      >
-                        <FolderPlus size={13} />
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.2rem' }}>
+                        <button 
+                          type="button"
+                          className="btn-icon" 
+                          style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                          title="Add to Product Catalog"
+                          onClick={() => handleQuickAddProduct(lead.product)}
+                        >
+                          <FolderPlus size={13} />
+                        </button>
+                        <button 
+                          type="button"
+                          className="btn-icon" 
+                          style={{ color: '#3b82f6', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                          title="Link to Catalog Product"
+                          onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
+                        >
+                          <Link size={13} />
+                        </button>
+                      </div>
                     )}
                   </div>
                   {lead.productList?.length > 0 && (
@@ -256,15 +284,26 @@ export default function Leads() {
                           <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', color: 'var(--text-dim)' }}>
                             <span>• {item.name} ({item.qty} × ₹{item.price})</span>
                             {!inCatalog && (
-                              <button 
-                                type="button"
-                                className="btn-icon" 
-                                style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                title="Add to Product Catalog"
-                                onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
-                              >
-                                <FolderPlus size={11} />
-                              </button>
+                              <div style={{ display: 'flex', gap: '0.2rem' }}>
+                                <button 
+                                  type="button"
+                                  className="btn-icon" 
+                                  style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                  title="Add to Product Catalog"
+                                  onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
+                                >
+                                  <FolderPlus size={11} />
+                                </button>
+                                <button 
+                                  type="button"
+                                  className="btn-icon" 
+                                  style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                  title="Link to Catalog Product"
+                                  onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: idx, currentName: item.name })}
+                                >
+                                  <Link size={11} />
+                                </button>
+                              </div>
                             )}
                           </div>
                         );
@@ -381,6 +420,14 @@ export default function Leads() {
           onSave={handleQuickAddSave}
         />
       )}
+      {linkProductContext && (
+        <LinkProductModal
+          context={linkProductContext}
+          products={products}
+          onClose={() => setLinkProductContext(null)}
+          onSave={handleLinkProductConfirm}
+        />
+      )}
     </div>
   );
 }
@@ -430,7 +477,7 @@ function QuickProductModal({ productName, initialPrice, initialHsn, initialGst, 
           </div>
           
           <div className="form-group">
-            <label>Category / Group</label>
+            <label>Category / Group (Optional)</label>
             <select 
               value={showCustomInput ? '__custom__' : form.category} 
               onChange={e => {
@@ -442,9 +489,8 @@ function QuickProductModal({ productName, initialPrice, initialHsn, initialGst, 
                   setForm(f => ({ ...f, category: e.target.value }));
                 }
               }}
-              required
             >
-              <option value="">Select category...</option>
+              <option value="">Select category (optional)...</option>
               {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
               <option value="__custom__" style={{ fontWeight: 'bold', color: 'var(--primary)' }}>+ Add Custom Category...</option>
             </select>
@@ -477,11 +523,11 @@ function QuickProductModal({ productName, initialPrice, initialHsn, initialGst, 
           )}
 
           <div className="form-row">
-            <div className="form-group"><label>Price (₹)</label><input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} min="0" step="any" required /></div>
-            <div className="form-group"><label>HSN Code</label><input value={form.hsn} onChange={e => setForm(f => ({ ...f, hsn: e.target.value }))} /></div>
+            <div className="form-group"><label>Price (₹) (Optional)</label><input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} min="0" step="any" /></div>
+            <div className="form-group"><label>HSN Code (Optional)</label><input value={form.hsn} onChange={e => setForm(f => ({ ...f, hsn: e.target.value }))} /></div>
           </div>
           
-          <div className="form-group"><label>GST %</label>
+          <div className="form-group"><label>GST % (Optional)</label>
             <select value={form.gst} onChange={e => setForm(f => ({ ...f, gst: e.target.value }))}>
               {['0','5','12','18','28'].map(g => <option key={g} value={g}>{g}%</option>)}
             </select>
@@ -492,6 +538,72 @@ function QuickProductModal({ productName, initialPrice, initialHsn, initialGst, 
             <button type="submit" className="btn btn-primary">Add Product</button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function LinkProductModal({ context, products, onClose, onSave }) {
+  const [search, setSearch] = useState('');
+  const filtered = products.filter(p => 
+    p.name?.toLowerCase().includes(search.toLowerCase()) || 
+    p.category?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-content" style={{ maxWidth: 420 }}>
+        <div className="modal-header">
+          <h2>Map to Catalog Product</h2>
+          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div style={{ padding: '0.25rem 0' }}>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
+            Map enquiry product <strong>"{context.currentName}"</strong> to one of your catalog products below:
+          </p>
+          <div style={{ position: 'relative', marginBottom: '1rem' }}>
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+            <input 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+              placeholder="Search catalog products..." 
+              style={{ paddingLeft: '2rem', width: '100%', boxSizing: 'border-box' }} 
+            />
+          </div>
+          <div style={{ maxHeight: 250, overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '0.4rem', background: 'var(--bg-input)' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.85rem' }}>No catalog products found.</div>
+            ) : (
+              filtered.map(p => (
+                <div 
+                  key={p.id} 
+                  onClick={() => onSave(context.leadId, context.itemIdx, p.name)}
+                  style={{ 
+                    padding: '0.65rem 0.75rem', 
+                    cursor: 'pointer', 
+                    borderBottom: '1px solid var(--glass-border)',
+                    transition: 'background 0.2s',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                  className="link-product-item"
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <div>
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block' }}>{p.name}</span>
+                    {p.category && <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{p.category}</span>}
+                  </div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)' }}>₹{p.price}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        </div>
       </div>
     </div>
   );

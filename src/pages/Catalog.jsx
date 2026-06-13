@@ -112,6 +112,7 @@ export default function Catalog() {
   const { products, leads, addProduct, updateProduct, deleteProduct, showBanner, companySettings, saveSettings } = useApp();
   const [editProduct, setEditProduct] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showOnlyCatalogStats, setShowOnlyCatalogStats] = useState(true);
 
   const handleSave = (data, newCustomCategory) => {
     if (newCustomCategory) {
@@ -138,6 +139,14 @@ export default function Catalog() {
       productStats[item.name].revenue += (parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1);
       if (DATA_CONFIG.getWonStatusLabels().includes(l.status)) productStats[item.name].converted++;
     });
+  });
+
+  const catalogProductNames = new Set(products.map(p => p.name?.trim().toLowerCase()));
+  const statsEntries = Object.entries(productStats).filter(([name]) => {
+    if (showOnlyCatalogStats) {
+      return catalogProductNames.has(name?.trim().toLowerCase());
+    }
+    return true;
   });
 
   return (
@@ -176,19 +185,33 @@ export default function Catalog() {
       {/* Product stats */}
       {Object.keys(productStats).length > 0 && (
         <>
-          <h3 style={{ marginBottom: '0.75rem', fontSize: '1rem' }}>Product Performance</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <h3 style={{ margin: 0, fontSize: '1rem' }}>Product Performance</h3>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-dim)' }}>
+              <input 
+                type="checkbox" 
+                checked={showOnlyCatalogStats} 
+                onChange={e => setShowOnlyCatalogStats(e.target.checked)} 
+              />
+              Show only catalog products
+            </label>
+          </div>
           <div className="table-wrapper">
             <table>
               <thead><tr><th>Product</th><th>Enquiries</th><th>Revenue</th><th>Conv. Rate</th></tr></thead>
               <tbody>
-                {Object.entries(productStats).sort((a, b) => b[1].revenue - a[1].revenue).map(([name, stats]) => (
-                  <tr key={name}>
-                    <td style={{ fontWeight: 600 }}>{name}</td>
-                    <td>{stats.enquiries}</td>
-                    <td style={{ fontWeight: 600 }}>₹{stats.revenue.toLocaleString()}</td>
-                    <td>{stats.enquiries > 0 ? ((stats.converted / stats.enquiries) * 100).toFixed(1) : 0}%</td>
-                  </tr>
-                ))}
+                {statsEntries.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-dim)', fontSize: '0.85rem' }}>No matching catalog products with enquiries.</td></tr>
+                ) : (
+                  statsEntries.sort((a, b) => b[1].revenue - a[1].revenue).map(([name, stats]) => (
+                    <tr key={name}>
+                      <td style={{ fontWeight: 600 }}>{name}</td>
+                      <td>{stats.enquiries}</td>
+                      <td style={{ fontWeight: 600 }}>₹{stats.revenue.toLocaleString()}</td>
+                      <td>{stats.enquiries > 0 ? ((stats.converted / stats.enquiries) * 100).toFixed(1) : 0}%</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

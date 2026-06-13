@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { generateInvoiceNumber, flattenInvoices } from '../utils/dataConfig';
+import { generateInvoiceNumber, flattenInvoices, DATA_CONFIG } from '../utils/dataConfig';
 import { isFirebaseConfigured, initFirebaseIfConfigured } from '../firebase';
 import {
   fsSetLead, fsUpdateLead, fsDeleteLead, fsListenLeads,

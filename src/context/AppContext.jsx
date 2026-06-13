@@ -675,7 +675,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!autoSyncEnabled || !gsUrl) return;
     gsBackup();
-  }, [leads, invoiceHistory]); // eslint-disable-line
+  }, [leads, invoiceHistory, products, companySettings, messageTemplates]); // eslint-disable-line
 
   const value = {
     leads, products, invoiceHistory, companySettings, messageTemplates,

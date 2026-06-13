@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload } from 'lucide-react';
+import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../App';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
@@ -16,7 +16,7 @@ const TABS = [
 ];
 
 export default function Leads() {
-  const { leads, invoiceHistory, updateLeadStatus, updateLead, deleteLead, addLead, showBanner } = useApp();
+  const { leads, invoiceHistory, updateLeadStatus, updateLead, deleteLead, addLead, showBanner, products, addProduct, companySettings, saveSettings } = useApp();
   const { openCustomer360 } = useAppUI();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -31,7 +31,27 @@ export default function Leads() {
   const [pickerLead, setPickerLead] = useState(null);
   const [invoiceLead, setInvoiceLead] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState(null);
+  const [quickAddProduct, setQuickAddProduct] = useState(null);
   const csvRef = useRef(null);
+
+  const handleQuickAddProduct = (name, price = 0, hsn = '', gst = '5') => {
+    setQuickAddProduct({ name, price, hsn, gst });
+  };
+
+  const handleQuickAddSave = (productData, newCustomCategory) => {
+    if (newCustomCategory) {
+      const currentCustom = companySettings.customCategories || [];
+      if (!currentCustom.includes(newCustomCategory)) {
+        saveSettings({
+          ...companySettings,
+          customCategories: [...currentCustom, newCustomCategory]
+        });
+      }
+    }
+    addProduct(productData);
+    showBanner(`Product "${productData.name}" added to catalog.`, 'success');
+    setQuickAddProduct(null);
+  };
 
   const openAdd = () => { setModalLeadId(undefined); setShowModal(true); };
   const openEdit = (id) => { setModalLeadId(id); setShowModal(true); };
@@ -214,8 +234,43 @@ export default function Leads() {
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{lead.contact}{lead.city ? ` | ${lead.city}` : ''}</div>
                 </td>
                 <td>
-                  <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>{lead.product}</div>
-                  {lead.productList?.length > 1 && <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)' }}>{lead.productList.length} items</div>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{lead.product}</span>
+                    {!lead.productList?.length && lead.product && !products.some(p => p.name === lead.product.trim()) && (
+                      <button 
+                        type="button"
+                        className="btn-icon" 
+                        style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                        title="Add to Product Catalog"
+                        onClick={() => handleQuickAddProduct(lead.product)}
+                      >
+                        <FolderPlus size={13} />
+                      </button>
+                    )}
+                  </div>
+                  {lead.productList?.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                      {lead.productList.map((item, idx) => {
+                        const inCatalog = products.some(p => p.name === item.name);
+                        return (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                            <span>• {item.name} ({item.qty} × ₹{item.price})</span>
+                            {!inCatalog && (
+                              <button 
+                                type="button"
+                                className="btn-icon" 
+                                style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                title="Add to Product Catalog"
+                                onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
+                              >
+                                <FolderPlus size={11} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </td>
                 <td>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 110 }}>
@@ -315,6 +370,129 @@ export default function Leads() {
           onClose={() => { setInvoiceLead(null); setInvoiceItems(null); }}
         />
       )}
+      {quickAddProduct && (
+        <QuickProductModal
+          productName={quickAddProduct.name}
+          initialPrice={quickAddProduct.price}
+          initialHsn={quickAddProduct.hsn}
+          initialGst={quickAddProduct.gst}
+          companySettings={companySettings}
+          onClose={() => setQuickAddProduct(null)}
+          onSave={handleQuickAddSave}
+        />
+      )}
+    </div>
+  );
+}
+
+const CATEGORIES = [
+  'Biofertilizers', 'Biopesticides', 'Biostimulants', 'Humic Acid', 
+  'Fulvic Acids', 'Chemical Pesticides', 'Herbicides', 'Micronutrients', 'Macronutrients'
+];
+
+function QuickProductModal({ productName, initialPrice, initialHsn, initialGst, onClose, onSave, companySettings }) {
+  const [form, setForm] = useState({ 
+    name: productName || '', 
+    price: initialPrice || '', 
+    hsn: initialHsn || '', 
+    gst: initialGst || '5',
+    category: '' 
+  });
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
+
+  const allCategories = [
+    ...CATEGORIES,
+    ...(companySettings?.customCategories || [])
+  ];
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const finalCategory = showCustomInput ? customCategoryName.trim() : form.category;
+    onSave({ 
+      ...form, 
+      category: finalCategory,
+      price: parseFloat(form.price) || 0 
+    }, showCustomInput ? finalCategory : null);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-content" style={{ maxWidth: 400 }}>
+        <div className="modal-header">
+          <h2>Add to Product Catalog</h2>
+          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Product Name</label>
+            <input value={form.name} disabled style={{ opacity: 0.7 }} />
+          </div>
+          
+          <div className="form-group">
+            <label>Category / Group</label>
+            <select 
+              value={showCustomInput ? '__custom__' : form.category} 
+              onChange={e => {
+                if (e.target.value === '__custom__') {
+                  setShowCustomInput(true);
+                  setForm(f => ({ ...f, category: '' }));
+                } else {
+                  setShowCustomInput(false);
+                  setForm(f => ({ ...f, category: e.target.value }));
+                }
+              }}
+              required
+            >
+              <option value="">Select category...</option>
+              {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="__custom__" style={{ fontWeight: 'bold', color: 'var(--primary)' }}>+ Add Custom Category...</option>
+            </select>
+          </div>
+
+          {showCustomInput && (
+            <div className="form-group" style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: '0.4rem', border: '1px solid var(--glass-border)' }}>
+              <label style={{ fontSize: '0.72rem' }}>Custom Category Name</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input 
+                  value={customCategoryName} 
+                  onChange={e => setCustomCategoryName(e.target.value)} 
+                  placeholder="e.g. Organic Soil"
+                  required
+                  style={{ flex: 1 }}
+                />
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => {
+                    setShowCustomInput(false);
+                    setCustomCategoryName('');
+                  }}
+                  style={{ padding: '0 0.75rem', fontSize: '0.75rem' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="form-row">
+            <div className="form-group"><label>Price (₹)</label><input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} min="0" step="any" required /></div>
+            <div className="form-group"><label>HSN Code</label><input value={form.hsn} onChange={e => setForm(f => ({ ...f, hsn: e.target.value }))} /></div>
+          </div>
+          
+          <div className="form-group"><label>GST %</label>
+            <select value={form.gst} onChange={e => setForm(f => ({ ...f, gst: e.target.value }))}>
+              {['0','5','12','18','28'].map(g => <option key={g} value={g}>{g}%</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Add Product</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

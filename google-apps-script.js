@@ -292,6 +292,14 @@ function safeCellValue(val) {
 function updateSheet(ss, name, data, headers, headerColor) {
   let sheet = ss.getSheetByName(name);
   if (!sheet) sheet = ss.insertSheet(name);
+  
+  // Remove any active filters to ensure all rows are visible
+  try {
+    if (sheet.getFilter()) {
+      sheet.getFilter().remove();
+    }
+  } catch (e) { }
+
   sheet.clearContents();
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   

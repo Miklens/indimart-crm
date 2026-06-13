@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, Link, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../App';

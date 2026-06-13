@@ -299,17 +299,19 @@ export default function Leads() {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{lead.product}</span>
-                      {!lead.linkedProduct && !lead.productList?.length && lead.product && !products.some(p => p.name === lead.product.trim()) && (
+                      {!lead.linkedProduct && !lead.productList?.length && lead.product && (
                         <div style={{ display: 'flex', gap: '0.2rem' }}>
-                          <button 
-                            type="button"
-                            className="btn-icon" 
-                            style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
-                            title="Add to Product Catalog"
-                            onClick={() => handleQuickAddProduct(lead.product)}
-                          >
-                            <FolderPlus size={13} />
-                          </button>
+                          {!products.some(p => p.name === lead.product.trim()) && (
+                            <button 
+                              type="button"
+                              className="btn-icon" 
+                              style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                              title="Add to Product Catalog"
+                              onClick={() => handleQuickAddProduct(lead.product)}
+                            >
+                              <FolderPlus size={13} />
+                            </button>
+                          )}
                           <button 
                             type="button"
                             className="btn-icon" 
@@ -355,17 +357,19 @@ export default function Leads() {
                           <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.72rem', color: 'var(--text-dim)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                               <span>• {item.name} ({item.qty} × ₹{item.price})</span>
-                              {!inCatalog && (
+                              {!isLinked && (
                                 <div style={{ display: 'flex', gap: '0.2rem' }}>
-                                  <button 
-                                    type="button"
-                                    className="btn-icon" 
-                                    style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                    title="Add to Product Catalog"
-                                    onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
-                                  >
-                                    <FolderPlus size={11} />
-                                  </button>
+                                  {!inCatalog && (
+                                    <button 
+                                      type="button"
+                                      className="btn-icon" 
+                                      style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                      title="Add to Product Catalog"
+                                      onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
+                                    >
+                                      <FolderPlus size={11} />
+                                    </button>
+                                  )}
                                   <button 
                                     type="button"
                                     className="btn-icon" 

@@ -204,9 +204,42 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           let state = '';
           const locationLine = lines.find(l => l.includes(','));
           if (locationLine) {
-            const parts = locationLine.split(',');
-            city = parts[0]?.trim() || '';
-            state = parts[1]?.trim() || '';
+            const parts = locationLine.split(',').map(p => p.trim());
+            const cleanParts = parts.filter(p => {
+              const lower = p.toLowerCase();
+              return lower !== 'india' && !/^\d{6}$/.test(lower) && !lower.startsWith('india -') && !/^\d+$/.test(lower);
+            });
+            if (cleanParts.length >= 2) {
+              const lastPart = cleanParts[cleanParts.length - 1];
+              const lastPartLower = lastPart.toLowerCase();
+              const indianStates = [
+                'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat',
+                'haryana', 'himachal pradesh', 'jharkhand', 'karnataka', 'kerala', 'madhya pradesh',
+                'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'odisha', 'punjab',
+                'rajasthan', 'sikkim', 'tamil nadu', 'telangana', 'tripura', 'uttar pradesh',
+                'uttarakhand', 'west bengal', 'delhi'
+              ];
+              if (indianStates.includes(lastPartLower)) {
+                state = lastPart;
+                city = cleanParts[cleanParts.length - 2] || '';
+              } else {
+                city = lastPart;
+              }
+            } else if (cleanParts.length === 1) {
+              const item = cleanParts[0];
+              const indianStates = [
+                'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat',
+                'haryana', 'himachal pradesh', 'jharkhand', 'karnataka', 'kerala', 'madhya pradesh',
+                'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'odisha', 'punjab',
+                'rajasthan', 'sikkim', 'tamil nadu', 'telangana', 'tripura', 'uttar pradesh',
+                'uttarakhand', 'west bengal', 'delhi'
+              ];
+              if (indianStates.includes(item.toLowerCase())) {
+                state = item;
+              } else {
+                city = item;
+              }
+            }
           }
           
           const formattedDate = leadDate.toISOString().split('T')[0];

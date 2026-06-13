@@ -65,6 +65,46 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
 
       // ── 1. Dashboard Sheet (added first so it appears as tab #1) ──────────
       const ds = wb.addWorksheet('Dashboard');
+
+      const cleanCityName = (rawCity, rawState) => {
+        if (!rawCity) return 'Other';
+        let city = rawCity.trim();
+        if (city.includes(',')) {
+          const parts = city.split(',').map(p => p.trim());
+          const cleanParts = parts.filter(p => {
+            const lower = p.toLowerCase();
+            return lower !== 'india' && !/^\d{6}$/.test(lower) && !lower.startsWith('india -') && !/^\d+$/.test(lower);
+          });
+          if (cleanParts.length > 0) {
+            const stateLower = (rawState || '').toLowerCase();
+            const lastPart = cleanParts[cleanParts.length - 1];
+            const lastPartLower = lastPart.toLowerCase();
+            const indianStates = [
+              'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat',
+              'haryana', 'himachal pradesh', 'jharkhand', 'karnataka', 'kerala', 'madhya pradesh',
+              'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'odisha', 'punjab',
+              'rajasthan', 'sikkim', 'tamil nadu', 'telangana', 'tripura', 'uttar pradesh',
+              'uttarakhand', 'west bengal', 'delhi'
+            ];
+            if (indianStates.includes(lastPartLower) || lastPartLower === stateLower) {
+              city = cleanParts[cleanParts.length - 2] || lastPart;
+            } else {
+              city = lastPart;
+            }
+          }
+        }
+        const indianStates = [
+          'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat',
+          'haryana', 'himachal pradesh', 'jharkhand', 'karnataka', 'kerala', 'madhya pradesh',
+          'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'odisha', 'punjab',
+          'rajasthan', 'sikkim', 'tamil nadu', 'telangana', 'tripura', 'uttar pradesh',
+          'uttarakhand', 'west bengal', 'delhi'
+        ];
+        if (indianStates.includes(city.toLowerCase())) {
+          return 'Other';
+        }
+        return city.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      };
       ds.getColumn(1).width = 32;
       ds.getColumn(2).width = 22;
       ds.getColumn(3).width = 22;
@@ -199,12 +239,14 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
       if (dsPaidInv.length) {
         dsPaidInv.forEach(inv => {
           const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv;
-          const raw = (inv.customerCity||'Other').trim() || 'Other';
-          const city = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+          const city = cleanCityName(inv.customerCity || inv.city, inv.customerState || inv.state);
           dsCityRev[city] = (dsCityRev[city]||0) + (parseFloat(v.totalAmount)||0);
         });
       } else {
-        leads.filter(l => dsWonAll.includes(l.status)).forEach(l => { const city=l.city||'Other'; dsCityRev[city]=(dsCityRev[city]||0)+(parseFloat(l.orderValue)||0); });
+        leads.filter(l => dsWonAll.includes(l.status)).forEach(l => {
+          const city = cleanCityName(l.city, l.state);
+          dsCityRev[city] = (dsCityRev[city]||0) + (parseFloat(l.orderValue)||0);
+        });
       }
       const dsTopCities = Object.entries(dsCityRev).sort((a,b)=>b[1]-a[1]).slice(0,10);
       const dsTotalCityRev = dsTopCities.reduce((s,[,v])=>s+v, 0);
@@ -306,7 +348,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
             idx === 0 ? l.id : '',
             idx === 0 ? l.customerName : '',
             idx === 0 ? l.contact : '',
-            idx === 0 ? l.city : '',
+            idx === 0 ? cleanCityName(l.city, l.state) : '',
             idx === 0 ? l.state : '',
             idx === 0 ? (l.source || '') : '',
             idx === 0 ? (l.gst || '') : '',
@@ -434,7 +476,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
             latest.invoiceDate,
             inv.customerName,
             inv.customerContact,
-            inv.customerCity,
+            cleanCityName(inv.customerCity || inv.city, inv.customerState || inv.state),
             inv.customerState,
             latest.totalAmount || 0,
             latest.receivedAmount || 0,

@@ -2,82 +2,72 @@ export const DATA_CONFIG = {
   statuses: {
     NEW_ENQUIRY: { label: 'New Enquiry', color: '#3b82f6', category: 'pipeline', stage: 1, isActive: true },
     CONTACTED: { label: 'Contacted', color: '#06b6d4', category: 'pipeline', stage: 2, isActive: true },
-    REQUIREMENT_DISCUSSED: { label: 'Requirement Discussed', color: '#8b5cf6', category: 'pipeline', stage: 3, isActive: true },
-    QUOTATION_REQUESTED: { label: 'Quotation Requested', color: '#f59e0b', category: 'quotation', stage: 4, isActive: true },
-    QUOTATION_SENT: { label: 'Quotation Sent', color: '#f97316', category: 'quotation', stage: 5, isActive: true },
-    NEGOTIATION: { label: 'Negotiation', color: '#ec4899', category: 'quotation', stage: 6, isActive: true },
-    CONVERTED: { label: 'Converted', color: '#10b981', category: 'won', stage: 7, isActive: true },
-    PURCHASED: { label: 'Purchased', color: '#059669', category: 'won', stage: 8, isActive: true },
-    REPEAT_CUSTOMER: { label: 'Repeat Customer', color: '#047857', category: 'won', stage: 9, isActive: true },
-    MATERIAL_DISPATCHED: { label: 'Material Dispatched', color: '#0284c7', category: 'won', stage: 10, isActive: true },
-    MATERIAL_REACHED: { label: 'Material Reached', color: '#0891b2', category: 'won', stage: 11, isActive: true },
-    NO_RESPONSE: { label: 'No Response', color: '#94a3b8', category: 'lost', stage: 0, isActive: false },
+    QUOTED: { label: 'Quoted', color: '#f59e0b', category: 'quotation', stage: 3, isActive: true },
+    NOT_RESPONDING: { label: 'Not Responding', color: '#94a3b8', category: 'lost', stage: 0, isActive: false },
+    WON: { label: 'Won', color: '#10b981', category: 'won', stage: 4, isActive: true },
+    LOST: { label: 'Lost', color: '#dc2626', category: 'lost', stage: 0, isActive: false },
     NOT_INTERESTED: { label: 'Not Interested', color: '#64748b', category: 'lost', stage: 0, isActive: false },
-    NO_CURRENT_REQUIREMENT: { label: 'No Current Requirement', color: '#475569', category: 'lost', stage: 0, isActive: false },
-    INVALID_LEAD: { label: 'Invalid Lead', color: '#ef4444', category: 'lost', stage: 0, isActive: false },
-    CLOSED_LOST: { label: 'Closed Lost', color: '#dc2626', category: 'lost', stage: 0, isActive: false },
   },
   getStatusColor(status) {
-    const found = Object.values(this.statuses).find(s => s.label === status);
+    const clean = this.getSimpleStatusLabel(status);
+    const found = Object.values(this.statuses).find(s => s.label === clean);
     return found ? found.color : '#94a3b8';
   },
   getLostStatuses() {
     return Object.values(this.statuses).filter(s => s.category === 'lost');
   },
   getLostStatusLabels() {
-    return this.getLostStatuses().map(s => s.label);
+    return ['Lost', 'Closed Lost', 'Invalid Lead', 'No Response', 'No Current Requirement', 'Not Responding', 'Not Interested'];
   },
   getDeadStatusLabels() {
-    return Object.values(this.statuses).filter(s => !s.isActive).map(s => s.label);
+    return ['Lost', 'Closed Lost', 'Invalid Lead', 'No Response', 'No Current Requirement', 'Not Responding', 'Not Interested'];
   },
   getWonStatuses() {
     return Object.values(this.statuses).filter(s => s.category === 'won');
   },
   getWonStatusLabels() {
-    return this.getWonStatuses().map(s => s.label);
+    return ['Won', 'Converted', 'Purchased', 'Repeat Customer', 'Material Dispatched', 'Material Reached'];
   },
   getContactedStatusLabels() {
-    return Object.values(this.statuses)
-      .filter(s => s.label !== 'New Enquiry' && s.label !== 'Invalid Lead')
-      .map(s => s.label);
+    return ['Contacted', 'Requirement Discussed', 'Quoted', 'Quotation Requested', 'Quotation Sent', 'Negotiation', 'Won', 'Converted', 'Purchased', 'Repeat Customer', 'Material Dispatched', 'Material Reached'];
   },
   getSimpleStatusLabel(status) {
     const map = {
+      'New Enquiry': 'New Enquiry',
+      'Contacted': 'Contacted',
+      'Requirement Discussed': 'Contacted',
       'Quotation Requested': 'Quoted',
       'Quotation Sent': 'Quoted',
+      'Negotiation': 'Quoted',
+      'Quoted': 'Quoted',
       'Converted': 'Won',
       'Purchased': 'Won',
       'Repeat Customer': 'Won',
-      'Material Dispatched': 'In Transit',
-      'Material Reached': 'Delivered',
-      'No Response': 'Lost',
-      'Not Interested': 'Lost',
+      'Material Dispatched': 'Won',
+      'Material Reached': 'Won',
+      'Won': 'Won',
+      'No Response': 'Not Responding',
+      'Not Responding': 'Not Responding',
+      'Not Interested': 'Not Interested',
       'No Current Requirement': 'Lost',
       'Invalid Lead': 'Lost',
       'Closed Lost': 'Lost',
+      'Lost': 'Lost',
     };
-    return map[status] || status;
+    return map[status] || status || 'New Enquiry';
   },
   resolveStatusFromSimple(status) {
-    const map = {
-      'Quoted': 'Quotation Sent',
-      'Won': 'Converted',
-      'In Transit': 'Material Dispatched',
-      'Delivered': 'Material Reached',
-      'Lost': 'Closed Lost',
-    };
-    return map[status] || status;
+    return status;
   },
   getStatusGroupStatuses(group) {
     const groups = {
-      all: this.allStatusLabels(),
-      pipeline: ['New Enquiry', 'Contacted', 'Requirement Discussed'],
-      quoted: ['Quotation Requested', 'Quotation Sent', 'Negotiation'],
-      negotiation: ['Negotiation'],
-      won: ['Converted', 'Purchased', 'Repeat Customer'],
-      inTransit: ['Material Dispatched'],
-      delivered: ['Material Reached'],
-      lost: this.getLostStatusLabels(),
+      all: ['New Enquiry', 'Contacted', 'Quoted', 'Not Responding', 'Won', 'Lost', 'Not Interested'],
+      pipeline: ['New Enquiry', 'Contacted'],
+      quoted: ['Quoted'],
+      won: ['Won'],
+      inTransit: [],
+      delivered: [],
+      lost: ['Not Responding', 'Lost', 'Not Interested'],
     };
     return groups[group] || [];
   },
@@ -86,24 +76,19 @@ export const DATA_CONFIG = {
       { id: 'all', label: 'All Statuses' },
       { id: 'pipeline', label: 'Pipeline' },
       { id: 'quoted', label: 'Quoted' },
-      { id: 'negotiation', label: 'Negotiation' },
       { id: 'won', label: 'Won' },
-      { id: 'inTransit', label: 'In Transit' },
-      { id: 'delivered', label: 'Delivered' },
-      { id: 'lost', label: 'Lost' },
+      { id: 'lost', label: 'Lost / Closed' },
     ];
   },
   getSimpleStatusOptions() {
     return [
       { label: 'New Enquiry', value: 'New Enquiry' },
       { label: 'Contacted', value: 'Contacted' },
-      { label: 'Requirement Discussed', value: 'Requirement Discussed' },
       { label: 'Quoted', value: 'Quoted' },
-      { label: 'Negotiation', value: 'Negotiation' },
+      { label: 'Not Responding', value: 'Not Responding' },
       { label: 'Won', value: 'Won' },
-      { label: 'In Transit', value: 'In Transit' },
-      { label: 'Delivered', value: 'Delivered' },
       { label: 'Lost', value: 'Lost' },
+      { label: 'Not Interested', value: 'Not Interested' },
     ];
   },
   sources: [
@@ -115,7 +100,7 @@ export const DATA_CONFIG = {
     'Competitor Selected', 'Product Not Available', 'Location Issue', 'Invalid Contact', 'Other'
   ],
   allStatusLabels() {
-    return Object.values(this.statuses).map(s => s.label);
+    return ['New Enquiry', 'Contacted', 'Quoted', 'Not Responding', 'Won', 'Lost', 'Not Interested'];
   }
 };
 

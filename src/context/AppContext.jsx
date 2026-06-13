@@ -395,6 +395,34 @@ export function AppProvider({ children }) {
       }
       persist('indimart_invoice_history', updated);
       if (fbEnabled) fsSetInvoice(upserted).catch(console.error);
+
+      // Auto update lead status when invoice is generated
+      if (resolvedLeadId) {
+        setLeads(prevLeads => {
+          const updatedLeads = prevLeads.map(l => {
+            if (l.id !== resolvedLeadId) return l;
+            const newPayStatus = invoiceData.paymentStatus || 'Pending';
+            let newStatus = l.status;
+            
+            if (newPayStatus === 'Paid') {
+              newStatus = 'Converted';
+            } else if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
+              newStatus = 'Quotation Sent';
+            }
+            
+            const history = [...(l.history || [])];
+            if (newStatus !== l.status) {
+              history.push({ status: newStatus, timestamp: Date.now(), note: 'Status auto-updated via Invoice generation' });
+            }
+            const updatedLead = { ...l, paymentStatus: newPayStatus, status: newStatus, history };
+            if (fbEnabled) fsSetLead(updatedLead).catch(console.error);
+            return updatedLead;
+          });
+          persist('indimart_leads', updatedLeads);
+          return updatedLeads;
+        });
+      }
+
       return updated;
     });
   }, [persist, fbEnabled]);
@@ -448,12 +476,32 @@ export function AppProvider({ children }) {
         return sum + (parseFloat(v.totalAmount) || 0);
       }, 0);
       const newPayStatus = totalReceived >= totalValue && totalValue > 0 ? 'Paid' : totalReceived > 0 ? 'Partial' : 'Pending';
-      const updatedLeads = prevLeads.map(l =>
-        l.id === inv.leadId ? { ...l, paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus } : l
-      );
+      
+      const updatedLeads = prevLeads.map(l => {
+        if (l.id !== inv.leadId) return l;
+        
+        let newStatus = l.status;
+        if (newPayStatus === 'Paid' && !['Converted', 'Purchased', 'Repeat Customer', 'Material Dispatched', 'Material Reached'].includes(l.status)) {
+          newStatus = 'Converted';
+        }
+        
+        const history = [...(l.history || [])];
+        if (newStatus !== l.status) {
+          history.push({ status: newStatus, timestamp: Date.now(), note: 'Status auto-updated to Converted via payment sync' });
+        }
+        
+        return { ...l, paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus, status: newStatus, history };
+      });
       persist('indimart_leads', updatedLeads);
       const updatedLead = updatedLeads.find(l => l.id === inv.leadId);
-      if (fbEnabled && updatedLead) fsUpdateLead(inv.leadId, { paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus }).catch(console.error);
+      if (fbEnabled && updatedLead) {
+        fsUpdateLead(inv.leadId, { 
+          paymentReceivedAmount: totalReceived, 
+          paymentStatus: newPayStatus,
+          status: updatedLead.status,
+          history: updatedLead.history
+        }).catch(console.error);
+      }
       return updatedLeads;
     });
   }

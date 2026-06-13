@@ -243,9 +243,7 @@ function syncAll(data) {
     settingsSheet.getRange(1, 1, 1, 2)
       .setBackground('#fbbc04').setFontColor('#000000').setFontWeight('bold');
     const rows = Object.entries(data.settings).map(([k, v]) => {
-      let val = v;
-      if (typeof val === 'object') val = JSON.stringify(val);
-      return [k, val];
+      return [k, safeCellValue(v)];
     });
     if (rows.length > 0) settingsSheet.getRange(2, 1, rows.length, 2).setValues(rows);
   }
@@ -268,6 +266,15 @@ function syncAll(data) {
   return { success: true };
 }
 
+function safeCellValue(val) {
+  if (val === undefined || val === null) return '';
+  var str = typeof val === 'object' ? JSON.stringify(val) : String(val);
+  if (str.length > 49900) {
+    return str.substring(0, 49900) + '...[TRUNCATED]';
+  }
+  return str;
+}
+
 function updateSheet(ss, name, data, headers, headerColor) {
   let sheet = ss.getSheetByName(name);
   if (!sheet) sheet = ss.insertSheet(name);
@@ -283,9 +290,7 @@ function updateSheet(ss, name, data, headers, headerColor) {
   if (data && data.length > 0) {
     const rows = data.map(item => {
       return headers.map(h => {
-        let val = item[h];
-        if (typeof val === 'object') return JSON.stringify(val);
-        return val !== undefined ? val : '';
+        return safeCellValue(item[h]);
       });
     });
     sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);

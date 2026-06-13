@@ -131,13 +131,17 @@ export default function Catalog() {
   // Product stats from leads
   const productStats = {};
   leads.forEach(l => {
-    const items = l.productList?.length ? l.productList : [{ name: l.product, price: l.orderValue, qty: 1 }];
+    const items = l.productList?.length 
+      ? l.productList.map(item => ({ ...item, displayName: item.linkedProduct || item.name }))
+      : [{ name: l.linkedProduct || l.product, displayName: l.linkedProduct || l.product, price: l.orderValue, qty: 1 }];
+    
     items.forEach(item => {
-      if (!item.name) return;
-      if (!productStats[item.name]) productStats[item.name] = { enquiries: 0, revenue: 0, converted: 0 };
-      productStats[item.name].enquiries++;
-      productStats[item.name].revenue += (parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1);
-      if (DATA_CONFIG.getWonStatusLabels().includes(l.status)) productStats[item.name].converted++;
+      const nameToUse = item.displayName;
+      if (!nameToUse) return;
+      if (!productStats[nameToUse]) productStats[nameToUse] = { enquiries: 0, revenue: 0, converted: 0 };
+      productStats[nameToUse].enquiries++;
+      productStats[nameToUse].revenue += (parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1);
+      if (DATA_CONFIG.getWonStatusLabels().includes(l.status)) productStats[nameToUse].converted++;
     });
   });
 

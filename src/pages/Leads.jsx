@@ -58,16 +58,33 @@ export default function Leads() {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
     if (itemIdx === -1) {
-      updateLead(leadId, { product: selectedProductName });
+      updateLead(leadId, { linkedProduct: selectedProductName });
     } else {
       const newList = [...(lead.productList || [])];
       if (newList[itemIdx]) {
-        newList[itemIdx] = { ...newList[itemIdx], name: selectedProductName };
+        newList[itemIdx] = { ...newList[itemIdx], linkedProduct: selectedProductName };
       }
       updateLead(leadId, { productList: newList });
     }
     showBanner('Enquiry product mapped to catalog successfully.', 'success');
     setLinkProductContext(null);
+  };
+
+  const handleUnlinkProduct = (leadId, itemIdx) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+    if (itemIdx === -1) {
+      updateLead(leadId, { linkedProduct: null });
+    } else {
+      const newList = [...(lead.productList || [])];
+      if (newList[itemIdx]) {
+        const itemCopy = { ...newList[itemIdx] };
+        delete itemCopy.linkedProduct;
+        newList[itemIdx] = itemCopy;
+      }
+      updateLead(leadId, { productList: newList });
+    }
+    showBanner('Mapping removed.', 'info');
   };
 
   const openAdd = () => { setModalLeadId(undefined); setShowModal(true); };
@@ -251,57 +268,108 @@ export default function Leads() {
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{lead.contact}{lead.city ? ` | ${lead.city}` : ''}</div>
                 </td>
                 <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{lead.product}</span>
-                    {!lead.productList?.length && lead.product && !products.some(p => p.name === lead.product.trim()) && (
-                      <div style={{ display: 'flex', gap: '0.2rem' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{lead.product}</span>
+                      {!lead.linkedProduct && !lead.productList?.length && lead.product && !products.some(p => p.name === lead.product.trim()) && (
+                        <div style={{ display: 'flex', gap: '0.2rem' }}>
+                          <button 
+                            type="button"
+                            className="btn-icon" 
+                            style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                            title="Add to Product Catalog"
+                            onClick={() => handleQuickAddProduct(lead.product)}
+                          >
+                            <FolderPlus size={13} />
+                          </button>
+                          <button 
+                            type="button"
+                            className="btn-icon" 
+                            style={{ color: '#3b82f6', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                            title="Link to Catalog Product"
+                            onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
+                          >
+                            <Link size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {lead.linkedProduct && (
+                      <div style={{ fontSize: '0.7rem', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
+                        <span>Linked to: <strong>{lead.linkedProduct}</strong></span>
                         <button 
                           type="button"
                           className="btn-icon" 
-                          style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
-                          title="Add to Product Catalog"
-                          onClick={() => handleQuickAddProduct(lead.product)}
+                          style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                          title="Change mapping"
+                          onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
                         >
-                          <FolderPlus size={13} />
+                          <Link size={10} />
                         </button>
                         <button 
                           type="button"
                           className="btn-icon" 
-                          style={{ color: '#3b82f6', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
-                          title="Link to Catalog Product"
-                          onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
+                          style={{ color: '#ef4444', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                          title="Remove mapping"
+                          onClick={() => handleUnlinkProduct(lead.id, -1)}
                         >
-                          <Link size={13} />
+                          <X size={10} />
                         </button>
                       </div>
                     )}
                   </div>
                   {lead.productList?.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
                       {lead.productList.map((item, idx) => {
-                        const inCatalog = products.some(p => p.name === item.name);
+                        const isLinked = !!item.linkedProduct;
+                        const inCatalog = isLinked || products.some(p => p.name === item.name);
                         return (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                            <span>• {item.name} ({item.qty} × ₹{item.price})</span>
-                            {!inCatalog && (
-                              <div style={{ display: 'flex', gap: '0.2rem' }}>
-                                <button 
-                                  type="button"
-                                  className="btn-icon" 
-                                  style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                  title="Add to Product Catalog"
-                                  onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
-                                >
-                                  <FolderPlus size={11} />
-                                </button>
+                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span>• {item.name} ({item.qty} × ₹{item.price})</span>
+                              {!inCatalog && (
+                                <div style={{ display: 'flex', gap: '0.2rem' }}>
+                                  <button 
+                                    type="button"
+                                    className="btn-icon" 
+                                    style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                    title="Add to Product Catalog"
+                                    onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
+                                  >
+                                    <FolderPlus size={11} />
+                                  </button>
+                                  <button 
+                                    type="button"
+                                    className="btn-icon" 
+                                    style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                    title="Link to Catalog Product"
+                                    onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: idx, currentName: item.name })}
+                                  >
+                                    <Link size={11} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            {isLinked && (
+                              <div style={{ fontSize: '0.68rem', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.25rem', paddingLeft: '0.6rem' }}>
+                                <span>Linked to: <strong>{item.linkedProduct}</strong></span>
                                 <button 
                                   type="button"
                                   className="btn-icon" 
                                   style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                  title="Link to Catalog Product"
+                                  title="Change mapping"
                                   onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: idx, currentName: item.name })}
                                 >
-                                  <Link size={11} />
+                                  <Link size={10} />
+                                </button>
+                                <button 
+                                  type="button"
+                                  className="btn-icon" 
+                                  style={{ color: '#ef4444', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                  title="Remove mapping"
+                                  onClick={() => handleUnlinkProduct(lead.id, idx)}
+                                >
+                                  <X size={10} />
                                 </button>
                               </div>
                             )}

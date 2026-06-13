@@ -91,13 +91,7 @@ export default function Leads() {
   const openEdit = (id) => { setModalLeadId(id); setShowModal(true); };
 
   const handleInvoiceClick = (lead) => {
-    const realItems = (lead.productList || []).filter(it => it.name?.trim());
-    if (realItems.length > 1) {
-      setPickerLead(lead);
-    } else {
-      setInvoiceItems(null); // let InvoiceModal resolve items from lead directly
-      setInvoiceLead(lead);
-    }
+    setPickerLead(lead);
   };
 
   const handlePickerConfirm = (items) => {

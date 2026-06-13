@@ -219,14 +219,17 @@ function getSettingsData(ss, name) {
 function syncAll(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Helper for natural alphanumeric sorting
-  const naturalSort = (key) => (a, b) => {
+  // Helpers for natural alphanumeric sorting
+  const naturalSortAsc = (key) => (a, b) => {
     return String(a[key] || '').localeCompare(String(b[key] || ''), undefined, { numeric: true, sensitivity: 'base' });
   };
+  const naturalSortDesc = (key) => (a, b) => {
+    return String(b[key] || '').localeCompare(String(a[key] || ''), undefined, { numeric: true, sensitivity: 'base' });
+  };
 
-  // Sync Leads (Sorted by ID ascending)
+  // Sync Leads (Sorted by ID descending - newest first)
   if (data.leads) {
-    const sortedLeads = data.leads.slice().sort(naturalSort('id'));
+    const sortedLeads = data.leads.slice().sort(naturalSortDesc('id'));
     updateSheet(ss, SHEET_NAMES.LEADS, sortedLeads, [
       'id', 'date', 'customerName', 'contact', 'gst', 'product', 'city', 'state',
       'status', 'paymentStatus', 'paymentReceivedAmount', 'transactionId', 'orderValue',
@@ -238,7 +241,7 @@ function syncAll(data) {
 
   // Sync Products (Sorted by ID ascending)
   if (data.products) {
-    const sortedProducts = data.products.slice().sort(naturalSort('id'));
+    const sortedProducts = data.products.slice().sort(naturalSortAsc('id'));
     updateSheet(ss, SHEET_NAMES.PRODUCTS, sortedProducts, ['id', 'name', 'price', 'hsn', 'gst', 'unit', 'category', 'updatedAt'], '#34a853');
   }
 
@@ -252,14 +255,14 @@ function syncAll(data) {
     const rows = Object.entries(data.settings).map(([k, v]) => {
       return [k, safeCellValue(v)];
     });
-    // Sort settings keys alphabetically
+    // Sort settings keys alphabetically ascending
     rows.sort((a, b) => a[0].localeCompare(b[0]));
     if (rows.length > 0) settingsSheet.getRange(2, 1, rows.length, 2).setValues(rows);
   }
 
-  // Sync Invoices (Sorted by invoiceNumber ascending)
+  // Sync Invoices (Sorted by invoiceNumber descending - newest first)
   if (data.invoices) {
-    const sortedInvoices = data.invoices.slice().sort(naturalSort('invoiceNumber'));
+    const sortedInvoices = data.invoices.slice().sort(naturalSortDesc('invoiceNumber'));
     updateSheet(ss, SHEET_NAMES.INVOICES, sortedInvoices, [
       'id', 'invoiceNumber', 'invoiceDate', 'customerName', 'customerContact',
       'customerGst', 'customerCity', 'customerState', 'leadId', 'items',
@@ -269,7 +272,7 @@ function syncAll(data) {
 
   // Sync Templates (Sorted by ID ascending)
   if (data.templates) {
-    const sortedTemplates = data.templates.slice().sort(naturalSort('id'));
+    const sortedTemplates = data.templates.slice().sort(naturalSortAsc('id'));
     updateSheet(ss, SHEET_NAMES.TEMPLATES, sortedTemplates, ['id', 'name', 'content', 'category', 'updatedAt'], '#ff5722');
   }
 

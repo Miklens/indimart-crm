@@ -219,9 +219,15 @@ function getSettingsData(ss, name) {
 function syncAll(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Sync Leads
+  // Helper for natural alphanumeric sorting
+  const naturalSort = (key) => (a, b) => {
+    return String(a[key] || '').localeCompare(String(b[key] || ''), undefined, { numeric: true, sensitivity: 'base' });
+  };
+
+  // Sync Leads (Sorted by ID ascending)
   if (data.leads) {
-    updateSheet(ss, SHEET_NAMES.LEADS, data.leads, [
+    const sortedLeads = data.leads.slice().sort(naturalSort('id'));
+    updateSheet(ss, SHEET_NAMES.LEADS, sortedLeads, [
       'id', 'date', 'customerName', 'contact', 'gst', 'product', 'city', 'state',
       'status', 'paymentStatus', 'paymentReceivedAmount', 'transactionId', 'orderValue',
       'dispatchDate', 'dispatchMethod', 'trackingId', 'materialReachedDate',
@@ -230,9 +236,10 @@ function syncAll(data) {
     ], '#1a73e8');
   }
 
-  // Sync Products
+  // Sync Products (Sorted by ID ascending)
   if (data.products) {
-    updateSheet(ss, SHEET_NAMES.PRODUCTS, data.products, ['id', 'name', 'price', 'hsn', 'gst', 'unit', 'category', 'updatedAt'], '#34a853');
+    const sortedProducts = data.products.slice().sort(naturalSort('id'));
+    updateSheet(ss, SHEET_NAMES.PRODUCTS, sortedProducts, ['id', 'name', 'price', 'hsn', 'gst', 'unit', 'category', 'updatedAt'], '#34a853');
   }
 
   // Sync Settings
@@ -245,21 +252,25 @@ function syncAll(data) {
     const rows = Object.entries(data.settings).map(([k, v]) => {
       return [k, safeCellValue(v)];
     });
+    // Sort settings keys alphabetically
+    rows.sort((a, b) => a[0].localeCompare(b[0]));
     if (rows.length > 0) settingsSheet.getRange(2, 1, rows.length, 2).setValues(rows);
   }
 
-  // Sync Invoices
+  // Sync Invoices (Sorted by invoiceNumber ascending)
   if (data.invoices) {
-    updateSheet(ss, SHEET_NAMES.INVOICES, data.invoices, [
+    const sortedInvoices = data.invoices.slice().sort(naturalSort('invoiceNumber'));
+    updateSheet(ss, SHEET_NAMES.INVOICES, sortedInvoices, [
       'id', 'invoiceNumber', 'invoiceDate', 'customerName', 'customerContact',
       'customerGst', 'customerCity', 'customerState', 'leadId', 'items',
       'totalAmount', 'otherCharges', 'roundOff', 'receivedAmount', 'paymentStatus', 'status', 'versions', 'latestVersion', 'createdAt', 'updatedAt'
     ], '#9334e6');
   }
 
-  // Sync Templates
+  // Sync Templates (Sorted by ID ascending)
   if (data.templates) {
-    updateSheet(ss, SHEET_NAMES.TEMPLATES, data.templates, ['id', 'name', 'content', 'category', 'updatedAt'], '#ff5722');
+    const sortedTemplates = data.templates.slice().sort(naturalSort('id'));
+    updateSheet(ss, SHEET_NAMES.TEMPLATES, sortedTemplates, ['id', 'name', 'content', 'category', 'updatedAt'], '#ff5722');
   }
 
   logAction('FULL_SYNC', 'all', '', `Synced all data points`);

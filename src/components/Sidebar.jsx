@@ -118,14 +118,14 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
       const dsConfirmedRev = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.totalAmount)||0); }, 0);
       const dsTotalReceived = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.receivedAmount)||0); }, 0);
       const dsBilledIds = new Set(dsPaidInv.map(inv => inv.leadId).filter(Boolean));
-      const dsValidLeads = leads.filter(l => !DATA_CONFIG.getLostStatusLabels().includes(l.status)).length;
+      const dsValidLeads = leads.filter(l => DATA_CONFIG.getSimpleStatusLabel(l.status) !== 'Lost').length;
       const dsConvRate = dsValidLeads ? ((dsBilledIds.size / dsValidLeads) * 100).toFixed(1) : '0';
-      const dsContactedCount = leads.filter(l => DATA_CONFIG.getContactedStatusLabels().includes(l.status)).length;
+      const dsContactedCount = leads.filter(l => ['Contacted', 'Quoted', 'Won'].includes(DATA_CONFIG.getSimpleStatusLabel(l.status))).length;
       const dsContactRate = leads.length ? ((dsContactedCount / leads.length) * 100).toFixed(1) : '0';
       const dsPending = Math.max(0, dsConfirmedRev - dsTotalReceived);
       const dsInTransit = leads.filter(l => DATA_CONFIG.getStatusGroupStatuses('inTransit').includes(l.status)).length;
       const dsWonAll = DATA_CONFIG.getWonStatusLabels();
-      const dsProjectedRev = leads.filter(l => !dsBilledIds.has(l.id) && !new Set(['Purchased', ...DATA_CONFIG.getLostStatusLabels()]).has(l.status)).reduce((s,l) => s+(l.orderValue||0), 0);
+      const dsProjectedRev = leads.filter(l => !dsBilledIds.has(l.id) && !['Lost', 'Not Responding', 'Not Interested', 'Won'].includes(DATA_CONFIG.getSimpleStatusLabel(l.status))).reduce((s,l) => s+(l.orderValue||0), 0);
 
       // KPI section
       dsSection('📊  KEY PERFORMANCE INDICATORS', greenFill);
@@ -151,10 +151,16 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
       dsSection('🎯  LEAD STATUS DISTRIBUTION', blueFill);
       dsColHead('Status', 'Count', '% of Total');
       const dsStatusCounts = {};
-      leads.forEach(l => { dsStatusCounts[l.status] = (dsStatusCounts[l.status]||0) + 1; });
-      const dsWonOnes  = DATA_CONFIG.getWonStatusLabels();
-      const dsLostOnes = DATA_CONFIG.getLostStatusLabels();
-      Object.entries(dsStatusCounts).sort((a,b) => b[1]-a[1]).forEach(([status, count]) => {
+      leads.forEach(l => {
+        const simple = DATA_CONFIG.getSimpleStatusLabel(l.status);
+        dsStatusCounts[simple] = (dsStatusCounts[simple]||0) + 1;
+      });
+      const dsWonOnes  = ['Won'];
+      const dsLostOnes = ['Lost', 'Not Responding', 'Not Interested'];
+      const orderedStatuses = ['New Enquiry', 'Contacted', 'Quoted', 'Not Responding', 'Won', 'Lost', 'Not Interested'];
+      
+      orderedStatuses.forEach(status => {
+        const count = dsStatusCounts[status] || 0;
         dsDataRow(status, count, leads.length ? `${((count/leads.length)*100).toFixed(1)}%` : '0%', r => {
           if (dsWonOnes.includes(status)) { r.getCell(1).fill = { type:'pattern',pattern:'solid',fgColor:{argb:'FFD1FAE5'} }; r.getCell(1).font = { bold:true, color:{argb:'FF065F46'} }; }
           else if (dsLostOnes.includes(status)) { r.getCell(1).fill = { type:'pattern',pattern:'solid',fgColor:{argb:'FFFEE2E2'} }; r.getCell(1).font = { color:{argb:'FF991B1B'} }; }
@@ -309,7 +315,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
             p.price || 0,
             (p.price || 0) * (p.qty || 0),
             idx === 0 ? (l.orderValue || 0) : '',
-            idx === 0 ? l.status : '',
+            idx === 0 ? DATA_CONFIG.getSimpleStatusLabel(l.status) : '',
             idx === 0 ? normalizeDisplayDate(l.followUpDate) : '',
             idx === 0 ? (l.lostReason || '') : '',
             idx === 0 ? (l.remarks || '') : '',
@@ -322,12 +328,13 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
 
           if (idx === 0) {
             const statusCell = row.getCell(14);
-            const wonStatuses = ['Converted', 'Purchased', 'Repeat Customer', 'Material Dispatched', 'Material Reached'];
-            const lostStatuses = ['Closed Lost', 'Invalid Lead', 'Not Interested', 'No Response', 'No Current Requirement'];
-            if (wonStatuses.includes(l.status)) {
+            const simple = DATA_CONFIG.getSimpleStatusLabel(l.status);
+            const wonStatuses = ['Won'];
+            const lostStatuses = ['Lost', 'Not Responding', 'Not Interested'];
+            if (wonStatuses.includes(simple)) {
               statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
               statusCell.font = { color: { argb: 'FF065F46' }, bold: true };
-            } else if (lostStatuses.includes(l.status)) {
+            } else if (lostStatuses.includes(simple)) {
               statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
               statusCell.font = { color: { argb: 'FF991B1B' } };
             }
@@ -355,11 +362,14 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
       const totalValue = leads.reduce((s, l) => s + (l.orderValue || 0), 0);
       const ssPaidInv = invoiceHistory.filter(inv => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return (parseFloat(v.receivedAmount)||0) > 0; });
       const ssBilledIds = new Set(ssPaidInv.map(inv => inv.leadId).filter(Boolean));
-      const ssValidLeads = leads.filter(l => l.status !== 'Invalid Lead').length;
+      const ssValidLeads = leads.filter(l => DATA_CONFIG.getSimpleStatusLabel(l.status) !== 'Lost').length;
       const convertedLeads = ssBilledIds.size;
       const conversionRate = ssValidLeads > 0 ? ((convertedLeads / ssValidLeads) * 100).toFixed(2) : 0;
       const statusCounts = {};
-      leads.forEach(l => { statusCounts[l.status] = (statusCounts[l.status] || 0) + 1; });
+      leads.forEach(l => {
+        const simple = DATA_CONFIG.getSimpleStatusLabel(l.status);
+        statusCounts[simple] = (statusCounts[simple] || 0) + 1;
+      });
 
       ss.addRow(['Metric', 'Value', 'Percentage']);
       ss.getRow(1).eachCell(cell => {
@@ -378,9 +388,9 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
       ss.getRow(ss.lastRow.number).eachCell(cell => {
         cell.font = { bold: true };
       });
-      Object.keys(statusCounts).sort((a, b) => statusCounts[b] - statusCounts[a]).forEach(status => {
-        const count = statusCounts[status];
-        const pct = ((count / totalLeads) * 100).toFixed(2);
+      orderedStatuses.forEach(status => {
+        const count = statusCounts[status] || 0;
+        const pct = totalLeads ? ((count / totalLeads) * 100).toFixed(2) : '0.00';
         ss.addRow([status, count, `${pct}%`]);
       });
       ss.getColumn(1).width = 25;

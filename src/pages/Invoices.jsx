@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, FileText, Trash2, Download, RefreshCw, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../App';
@@ -12,6 +12,11 @@ export default function Invoices() {
   const [viewInvoice, setViewInvoice] = useState(null);
   const [viewLeadId, setViewLeadId] = useState(null);
   const [expandedVersions, setExpandedVersions] = useState(new Set());
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [search]);
 
   const toggleVersions = (invNo) => setExpandedVersions(prev => {
     const next = new Set(prev);
@@ -92,7 +97,7 @@ export default function Invoices() {
             {filtered.length === 0 && (
               <tr><td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>No invoices yet. Generate one from the Leads page.</td></tr>
             )}
-            {filtered.map(inv => {
+            {filtered.slice(0, visibleCount).map(inv => {
               const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
               const customerName = inv.customerName || '';
               const customerContact = inv.customerContact || inv.contact || '';
@@ -230,6 +235,14 @@ export default function Invoices() {
           </tbody>
         </table>
       </div>
+
+      {filtered.length > visibleCount && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem' }}>
+          <button className="btn btn-secondary" onClick={() => setVisibleCount(prev => prev + 50)}>
+            Load More Invoices ({filtered.length - visibleCount} remaining)
+          </button>
+        </div>
+      )}
 
       {viewInvoice && <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
       {viewLeadId && (

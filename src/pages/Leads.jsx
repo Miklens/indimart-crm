@@ -24,6 +24,11 @@ export default function Leads() {
   const [activeTab, setActiveTab] = useState('all');
   const [modalLeadId, setModalLeadId] = useState(undefined);
   const [showModal, setShowModal] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [search, statusFilter, sourceFilter, activeTab]);
 
   const STATUS_FILTERS = DATA_CONFIG.getStatusFilterOptions();
   const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
@@ -269,7 +274,7 @@ export default function Leads() {
             {filtered.length === 0 && (
               <tr><td colSpan={10} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-dim)' }}>No leads found</td></tr>
             )}
-            {filtered.map(lead => (
+            {filtered.slice(0, visibleCount).map(lead => (
               <tr key={lead.id}>
                 <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{lead.id}</td>
                 <td style={{ whiteSpace: 'nowrap', fontSize: '0.78rem' }}>{normalizeDisplayDate(lead.date)}</td>
@@ -498,6 +503,14 @@ export default function Leads() {
           </tbody>
         </table>
       </div>
+
+      {filtered.length > visibleCount && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem' }}>
+          <button className="btn btn-secondary" onClick={() => setVisibleCount(prev => prev + 50)}>
+            Load More Leads ({filtered.length - visibleCount} remaining)
+          </button>
+        </div>
+      )}
 
       {showModal && <LeadModal leadId={modalLeadId} onClose={() => setShowModal(false)} />}
       {pickerLead && <ProductPicker lead={pickerLead} onConfirm={handlePickerConfirm} onClose={() => setPickerLead(null)} />}

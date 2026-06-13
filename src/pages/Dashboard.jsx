@@ -37,7 +37,7 @@ export default function Dashboard() {
   const billedLeadIds = new Set(paidInvoices.map(inv => inv.leadId).filter(Boolean));
   const paidOrderCount = paidInvoices.length;
   const projectedRevenue = leads
-    .filter(l => !billedLeadIds.has(l.id) && !new Set(['Purchased', ...DATA_CONFIG.getLostStatusLabels()]).has(l.status))
+    .filter(l => !billedLeadIds.has(l.id) && !new Set([...DATA_CONFIG.getWonStatusLabels(), ...DATA_CONFIG.getLostStatusLabels()]).has(l.status))
     .reduce((sum, l) => sum + (l.orderValue || 0), 0);
   const inTransitCount = leads.filter(l => DATA_CONFIG.getStatusGroupStatuses('inTransit').includes(l.status)).length;
   const validLeads = leads.filter(l => !DATA_CONFIG.getLostStatusLabels().includes(l.status)).length;
@@ -86,7 +86,8 @@ export default function Dashboard() {
 
     // 3. Top product categories bar
     const categoryRevenue = {};
-    leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).forEach(l => {
+    const wonLabels = DATA_CONFIG.getWonStatusLabels();
+    leads.filter(l => wonLabels.includes(l.status)).forEach(l => {
       (l.productList || [{ name: l.product, price: l.orderValue, qty: 1 }]).forEach(item => {
         if (!item.name) return;
         
@@ -112,7 +113,7 @@ export default function Dashboard() {
 
     // 4. City revenue pie
     const cityRevenue = {};
-    leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).forEach(l => {
+    leads.filter(l => wonLabels.includes(l.status)).forEach(l => {
       const city = l.city || 'Other';
       cityRevenue[city] = (cityRevenue[city] || 0) + (parseFloat(l.orderValue) || 0);
     });
@@ -126,13 +127,12 @@ export default function Dashboard() {
     }
 
     // 5. Sales funnel bar
-    const wonLabels = DATA_CONFIG.getWonStatusLabels();
     const funnelData = [
       leads.length,
       leads.filter(l => DATA_CONFIG.getContactedStatusLabels().includes(l.status)).length,
       leads.filter(l => [...DATA_CONFIG.getStatusGroupStatuses('quoted'), ...wonLabels].includes(l.status)).length,
       leads.filter(l => wonLabels.includes(l.status)).length,
-      leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).length,
+      leads.filter(l => wonLabels.includes(l.status)).length,
     ];
     if (canvasRefs.funnel.current && leads.length) {
       chartsRef.current.funnel = new Chart(canvasRefs.funnel.current, {
@@ -148,7 +148,7 @@ export default function Dashboard() {
       const month = (l.date || '').substring(0, 7);
       if (!month) return;
       if (!monthlyData[month]) monthlyData[month] = { revenue: 0, count: 0 };
-      if (['Purchased','Repeat Customer'].includes(l.status)) monthlyData[month].revenue += l.orderValue;
+      if (wonLabels.includes(l.status)) monthlyData[month].revenue += l.orderValue;
       monthlyData[month].count++;
     });
     const months = Object.keys(monthlyData).sort();
@@ -256,8 +256,8 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
         <ChartCard title="Lead Status Distribution" canvasKey="dist" hasData={leads.length > 0} />
         <ChartCard title="Lost Reason Analysis" canvasKey="lost" hasData={leads.filter(l => DATA_CONFIG.getLostStatusLabels().includes(l.status)).length > 0} />
-        <ChartCard title="Top Categories by Revenue" canvasKey="product" hasData={leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).length > 0} />
-        <ChartCard title="City-wise Revenue" canvasKey="city" hasData={leads.filter(l => ['Purchased','Repeat Customer'].includes(l.status)).length > 0} />
+        <ChartCard title="Top Categories by Revenue" canvasKey="product" hasData={leads.filter(l => DATA_CONFIG.getWonStatusLabels().includes(l.status)).length > 0} />
+        <ChartCard title="City-wise Revenue" canvasKey="city" hasData={leads.filter(l => DATA_CONFIG.getWonStatusLabels().includes(l.status)).length > 0} />
         <ChartCard title="Sales Funnel" canvasKey="funnel" hasData={leads.length > 0} />
         <ChartCard title="Monthly Revenue Trend" canvasKey="trend" hasData={leads.filter(l => l.date).length > 0} />
       </div>

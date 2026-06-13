@@ -143,6 +143,23 @@ export default function Leads() {
     reader.readAsText(file);
   };
 
+  // Phone/contact normalizer
+  const normC = (raw) => {
+    if (!raw) return '';
+    const d = String(raw).replace(/\D/g, '');
+    if (d.length === 12 && d.startsWith('91')) return d.slice(2);
+    return d.slice(-10);
+  };
+
+  // Precalculate lead counts per contact for Repeat Customer badges
+  const leadCountsByContact = {};
+  leads.forEach(l => {
+    const key = normC(l.contact) || l.customerName?.trim();
+    if (key) {
+      leadCountsByContact[key] = (leadCountsByContact[key] || 0) + 1;
+    }
+  });
+
   // Leads that have at least one invoice and are not fully paid
   const billedLeadIds = new Set(invoiceHistory.map(inv => inv.leadId).filter(Boolean));
   const unpaidBilledLeadIds = new Set(
@@ -164,22 +181,25 @@ export default function Leads() {
   }).sort((a, b) => {
     const toDate = (str) => {
       if (!str) return new Date(0);
-      if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
-        const [d, m, y] = str.split('-');
+      const clean = String(str).trim();
+      if (/^\d{2}-\d{2}-\d{4}$/.test(clean)) {
+        const [d, m, y] = clean.split('-');
         return new Date(`${y}-${m}-${d}`);
       }
-      const d = new Date(str);
-      return isNaN(d.getTime()) ? new Date(0) : d;
+      const parsed = new Date(clean);
+      return isNaN(parsed.getTime()) ? new Date(0) : parsed;
     };
     const dateDiff = toDate(b.date) - toDate(a.date);
     if (dateDiff !== 0) return dateDiff;
     
+    const timeDiff = (b.timestamp || 0) - (a.timestamp || 0);
+    if (timeDiff !== 0) return timeDiff;
+
     const getNum = (id) => {
       const match = String(id || '').match(/\d+/);
       return match ? parseInt(match[0], 10) : 0;
     };
-    const idDiff = getNum(b.id) - getNum(a.id);
-    return idDiff !== 0 ? idDiff : (b.timestamp || 0) - (a.timestamp || 0);
+    return getNum(b.id) - getNum(a.id);
   });
 
   const handleDelete = (id) => {
@@ -254,10 +274,24 @@ export default function Leads() {
                 <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{lead.id}</td>
                 <td style={{ whiteSpace: 'nowrap', fontSize: '0.78rem' }}>{normalizeDisplayDate(lead.date)}</td>
                 <td>
-                  <div style={{ fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}
-                    onClick={() => openCustomer360({ name: lead.customerName, contact: lead.contact, city: lead.city })}
-                    title="View Customer 360">
-                    {lead.customerName}
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}
+                      onClick={() => openCustomer360({ name: lead.customerName, contact: lead.contact, city: lead.city })}
+                      title="View Customer 360">
+                      {lead.customerName}
+                    </div>
+                    {(() => {
+                      const key = normC(lead.contact) || lead.customerName?.trim();
+                      const count = leadCountsByContact[key] || 1;
+                      if (count > 1) {
+                        return (
+                          <span style={{ fontSize: '0.62rem', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', padding: '1px 5px', borderRadius: 4, fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
+                            Repeat ({count})
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{lead.contact}{lead.city ? ` | ${lead.city}` : ''}</div>
                 </td>

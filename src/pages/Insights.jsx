@@ -8,12 +8,15 @@ export default function Insights() {
   const contactMeta = {}; // key -> { contact, name }
   invoiceHistory.forEach(inv => {
     const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+    const received = parseFloat(latest.receivedAmount) || 0;
+    if (received <= 0) return;
+    
     const contact = inv.customerContact || inv.contact || '';
     const name = inv.customerName || '';
     const digits = contact.replace(/\D/g, '');
     const normContact = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits.slice(-10) || contact.trim();
     const key = normContact || name.trim() || inv.invoiceNumber;
-    contactLTV[key] = (contactLTV[key] || 0) + (parseFloat(latest.totalAmount) || 0);
+    contactLTV[key] = (contactLTV[key] || 0) + received;
     if (!contactMeta[key]) contactMeta[key] = { contact, name };
   });
 

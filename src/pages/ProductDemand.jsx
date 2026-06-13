@@ -13,24 +13,31 @@ export default function ProductDemand() {
     const items = l.productList?.length ? l.productList : [{ name: l.product, qty: l.qty || 1, price: l.orderValue }];
     items.forEach(item => {
       if (!item?.name) return;
+
+      // Resolve linked product first, fallback to the item name
+      const resolvedName = item.linkedProduct || l.linkedProduct || item.name;
+      if (!resolvedName) return;
+
+      // Check if the resolved product actually exists in the catalog
+      const catProduct = products.find(p => p.name === resolvedName);
+      if (!catProduct) {
+        // Skip unlinked raw/new enquiries that are not in the catalog
+        return;
+      }
+
+      const prodName = catProduct.name;
       
       // Calculate product stats
-      if (!productStats[item.name]) productStats[item.name] = { name: item.name, enquiries: 0, totalQty: 0, revenue: 0, converted: 0, cities: new Set() };
-      const ps = productStats[item.name];
+      if (!productStats[prodName]) productStats[prodName] = { name: prodName, enquiries: 0, totalQty: 0, revenue: 0, converted: 0, cities: new Set() };
+      const ps = productStats[prodName];
       ps.enquiries++;
       ps.totalQty += (parseFloat(item.qty) || 0);
       ps.revenue += (parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1);
       if (DATA_CONFIG.getWonStatusLabels().includes(l.status)) ps.converted++;
       if (l.city) ps.cities.add(l.city);
 
-      // Find product category from catalog
-      const clean = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const itemClean = clean(item.name.replace('[NEW] ', ''));
-      const catProduct = products.find(p => clean(p.name) === itemClean) || 
-                         products.find(p => itemClean.includes(clean(p.name))) || 
-                         products.find(p => clean(p.name).includes(itemClean));
-      
-      const category = catProduct?.category || 'Uncategorized';
+      // Category stats
+      const category = catProduct.category || 'Uncategorized';
       
       if (!categoryStats[category]) categoryStats[category] = { name: category, enquiries: 0, totalQty: 0, revenue: 0, converted: 0, cities: new Set() };
       const cs = categoryStats[category];

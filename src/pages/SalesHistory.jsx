@@ -36,6 +36,12 @@ export default function SalesHistory() {
   const customers = {};
   invoiceHistory.forEach(inv => {
     const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+    
+    // Skip unpaid/pending invoices (not actual purchases yet)
+    if (latest.paymentStatus === 'Pending' && (parseFloat(latest.receivedAmount) || 0) <= 0) {
+      return;
+    }
+
     const rawContact = inv.customerContact || inv.contact || '';
     const digits = rawContact.replace(/\D/g, '');
     const contact = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits.slice(-10) || rawContact.trim();
@@ -45,7 +51,8 @@ export default function SalesHistory() {
       customers[key] = { name, contact, key, invoices: [], totalValue: 0, totalOrders: 0 };
     }
     customers[key].invoices.push({ ...inv, latest });
-    customers[key].totalValue += parseFloat(latest.totalAmount || 0) || 0;
+    // Total value reflects actual money received
+    customers[key].totalValue += parseFloat(latest.receivedAmount || 0) || 0;
     customers[key].totalOrders++;
   });
 

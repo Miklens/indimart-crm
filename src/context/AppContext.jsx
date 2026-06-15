@@ -151,6 +151,7 @@ export function AppProvider({ children }) {
   // ── Firebase + GS state ───────────────────────────────────────────────────
   const [gsUrl, setGsUrl] = useState(() => localStorage.getItem('indimart_gsUrl') || '');
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => localStorage.getItem('indimart_autoSync') === 'true');
+  const [invoicesLoaded, setInvoicesLoaded] = useState(!fbEnabled);
   const [syncStatus, setSyncStatus] = useState({ status: fbEnabled ? 'syncing' : 'idle', text: fbEnabled ? 'Connecting...' : 'No Firebase' });
   const [syncBanner, setSyncBanner] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -198,6 +199,7 @@ export function AppProvider({ children }) {
     unsubInvoicesRef.current = fsListenInvoices((fsInvoices) => {
       setInvoiceHistory(sanitizeInvoiceNumbers(fsInvoices));
       persist('indimart_invoice_history', fsInvoices);
+      setInvoicesLoaded(true);
     });
 
     // One-time fetch for products, templates, settings
@@ -214,32 +216,73 @@ export function AppProvider({ children }) {
   }, [fbEnabled]); // eslint-disable-line
 
   // Retroactive sync of lead statuses based on invoice payment history
-  // ONLY adjusts leads that have linked invoices. Leads without invoices are left untouched.
   // Business rule: Invoice generated + no payment = Quoted, Payment received = Won
+  // If no invoice exists, demote from Won or Quoted status back to early pipeline stage.
   useEffect(() => {
-    if (!invoiceHistory.length) return; // Nothing to sync if no invoices exist
+    if (!invoicesLoaded) return;
 
     // Build a map of leadId -> invoices for efficient lookup
     const invoicesByLeadId = {};
-    invoiceHistory.forEach(inv => {
+    (invoiceHistory || []).forEach(inv => {
       if (!inv.leadId) return;
       if (!invoicesByLeadId[inv.leadId]) invoicesByLeadId[inv.leadId] = [];
       invoicesByLeadId[inv.leadId].push(inv);
     });
 
-    // Only process leads that have at least one linked invoice
-    const leadIdsWithInvoices = Object.keys(invoicesByLeadId);
-    if (!leadIdsWithInvoices.length) return;
-
     setLeads(prevLeads => {
-      if (!prevLeads.length) return prevLeads;
+      if (!prevLeads || !prevLeads.length) return prevLeads;
       let needsUpdate = false;
       const updated = prevLeads.map(l => {
-        const leadInvoices = invoicesByLeadId[l.id];
+        const leadInvoices = invoicesByLeadId[l.id] || [];
         
-        // Skip leads that have NO invoices — don't touch their status
-        if (!leadInvoices || leadInvoices.length === 0) return l;
+        if (leadInvoices.length === 0) {
+          // Skip if the lead does not have a Won/Quoted status or paid paymentStatus
+          const isWon = DATA_CONFIG.getWonStatusLabels().includes(l.status);
+          const isQuoted = DATA_CONFIG.getStatusGroupStatuses('quoted').includes(l.status);
+          const hasPayment = l.paymentStatus !== 'Pending' || l.paymentReceivedAmount > 0;
+          
+          if (isWon || isQuoted || hasPayment) {
+            needsUpdate = true;
+            let fallback = 'Contacted';
+            const nonWonQuotedHistory = (l.history || [])
+              .slice()
+              .reverse()
+              .find(h => h.status && 
+                !DATA_CONFIG.getWonStatusLabels().includes(h.status) && 
+                !DATA_CONFIG.getStatusGroupStatuses('quoted').includes(h.status)
+              );
+            if (nonWonQuotedHistory) {
+              fallback = nonWonQuotedHistory.status;
+            }
+            
+            const history = [...(l.history || [])];
+            history.push({ 
+              status: fallback, 
+              timestamp: Date.now(), 
+              note: `Demoted because no linked invoices exist` 
+            });
+            
+            const updatedLead = {
+              ...l,
+              paymentReceivedAmount: 0,
+              paymentStatus: 'Pending',
+              status: fallback,
+              history
+            };
+            if (fbEnabled) {
+              fsUpdateLead(l.id, {
+                status: updatedLead.status,
+                paymentReceivedAmount: updatedLead.paymentReceivedAmount,
+                paymentStatus: updatedLead.paymentStatus,
+                history: updatedLead.history
+              }).catch(console.error);
+            }
+            return updatedLead;
+          }
+          return l;
+        }
 
+        // Process leads WITH invoices
         const totalReceived = leadInvoices.reduce((sum, inv) => {
           const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
           return sum + (parseFloat(v.receivedAmount) || 0);
@@ -258,7 +301,6 @@ export function AppProvider({ children }) {
           }
         } else {
           // Invoice exists but no payment received yet → Quoted
-          // Only promote from early pipeline stages or demote from Won (since no payment backs it)
           if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
             newStatus = 'Quoted';
           } else if (DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
@@ -302,7 +344,7 @@ export function AppProvider({ children }) {
       }
       return prevLeads;
     });
-  }, [invoiceHistory, fbEnabled, persist]); // eslint-disable-line -- intentionally excludes `leads` to avoid infinite loop
+  }, [invoiceHistory, fbEnabled, persist, invoicesLoaded]); // eslint-disable-line -- intentionally excludes `leads` to avoid infinite loop
 
   // ── Lead operations ───────────────────────────────────────────────────────
   const addLead = useCallback((leadData) => {

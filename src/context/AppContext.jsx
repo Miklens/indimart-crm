@@ -152,6 +152,7 @@ export function AppProvider({ children }) {
   const [gsUrl, setGsUrl] = useState(() => localStorage.getItem('indimart_gsUrl') || '');
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => localStorage.getItem('indimart_autoSync') === 'true');
   const [invoicesLoaded, setInvoicesLoaded] = useState(!fbEnabled);
+  const [leadsLoaded, setLeadsLoaded] = useState(!fbEnabled);
   const [syncStatus, setSyncStatus] = useState({ status: fbEnabled ? 'syncing' : 'idle', text: fbEnabled ? 'Connecting...' : 'No Firebase' });
   const [syncBanner, setSyncBanner] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -192,6 +193,7 @@ export function AppProvider({ children }) {
     unsubLeadsRef.current = fsListenLeads((fsLeads) => {
       setLeads(fsLeads);
       persist('indimart_leads', fsLeads);
+      setLeadsLoaded(true);
       updateSyncStatus('connected', 'Live ✓');
     });
 
@@ -219,7 +221,7 @@ export function AppProvider({ children }) {
   // Business rule: Invoice generated + no payment = Quoted, Payment received = Won
   // If no invoice exists, demote from Won or Quoted status back to early pipeline stage.
   useEffect(() => {
-    if (!invoicesLoaded) return;
+    if (!invoicesLoaded || !leadsLoaded) return;
 
     // Build a map of leadId -> invoices for efficient lookup
     const invoicesByLeadId = {};
@@ -344,7 +346,7 @@ export function AppProvider({ children }) {
       }
       return prevLeads;
     });
-  }, [invoiceHistory, fbEnabled, persist, invoicesLoaded]); // eslint-disable-line -- intentionally excludes `leads` to avoid infinite loop
+  }, [invoiceHistory, leads, fbEnabled, persist, invoicesLoaded, leadsLoaded]); // eslint-disable-line -- intentionally excludes `leads` to avoid infinite loop
 
   // ── Lead operations ───────────────────────────────────────────────────────
   const addLead = useCallback((leadData) => {

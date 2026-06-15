@@ -162,7 +162,7 @@ export default function Dashboard() {
       });
     }
 
-    // 6. Monthly trend line
+    // 6. Monthly trend line with Month-over-Month comparison
     const monthlyData = {};
     leads.forEach(l => {
       const month = (l.date || '').substring(0, 7);
@@ -175,13 +175,19 @@ export default function Dashboard() {
     if (canvasRefs.trend.current && months.length) {
       chartsRef.current.trend = new Chart(canvasRefs.trend.current, {
         type: 'line',
-        data: { labels: months, datasets: [{ label: 'Revenue (₹)', data: months.map(m => monthlyData[m].revenue), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.4 }] },
+        data: { 
+          labels: months, 
+          datasets: [
+            { label: 'Revenue (₹)', data: months.map(m => monthlyData[m].revenue), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.4 },
+            { label: 'Total Enquiries', data: months.map(m => monthlyData[m].count), borderColor: '#3b82f6', backgroundColor: 'transparent', fill: false, tension: 0.4, borderDash: [5, 5] }
+          ] 
+        },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartColor.text } } }, scales: { y: { grid: { color: chartColor.grid }, ticks: { color: chartColor.text } }, x: { grid: { display: false }, ticks: { color: chartColor.text } } } },
       });
     }
 
     return () => { Object.values(chartsRef.current).forEach(c => c?.destroy()); };
-  }, [leads, invoiceHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [leads, invoiceHistory, products]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
 

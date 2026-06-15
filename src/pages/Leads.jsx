@@ -206,13 +206,31 @@ export default function Leads() {
 
   const payColor = (ps) => ps === 'Paid' ? '#10b981' : ps === 'Partial' ? '#f59e0b' : '#ef4444';
 
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
+
   if (detailsLeadId) return <LeadDetails leadId={detailsLeadId} onBack={() => setDetailsLeadId(null)} onEdit={openEdit} />;
 
   return (
     <div className="page-section">
       <div className="section-header">
         <h2 className="section-title">Leads Tracker</h2>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.4rem', padding: 2, marginRight: '0.5rem' }}>
+            <button 
+              className={`btn ${viewMode === 'list' ? 'btn-primary' : 'btn-secondary'}`} 
+              onClick={() => setViewMode('list')} 
+              style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem', border: 'none', minWidth: 60 }}
+            >
+              List
+            </button>
+            <button 
+              className={`btn ${viewMode === 'kanban' ? 'btn-primary' : 'btn-secondary'}`} 
+              onClick={() => setViewMode('kanban')} 
+              style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem', border: 'none', minWidth: 60 }}
+            >
+              Kanban
+            </button>
+          </div>
           <input ref={csvRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImportCSV} />
           <button className="btn btn-secondary" onClick={() => csvRef.current?.click()}><Upload size={14} /> Import CSV</button>
           <button className="btn btn-primary" onClick={openAdd}><Plus size={14} /> New Lead</button>
@@ -254,254 +272,305 @@ export default function Leads() {
         </select>
       </div>
 
-      {/* Table */}
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Date</th><th>Customer</th><th>Product</th>
-              <th>Dispatch</th><th>Status</th><th>Value (₹)</th><th>Follow-up</th><th>Remarks</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr><td colSpan={10} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-dim)' }}>No leads found</td></tr>
-            )}
-            {filtered.slice(0, visibleCount).map(lead => (
-              <tr key={lead.id}>
-                <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{lead.id}</td>
-                <td style={{ whiteSpace: 'nowrap', fontSize: '0.78rem' }}>{normalizeDisplayDate(lead.date)}</td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}
-                      onClick={() => openCustomer360({ name: lead.customerName, contact: lead.contact, city: lead.city })}
-                      title="View Customer 360">
-                      {lead.customerName}
-                    </div>
-                    {(() => {
-                      const key = normC(lead.contact) || lead.customerName?.trim();
-                      const count = leadCountsByContact[key] || 1;
-                      if (count > 1) {
-                        return (
-                          <span style={{ fontSize: '0.62rem', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', padding: '1px 5px', borderRadius: 4, fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
-                            Repeat ({count})
-                          </span>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{lead.contact}{lead.city ? ` | ${lead.city}` : ''}</div>
-                </td>
-                <td>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{lead.product}</span>
-                      {!lead.linkedProduct && !lead.productList?.length && lead.product && (
-                        <div style={{ display: 'flex', gap: '0.2rem' }}>
-                          {!products.some(p => p.name === lead.product.trim()) && (
+      {viewMode === 'list' ? (
+        <>
+          {/* Table */}
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th><th>Date</th><th>Customer</th><th>Product</th>
+                  <th>Dispatch</th><th>Status</th><th>Value (₹)</th><th>Follow-up</th><th>Remarks</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 && (
+                  <tr><td colSpan={10} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-dim)' }}>No leads found</td></tr>
+                )}
+                {filtered.slice(0, visibleCount).map(lead => (
+                  <tr key={lead.id}>
+                    <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{lead.id}</td>
+                    <td style={{ whiteSpace: 'nowrap', fontSize: '0.78rem' }}>{normalizeDisplayDate(lead.date)}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}
+                          onClick={() => openCustomer360({ name: lead.customerName, contact: lead.contact, city: lead.city })}
+                          title="View Customer 360">
+                          {lead.customerName}
+                        </div>
+                        {(() => {
+                          const key = normC(lead.contact) || lead.customerName?.trim();
+                          const count = leadCountsByContact[key] || 1;
+                          if (count > 1) {
+                            return (
+                              <span style={{ fontSize: '0.62rem', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', padding: '1px 5px', borderRadius: 4, fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
+                                Repeat ({count})
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{lead.contact}{lead.city ? ` | ${lead.city}` : ''}</div>
+                    </td>
+                    <td>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{lead.product}</span>
+                          {!lead.linkedProduct && !lead.productList?.length && lead.product && (
+                            <div style={{ display: 'flex', gap: '0.2rem' }}>
+                              {!products.some(p => p.name === lead.product.trim()) && (
+                                <button 
+                                  type="button"
+                                  className="btn-icon" 
+                                  style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                                  title="Add to Product Catalog"
+                                  onClick={() => handleQuickAddProduct(lead.product)}
+                                >
+                                  <FolderPlus size={13} />
+                                </button>
+                              )}
+                              <button 
+                                type="button"
+                                className="btn-icon" 
+                                style={{ color: '#3b82f6', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                                title="Link to Catalog Product"
+                                onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
+                              >
+                                <Link size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {lead.linkedProduct && (
+                          <div style={{ fontSize: '0.7rem', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
+                            <span>Linked to: <strong>{lead.linkedProduct}</strong></span>
                             <button 
                               type="button"
                               className="btn-icon" 
-                              style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
-                              title="Add to Product Catalog"
-                              onClick={() => handleQuickAddProduct(lead.product)}
+                              style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                              title="Change mapping"
+                              onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
                             >
-                              <FolderPlus size={13} />
+                              <Link size={10} />
                             </button>
-                          )}
-                          <button 
-                            type="button"
-                            className="btn-icon" 
-                            style={{ color: '#3b82f6', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
-                            title="Link to Catalog Product"
-                            onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
-                          >
-                            <Link size={13} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    {lead.linkedProduct && (
-                      <div style={{ fontSize: '0.7rem', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
-                        <span>Linked to: <strong>{lead.linkedProduct}</strong></span>
-                        <button 
-                          type="button"
-                          className="btn-icon" 
-                          style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                          title="Change mapping"
-                          onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
-                        >
-                          <Link size={10} />
-                        </button>
-                        <button 
-                          type="button"
-                          className="btn-icon" 
-                          style={{ color: '#ef4444', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                          title="Remove mapping"
-                          onClick={() => handleUnlinkProduct(lead.id, -1)}
-                        >
-                          <X size={10} />
-                        </button>
+                            <button 
+                              type="button"
+                              className="btn-icon" 
+                              style={{ color: '#ef4444', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                              title="Remove mapping"
+                              onClick={() => handleUnlinkProduct(lead.id, -1)}
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  {lead.productList?.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-                      {lead.productList.map((item, idx) => {
-                        const isLinked = !!item.linkedProduct;
-                        const inCatalog = isLinked || products.some(p => p.name === item.name);
-                        return (
-                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                              <span>• {item.name} ({item.qty} × ₹{item.price})</span>
-                              {!isLinked && (
-                                <div style={{ display: 'flex', gap: '0.2rem' }}>
-                                  {!inCatalog && (
+                      {lead.productList?.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                          {lead.productList.map((item, idx) => {
+                            const isLinked = !!item.linkedProduct;
+                            const inCatalog = isLinked || products.some(p => p.name === item.name);
+                            return (
+                              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                  <span>• {item.name} ({item.qty} × ₹{item.price})</span>
+                                  {!isLinked && (
+                                    <div style={{ display: 'flex', gap: '0.2rem' }}>
+                                      {!inCatalog && (
+                                        <button 
+                                          type="button"
+                                          className="btn-icon" 
+                                          style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                          title="Add to Product Catalog"
+                                          onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
+                                        >
+                                          <FolderPlus size={11} />
+                                        </button>
+                                      )}
+                                      <button 
+                                        type="button"
+                                        className="btn-icon" 
+                                        style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                        title="Link to Catalog Product"
+                                        onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: idx, currentName: item.name })}
+                                      >
+                                        <Link size={11} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                                {isLinked && (
+                                  <div style={{ fontSize: '0.68rem', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.25rem', paddingLeft: '0.6rem' }}>
+                                    <span>Linked to: <strong>{item.linkedProduct}</strong></span>
                                     <button 
                                       type="button"
                                       className="btn-icon" 
-                                      style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                      title="Add to Product Catalog"
-                                      onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
+                                      style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                      title="Change mapping"
+                                      onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: idx, currentName: item.name })}
                                     >
-                                      <FolderPlus size={11} />
+                                      <Link size={10} />
                                     </button>
-                                  )}
-                                  <button 
-                                    type="button"
-                                    className="btn-icon" 
-                                    style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                    title="Link to Catalog Product"
-                                    onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: idx, currentName: item.name })}
-                                  >
-                                    <Link size={11} />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                            {isLinked && (
-                              <div style={{ fontSize: '0.68rem', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.25rem', paddingLeft: '0.6rem' }}>
-                                <span>Linked to: <strong>{item.linkedProduct}</strong></span>
-                                <button 
-                                  type="button"
-                                  className="btn-icon" 
-                                  style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                  title="Change mapping"
-                                  onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: idx, currentName: item.name })}
-                                >
-                                  <Link size={10} />
-                                </button>
-                                <button 
-                                  type="button"
-                                  className="btn-icon" 
-                                  style={{ color: '#ef4444', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                  title="Remove mapping"
-                                  onClick={() => handleUnlinkProduct(lead.id, idx)}
-                                >
-                                  <X size={10} />
-                                </button>
+                                    <button 
+                                      type="button"
+                                      className="btn-icon" 
+                                      style={{ color: '#ef4444', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                                      title="Remove mapping"
+                                      onClick={() => handleUnlinkProduct(lead.id, idx)}
+                                    >
+                                      <X size={10} />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </td>
-                <td>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 110 }}>
-                    <input className="table-inline-input"
-                      key={lead.id + '-dm-' + lead.dispatchMethod}
-                      defaultValue={lead.dispatchMethod || ''} placeholder="Courier"
-                      onBlur={e => { if (e.target.value !== (lead.dispatchMethod || '')) updateLead(lead.id, { dispatchMethod: e.target.value }); }} />
-                    <input className="table-inline-input"
-                      key={lead.id + '-tid-' + lead.trackingId}
-                      defaultValue={lead.trackingId || ''} placeholder="AWB #" style={{ fontFamily: 'monospace' }}
-                      onBlur={e => { if (e.target.value !== (lead.trackingId || '')) updateLead(lead.id, { trackingId: e.target.value }); }} />
-                    <input type="date" className="table-inline-input"
-                      key={lead.id + '-dd-' + lead.dispatchDate}
-                      defaultValue={lead.dispatchDate || ''} title="Dispatch Date" style={{ fontSize: '0.68rem' }}
-                      onChange={e => updateLead(lead.id, { dispatchDate: e.target.value })} />
-                  </div>
-                </td>
-                <td>
-                  <div style={{ minWidth: 155 }}>
-                    {(() => {
-                      const simpleStatus = DATA_CONFIG.getSimpleStatusLabel(lead.status);
-                      return (
-                        <select className="table-inline-select" value={simpleStatus} onChange={e => {
-                          const resolved = DATA_CONFIG.resolveStatusFromSimple(e.target.value);
-                          updateLeadStatus(lead.id, resolved);
-                          showBanner(`✅ ${lead.id} → ${e.target.value}`, 'success');
-                        }}>
-                          {STATUS_OPTIONS.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      );
-                    })()}
-                    <div style={{ fontSize: '0.68rem', color: payColor(lead.paymentStatus), marginTop: 3 }}>● {lead.paymentStatus || 'Pending'}</div>
-                    {DATA_CONFIG.getLostStatusLabels().includes(lead.status) || DATA_CONFIG.getSimpleStatusLabel(lead.status) === 'Lost' ? (
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 110 }}>
+                        <input className="table-inline-input"
+                          key={lead.id + '-dm-' + lead.dispatchMethod}
+                          defaultValue={lead.dispatchMethod || ''} placeholder="Courier"
+                          onBlur={e => { if (e.target.value !== (lead.dispatchMethod || '')) updateLead(lead.id, { dispatchMethod: e.target.value }); }} />
+                        <input className="table-inline-input"
+                          key={lead.id + '-tid-' + lead.trackingId}
+                          defaultValue={lead.trackingId || ''} placeholder="AWB #" style={{ fontFamily: 'monospace' }}
+                          onBlur={e => { if (e.target.value !== (lead.trackingId || '')) updateLead(lead.id, { trackingId: e.target.value }); }} />
+                        <input type="date" className="table-inline-input"
+                          key={lead.id + '-dd-' + lead.dispatchDate}
+                          defaultValue={lead.dispatchDate || ''} title="Dispatch Date" style={{ fontSize: '0.68rem' }}
+                          onChange={e => updateLead(lead.id, { dispatchDate: e.target.value })} />
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ minWidth: 155 }}>
+                        {(() => {
+                          const simpleStatus = DATA_CONFIG.getSimpleStatusLabel(lead.status);
+                          return (
+                            <select className="table-inline-select" value={simpleStatus} onChange={e => {
+                              const resolved = DATA_CONFIG.resolveStatusFromSimple(e.target.value);
+                              updateLeadStatus(lead.id, resolved);
+                              showBanner(`✅ ${lead.id} → ${e.target.value}`, 'success');
+                            }}>
+                              {STATUS_OPTIONS.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          );
+                        })()}
+                        <div style={{ fontSize: '0.68rem', color: payColor(lead.paymentStatus), marginTop: 3 }}>● {lead.paymentStatus || 'Pending'}</div>
+                        {DATA_CONFIG.getLostStatusLabels().includes(lead.status) || DATA_CONFIG.getSimpleStatusLabel(lead.status) === 'Lost' ? (
+                          <input className="table-inline-input"
+                            key={lead.id + '-lr-' + (lead.lostReason || '')}
+                            defaultValue={lead.lostReason || ''} placeholder="Lost reason"
+                            onBlur={e => { if (e.target.value !== (lead.lostReason || '')) updateLead(lead.id, { lostReason: e.target.value }); }}
+                            style={{ marginTop: 3, background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' }} />
+                        ) : null}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.4rem', padding: '0 0.35rem', minWidth: 100 }}>
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>₹</span>
+                        <input type="number" className="table-inline-input"
+                          key={lead.id + '-val-' + lead.orderValue}
+                          defaultValue={lead.orderValue || 0}
+                          onBlur={e => updateLead(lead.id, { orderValue: parseFloat(e.target.value) || 0 })}
+                          style={{ border: 'none', padding: '0.3rem 0', background: 'transparent', fontWeight: 600, textAlign: 'right' }} />
+                      </div>
+                    </td>
+                    <td style={{ minWidth: 120 }}>
+                      <input type="date" className="table-inline-input" value={lead.followUpDate || ''}
+                        onChange={e => updateLead(lead.id, { followUpDate: e.target.value })}
+                        style={{ fontSize: '0.72rem', color: lead.followUpDate && lead.followUpDate < new Date().toISOString().split('T')[0] ? '#ef4444' : undefined }} />
+                    </td>
+                    <td style={{ maxWidth: 180 }}>
                       <input className="table-inline-input"
-                        key={lead.id + '-lr-' + (lead.lostReason || '')}
-                        defaultValue={lead.lostReason || ''} placeholder="Lost reason"
-                        onBlur={e => { if (e.target.value !== (lead.lostReason || '')) updateLead(lead.id, { lostReason: e.target.value }); }}
-                        style={{ marginTop: 3, background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' }} />
-                    ) : null}
-                  </div>
-                </td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.4rem', padding: '0 0.35rem', minWidth: 100 }}>
-                    <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>₹</span>
-                    <input type="number" className="table-inline-input"
-                      key={lead.id + '-val-' + lead.orderValue}
-                      defaultValue={lead.orderValue || 0}
-                      onBlur={e => updateLead(lead.id, { orderValue: parseFloat(e.target.value) || 0 })}
-                      style={{ border: 'none', padding: '0.3rem 0', background: 'transparent', fontWeight: 600, textAlign: 'right' }} />
-                  </div>
-                </td>
-                <td style={{ minWidth: 120 }}>
-                  <input type="date" className="table-inline-input" value={lead.followUpDate || ''}
-                    onChange={e => updateLead(lead.id, { followUpDate: e.target.value })}
-                    style={{ fontSize: '0.72rem', color: lead.followUpDate && lead.followUpDate < new Date().toISOString().split('T')[0] ? '#ef4444' : undefined }} />
-                </td>
-                <td style={{ maxWidth: 180 }}>
-                  <input className="table-inline-input"
-                    key={lead.id + '-rem-' + (lead.remarks || '').slice(0,10)}
-                    defaultValue={lead.remarks || ''} placeholder="Remarks"
-                    onBlur={e => { if (e.target.value !== (lead.remarks || '')) updateLead(lead.id, { remarks: e.target.value }); }} />
-                </td>
-                <td>
-                  <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                    <button className="btn-icon" style={{ color: '#25d366' }} title="WhatsApp" onClick={() => window.open(`https://wa.me/91${lead.contact}`)}>
-                      <MessageCircle size={14} />
-                    </button>
-                    <button className="btn-icon" style={{ color: '#3b82f6' }} title="View" onClick={() => setDetailsLeadId(lead.id)}>
-                      <Eye size={14} />
-                    </button>
-                    <button className="btn-icon" style={{ color: 'var(--primary)' }} title="Edit" onClick={() => openEdit(lead.id)}>
-                      <Edit3 size={14} />
-                    </button>
-                    <button className="btn-icon" style={{ color: '#f59e0b' }} title="Generate Invoice" onClick={() => handleInvoiceClick(lead)}>
-                      <FileText size={14} />
-                    </button>
-                    <button className="btn-icon" style={{ color: '#ef4444' }} title="Delete" onClick={() => handleDelete(lead.id)}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                        key={lead.id + '-rem-' + (lead.remarks || '').slice(0,10)}
+                        defaultValue={lead.remarks || ''} placeholder="Remarks"
+                        onBlur={e => { if (e.target.value !== (lead.remarks || '')) updateLead(lead.id, { remarks: e.target.value }); }} />
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                        <button className="btn-icon" style={{ color: '#25d366' }} title="WhatsApp" onClick={() => window.open(`https://wa.me/91${lead.contact}`)}>
+                          <MessageCircle size={14} />
+                        </button>
+                        <button className="btn-icon" style={{ color: '#3b82f6' }} title="View" onClick={() => setDetailsLeadId(lead.id)}>
+                          <Eye size={14} />
+                        </button>
+                        <button className="btn-icon" style={{ color: 'var(--primary)' }} title="Edit" onClick={() => openEdit(lead.id)}>
+                          <Edit3 size={14} />
+                        </button>
+                        <button className="btn-icon" style={{ color: '#f59e0b' }} title="Generate Invoice" onClick={() => handleInvoiceClick(lead)}>
+                          <FileText size={14} />
+                        </button>
+                        <button className="btn-icon" style={{ color: '#ef4444' }} title="Delete" onClick={() => handleDelete(lead.id)}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      {filtered.length > visibleCount && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem' }}>
-          <button className="btn btn-secondary" onClick={() => setVisibleCount(prev => prev + 50)}>
-            Load More Leads ({filtered.length - visibleCount} remaining)
-          </button>
+          {filtered.length > visibleCount && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem' }}>
+              <button className="btn btn-secondary" onClick={() => setVisibleCount(prev => prev + 50)}>
+                Load More Leads ({filtered.length - visibleCount} remaining)
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        /* Kanban View */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginTop: '1rem', alignItems: 'flex-start' }}>
+          {STATUS_OPTIONS.map(col => {
+            const colLeads = filtered.filter(l => DATA_CONFIG.getSimpleStatusLabel(l.status) === col.value);
+            return (
+              <div key={col.value} style={{ background: 'var(--bg-card)', borderRadius: '0.6rem', border: '1px solid var(--glass-border)', padding: '0.75rem', minHeight: '60vh' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', paddingBottom: '0.5rem', borderBottom: '2px solid ' + DATA_CONFIG.getStatusColor(col.value) }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{col.label}</span>
+                  <span style={{ fontSize: '0.72rem', background: 'var(--bg-input)', padding: '2px 6px', borderRadius: 999, fontWeight: 700, color: 'var(--text-dim)' }}>{colLeads.length}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {colLeads.length === 0 && <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No leads here</div>}
+                  {colLeads.map(lead => (
+                    <div 
+                      key={lead.id} 
+                      className="glass-card" 
+                      style={{ padding: '0.75rem', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', borderLeft: '3px solid ' + DATA_CONFIG.getStatusColor(lead.status), cursor: 'pointer' }}
+                      onClick={() => setDetailsLeadId(lead.id)}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                        <span style={{ color: 'var(--primary)' }}>{lead.id}</span>
+                        <span>₹{(lead.orderValue || 0).toLocaleString()}</span>
+                      </div>
+                      <div style={{ fontWeight: 600 }}>{lead.customerName}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{lead.product || '—'}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 4 }}>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>{normalizeDisplayDate(lead.date)}</span>
+                        <div style={{ display: 'flex', gap: '0.2rem' }} onClick={e => e.stopPropagation()}>
+                          <button className="btn-icon" style={{ color: '#25d366', padding: 2 }} title="WhatsApp" onClick={() => window.open(`https://wa.me/91${lead.contact}`)}>
+                            <MessageCircle size={12} />
+                          </button>
+                          <button className="btn-icon" style={{ color: '#f59e0b', padding: 2 }} title="Invoice" onClick={() => handleInvoiceClick(lead)}>
+                            <FileText size={12} />
+                          </button>
+                          <button className="btn-icon" style={{ color: 'var(--primary)', padding: 2 }} title="Edit" onClick={() => openEdit(lead.id)}>
+                            <Edit3 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

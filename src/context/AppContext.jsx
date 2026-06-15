@@ -302,19 +302,8 @@ export function AppProvider({ children }) {
       const paymentStatus = totalReceived >= totalValue && totalValue > 0 ? 'Paid' : totalReceived > 0 ? 'Partial' : 'Pending';
       
       let newStatus = l.status;
-      if (totalReceived > 0) {
-        // Payment received → Won (if not already a won-level status)
-        if (!DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
-          newStatus = 'Won';
-        }
-      } else {
-        // Invoice exists but no payment received yet
-        if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
-          newStatus = 'Quoted';
-        }
-      }
       
-      const statusDiff = newStatus !== l.status;
+      const statusDiff = false;
       const amountDiff = l.paymentReceivedAmount !== totalReceived;
       const statusPayDiff = l.paymentStatus !== paymentStatus;
       

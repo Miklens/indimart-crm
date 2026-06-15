@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { generateInvoiceNumber, flattenInvoices, DATA_CONFIG } from '../utils/dataConfig';
+import { generateInvoiceNumber, flattenInvoices, DATA_CONFIG, normalizeContact, getLeadForInvoice } from '../utils/dataConfig';
 import { isFirebaseConfigured, initFirebaseIfConfigured } from '../firebase';
 import {
   fsSetLead, fsUpdateLead, fsDeleteLead, fsListenLeads,
@@ -34,14 +34,7 @@ const SAMPLE_PRODUCTS = [
   { id: 'P003', name: 'Organic Potash', price: 950, hsn: '', gst: '12', category: 'Biofertilizers' }
 ];
 
-// Normalize a phone/contact to digits-only (last 10 digits) for consistent matching
-function normalizeContact(raw) {
-  if (!raw) return '';
-  const digits = String(raw).replace(/\D/g, '');
-  // strip country code prefix 91 if 12 digits
-  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
-  return digits.slice(-10);
-}
+
 
 function sanitizeInvoiceNumbers(history) {
   const fix = str => {
@@ -223,12 +216,13 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!invoicesLoaded || !leadsLoaded) return;
 
-    // Build a map of leadId -> invoices for efficient lookup
+    // Build a map of leadId -> invoices for efficient lookup, utilizing contact-matching validation
     const invoicesByLeadId = {};
     (invoiceHistory || []).forEach(inv => {
-      if (!inv.leadId) return;
-      if (!invoicesByLeadId[inv.leadId]) invoicesByLeadId[inv.leadId] = [];
-      invoicesByLeadId[inv.leadId].push(inv);
+      const matchedLead = getLeadForInvoice(inv, leads);
+      if (!matchedLead) return;
+      if (!invoicesByLeadId[matchedLead.id]) invoicesByLeadId[matchedLead.id] = [];
+      invoicesByLeadId[matchedLead.id].push(inv);
     });
 
     let needsUpdate = false;
@@ -500,8 +494,10 @@ export function AppProvider({ children }) {
       }
       // Normalize contact for consistent cross-device matching
       const normContact = normalizeContact(invoiceData.customerContact || '');
-      // Ensure leadId is a real non-empty string
-      const resolvedLeadId = invoiceData.leadId || '';
+      
+      // Use getLeadForInvoice to find the correct lead based on customer contact
+      const matchedLead = getLeadForInvoice({ ...invoiceData, customerContact: normContact }, leads);
+      const resolvedLeadId = matchedLead ? matchedLead.id : '';
 
       const existing = prev.find(inv => inv.invoiceNumber === invoiceData.invoiceNumber);
       let updated, upserted;
@@ -569,7 +565,7 @@ export function AppProvider({ children }) {
 
       return updated;
     });
-  }, [persist, fbEnabled]);
+  }, [persist, fbEnabled, leads]);
 
   const updateInvoiceField = useCallback((invoiceNumber, field, value) => {
     setInvoiceHistory(prev => {
@@ -608,9 +604,15 @@ export function AppProvider({ children }) {
 
   function syncPaymentToLead(updatedHistory, invoiceNumber) {
     const inv = updatedHistory.find(i => i.invoiceNumber === invoiceNumber);
-    if (!inv?.leadId) return;
+    if (!inv) return;
     setLeads(prevLeads => {
-      const leadInvoices = updatedHistory.filter(i => i.leadId === inv.leadId);
+      const matchedLead = getLeadForInvoice(inv, prevLeads);
+      if (!matchedLead) return prevLeads;
+      
+      const leadInvoices = updatedHistory.filter(i => {
+        const targetLead = getLeadForInvoice(i, prevLeads);
+        return targetLead && targetLead.id === matchedLead.id;
+      });
       const totalReceived = leadInvoices.reduce((sum, i) => {
         const v = i.versions?.length ? i.versions[i.versions.length - 1] : i;
         return sum + (parseFloat(v.receivedAmount) || 0);
@@ -622,7 +624,7 @@ export function AppProvider({ children }) {
       const newPayStatus = totalReceived >= totalValue && totalValue > 0 ? 'Paid' : totalReceived > 0 ? 'Partial' : 'Pending';
       
       const updatedLeads = prevLeads.map(l => {
-        if (l.id !== inv.leadId) return l;
+        if (l.id !== matchedLead.id) return l;
         
         let newStatus = l.status;
         if (['Paid', 'Partial'].includes(newPayStatus)) {
@@ -644,9 +646,9 @@ export function AppProvider({ children }) {
         return { ...l, paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus, status: newStatus, history };
       });
       persist('indimart_leads', updatedLeads);
-      const updatedLead = updatedLeads.find(l => l.id === inv.leadId);
+      const updatedLead = updatedLeads.find(l => l.id === matchedLead.id);
       if (fbEnabled && updatedLead) {
-        fsUpdateLead(inv.leadId, { 
+        fsUpdateLead(matchedLead.id, { 
           paymentReceivedAmount: totalReceived, 
           paymentStatus: newPayStatus,
           status: updatedLead.status,

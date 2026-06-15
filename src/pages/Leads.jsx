@@ -166,11 +166,25 @@ export default function Leads() {
   });
 
   // Leads that have at least one invoice and are not fully paid
-  const billedLeadIds = new Set(invoiceHistory.map(inv => inv.leadId).filter(Boolean));
+  const billedLeadIds = new Set(
+    invoiceHistory
+      .map(inv => {
+        const lead = DATA_CONFIG.getLeadForInvoice(inv, leads);
+        return lead ? lead.id : null;
+      })
+      .filter(Boolean)
+  );
   const unpaidBilledLeadIds = new Set(
     invoiceHistory
-      .filter(inv => { const l = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv; return l.paymentStatus !== 'Paid'; })
-      .map(inv => inv.leadId).filter(Boolean)
+      .filter(inv => {
+        const l = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+        return l.paymentStatus !== 'Paid';
+      })
+      .map(inv => {
+        const lead = DATA_CONFIG.getLeadForInvoice(inv, leads);
+        return lead ? lead.id : null;
+      })
+      .filter(Boolean)
   );
 
   const filtered = leads.filter(l => {

@@ -34,7 +34,14 @@ export default function Dashboard() {
     return sum + (parseFloat(latest.receivedAmount) || 0);
   }, 0);
   const pendingPaymentTotal = confirmedRevenue - totalReceived;
-  const billedLeadIds = new Set(paidInvoices.map(inv => inv.leadId).filter(Boolean));
+  const billedLeadIds = new Set(
+    paidInvoices
+      .map(inv => {
+        const lead = DATA_CONFIG.getLeadForInvoice(inv, leads);
+        return lead ? lead.id : null;
+      })
+      .filter(Boolean)
+  );
   const paidOrderCount = paidInvoices.length;
   const projectedRevenue = leads
     .filter(l => !billedLeadIds.has(l.id) && !new Set([...DATA_CONFIG.getWonStatusLabels(), ...DATA_CONFIG.getLostStatusLabels()]).has(l.status))

@@ -302,8 +302,19 @@ export function AppProvider({ children }) {
       const paymentStatus = totalReceived >= totalValue && totalValue > 0 ? 'Paid' : totalReceived > 0 ? 'Partial' : 'Pending';
       
       let newStatus = l.status;
+      if (totalReceived > 0) {
+        // Payment received -> auto-sync to 'Won' only if it's not already in a Won status category
+        if (!DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+          newStatus = 'Won';
+        }
+      } else {
+        // If payment is pending/0, set it to Quoted if it was in early pipeline stages
+        if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
+          newStatus = 'Quoted';
+        }
+      }
       
-      const statusDiff = false;
+      const statusDiff = newStatus !== l.status;
       const amountDiff = l.paymentReceivedAmount !== totalReceived;
       const statusPayDiff = l.paymentStatus !== paymentStatus;
       

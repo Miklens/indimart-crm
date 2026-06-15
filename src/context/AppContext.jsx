@@ -220,6 +220,13 @@ export function AppProvider({ children }) {
     // Build a map of leadId -> invoices for efficient lookup, utilizing contact-matching validation
     const invoicesByLeadId = {};
     (invoiceHistory || []).forEach(inv => {
+      // 1. If explicit leadId is set on invoice, use it directly (highly robust for duplicates)
+      if (inv.leadId) {
+        if (!invoicesByLeadId[inv.leadId]) invoicesByLeadId[inv.leadId] = [];
+        invoicesByLeadId[inv.leadId].push(inv);
+        return;
+      }
+      // 2. Otherwise fall back to getLeadForInvoice contact matching
       const matchedLead = getLeadForInvoice(inv, leads);
       if (!matchedLead) return;
       if (!invoicesByLeadId[matchedLead.id]) invoicesByLeadId[matchedLead.id] = [];

@@ -59,7 +59,10 @@ export default function Dashboard() {
   const projectedRevenue = leads
     .filter(l => !billedLeadIds.has(l.id) && !new Set([...DATA_CONFIG.getWonStatusLabels(), ...DATA_CONFIG.getLostStatusLabels()]).has(l.status))
     .reduce((sum, l) => sum + (l.orderValue || 0), 0);
-  const inTransitCount = leads.filter(l => DATA_CONFIG.getStatusGroupStatuses('inTransit').includes(l.status)).length;
+  const inTransitCount = invoiceHistory.filter(inv => {
+    const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+    return latest.deliveryStatus === 'Material Dispatched';
+  }).length;
   const validLeads = leads.filter(l => !DATA_CONFIG.getLostStatusLabels().includes(l.status)).length;
   const conversionRate = validLeads ? ((billedLeadIds.size / validLeads) * 100).toFixed(0) : 0;
   const contacted = leads.filter(l => DATA_CONFIG.getContactedStatusLabels().includes(l.status));
@@ -69,7 +72,7 @@ export default function Dashboard() {
     { label: 'Pipeline Enquiries', value: leads.length, sub: `${contactRate}% Contacted`, color: '#3b82f6', icon: Users, onClick: () => setCurrentSection('leads') },
     { label: 'ACTUAL SALES (BILLED)', value: `₹${confirmedRevenue.toLocaleString()}`, sub: `From ${paidOrderCount} Orders`, color: '#10b981', icon: TrendingUp },
     { label: 'Outstanding Payments', value: `₹${Math.max(0, pendingPaymentTotal).toLocaleString()}`, sub: `Collected: ₹${totalReceived.toLocaleString()}`, color: pendingPaymentTotal > 0 ? '#ef4444' : '#10b981', icon: AlertCircle, onClick: () => setCurrentSection('invoices') },
-    { label: 'In-Transit Orders', value: inTransitCount, sub: 'Active Shipments', color: '#3b82f6', icon: Truck, onClick: () => setCurrentSection('leads') },
+    { label: 'In-Transit Orders', value: inTransitCount, sub: 'Active Shipments', color: '#3b82f6', icon: Truck, onClick: () => setCurrentSection('invoices') },
     { label: 'Projected Revenue', value: `₹${projectedRevenue.toLocaleString()}`, sub: 'Unbilled Enquiries', color: '#f59e0b', icon: DollarSign },
     { label: '🚀 Conversion Rate', value: `${conversionRate}%`, sub: `${billedLeadIds.size} Billed / ${validLeads} Valid`, color: '#10b981', icon: Zap },
   ];

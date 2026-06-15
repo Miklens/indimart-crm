@@ -163,7 +163,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
       const dsContactedCount = leads.filter(l => ['Contacted', 'Quoted', 'Won'].includes(DATA_CONFIG.getSimpleStatusLabel(l.status))).length;
       const dsContactRate = leads.length ? ((dsContactedCount / leads.length) * 100).toFixed(1) : '0';
       const dsPending = Math.max(0, dsConfirmedRev - dsTotalReceived);
-      const dsInTransit = leads.filter(l => DATA_CONFIG.getStatusGroupStatuses('inTransit').includes(l.status)).length;
+      const dsInTransit = invoiceHistory.filter(inv => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return v.deliveryStatus === 'Material Dispatched'; }).length;
       const dsWonAll = DATA_CONFIG.getWonStatusLabels();
       const dsProjectedRev = leads.filter(l => !dsBilledIds.has(l.id) && !['Lost', 'Not Responding', 'Not Interested', 'Won'].includes(DATA_CONFIG.getSimpleStatusLabel(l.status))).reduce((s,l) => s+(l.orderValue||0), 0);
 

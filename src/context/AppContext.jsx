@@ -597,33 +597,14 @@ export function AppProvider({ children }) {
       const updatedLeads = prevLeads.map(l => {
         if (l.id !== matchedLead.id) return l;
         
-        let newStatus = l.status;
-        if (['Paid', 'Partial'].includes(newPayStatus)) {
-          if (!DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
-            newStatus = 'Won';
-          }
-        } else {
-          // If payment is pending, set status to Quoted if it is currently Won or pipeline
-          if (['New Enquiry', 'Contacted', 'Requirement Discussed', ...DATA_CONFIG.getWonStatusLabels()].includes(l.status)) {
-            newStatus = 'Quoted';
-          }
-        }
-        
-        const history = [...(l.history || [])];
-        if (newStatus !== l.status) {
-          history.push({ status: newStatus, timestamp: Date.now(), note: `Status auto-updated to ${newStatus} via payment sync` });
-        }
-        
-        return { ...l, paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus, status: newStatus, history };
+        return { ...l, paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus };
       });
       persist('indimart_leads', updatedLeads);
       const updatedLead = updatedLeads.find(l => l.id === matchedLead.id);
       if (fbEnabled && updatedLead) {
         fsUpdateLead(matchedLead.id, { 
           paymentReceivedAmount: totalReceived, 
-          paymentStatus: newPayStatus,
-          status: updatedLead.status,
-          history: updatedLead.history
+          paymentStatus: newPayStatus
         }).catch(console.error);
       }
       return updatedLeads;

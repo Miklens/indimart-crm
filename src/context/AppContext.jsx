@@ -508,7 +508,7 @@ export function AppProvider({ children }) {
       let updated, upserted;
       if (existing) {
         const nextVersion = (existing.versions?.length || 0) + 1;
-        const versionEntry = { ...invoiceData, customerContact: normContact, leadId: resolvedLeadId, version: nextVersion, createdAt: new Date().toISOString(), id: `INV${Date.now()}` };
+        const versionEntry = { ...invoiceData, customerContact: normContact, leadId: resolvedLeadId, version: nextVersion, createdAt: new Date().toISOString(), id: `INV${Date.now()}`, deliveryStatus: invoiceData.deliveryStatus || existing.deliveryStatus || 'Converted' };
         const versions = existing.versions
           ? [...existing.versions, versionEntry]
           : [{ ...existing, version: 1, createdAt: existing.createdAt || new Date().toISOString() }, versionEntry];
@@ -519,9 +519,11 @@ export function AppProvider({ children }) {
           customerCity: invoiceData.customerCity,
           customerState: invoiceData.customerState,
           leadId: resolvedLeadId || existing.leadId || '',
+          deliveryStatus: invoiceData.deliveryStatus || existing.deliveryStatus || 'Converted',
           updatedAt: new Date().toISOString(), versions, latestVersion: nextVersion };
         updated = prev.map(inv => inv.invoiceNumber === invoiceData.invoiceNumber ? upserted : inv);
       } else {
+        const initialDeliveryStatus = invoiceData.deliveryStatus || 'Converted';
         upserted = {
           invoiceNumber: invoiceData.invoiceNumber,
           customerName: invoiceData.customerName,
@@ -530,8 +532,9 @@ export function AppProvider({ children }) {
           customerCity: invoiceData.customerCity,
           customerState: invoiceData.customerState,
           leadId: resolvedLeadId, latestVersion: 1,
+          deliveryStatus: initialDeliveryStatus,
           createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-          versions: [{ ...invoiceData, customerContact: normContact, leadId: resolvedLeadId, version: 1, createdAt: new Date().toISOString(), id: `INV${Date.now()}` }],
+          versions: [{ ...invoiceData, customerContact: normContact, leadId: resolvedLeadId, version: 1, createdAt: new Date().toISOString(), id: `INV${Date.now()}`, deliveryStatus: initialDeliveryStatus }],
         };
         updated = [...prev, upserted];
       }
@@ -545,21 +548,18 @@ export function AppProvider({ children }) {
             if (l.id !== resolvedLeadId) return l;
             const newPayStatus = invoiceData.paymentStatus || 'Pending';
             let newStatus = l.status;
-            
             if (['Paid', 'Partial'].includes(newPayStatus)) {
-              newStatus = 'Won';
+              if (!DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+                newStatus = 'Won';
+              }
             } else {
-              // If payment is pending, set status to Quoted if it is currently Won or pipeline
-              if (['New Enquiry', 'Contacted', 'Requirement Discussed', ...DATA_CONFIG.getWonStatusLabels()].includes(l.status)) {
+              // If payment is pending/0, set it to Quoted if it was in early pipeline stages
+              if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
                 newStatus = 'Quoted';
               }
             }
             
-            const history = [...(l.history || [])];
-            if (newStatus !== l.status) {
-              history.push({ status: newStatus, timestamp: Date.now(), note: `Status auto-updated to ${newStatus} via Invoice generation` });
-            }
-            const updatedLead = { ...l, paymentStatus: newPayStatus, status: newStatus, history };
+            const updatedLead = { ...l, paymentStatus: newPayStatus, status: newStatus };
             if (fbEnabled) fsSetLead(updatedLead).catch(console.error);
             return updatedLead;
           });
@@ -596,15 +596,25 @@ export function AppProvider({ children }) {
       
       const updatedLeads = prevLeads.map(l => {
         if (l.id !== matchedLead.id) return l;
-        
-        return { ...l, paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus };
+        let newStatus = l.status;
+        if (totalReceived > 0 && !DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+          newStatus = 'Won';
+        }
+        const extra = {};
+        if (newStatus !== l.status) {
+          extra.status = newStatus;
+          extra.history = [...(l.history || []), { status: newStatus, timestamp: Date.now(), note: `Status auto-synced to ${newStatus} based on invoice payments` }];
+        }
+        return { ...l, paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus, ...extra };
       });
       persist('indimart_leads', updatedLeads);
       const updatedLead = updatedLeads.find(l => l.id === matchedLead.id);
       if (fbEnabled && updatedLead) {
         fsUpdateLead(matchedLead.id, { 
-          paymentReceivedAmount: totalReceived, 
-          paymentStatus: newPayStatus
+          paymentReceivedAmount: updatedLead.paymentReceivedAmount, 
+          paymentStatus: updatedLead.paymentStatus,
+          status: updatedLead.status,
+          history: updatedLead.history
         }).catch(console.error);
       }
       return updatedLeads;

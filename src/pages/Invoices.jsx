@@ -6,7 +6,7 @@ import InvoiceModal from '../components/InvoiceModal';
 import LeadDetails from '../components/LeadDetails';
 
 export default function Invoices() {
-  const { invoiceHistory, leads, updateInvoiceField, updateInvoicePayment, deleteInvoice, deleteInvoiceVersion, updateLeadStatus, showBanner } = useApp();
+  const { invoiceHistory, updateInvoiceField, updateInvoicePayment, deleteInvoice, deleteInvoiceVersion, showBanner } = useApp();
   const { openCustomer360 } = useAppUI();
   const [search, setSearch] = useState('');
   const [viewInvoice, setViewInvoice] = useState(null);
@@ -104,8 +104,7 @@ export default function Invoices() {
               const customerName = inv.customerName || '';
               const customerContact = inv.customerContact || inv.contact || '';
               const customerCity = inv.customerCity || inv.city || '';
-              const lead = leads.find(l => l.id === inv.leadId);
-              const shippingStatus = lead?.status || 'N/A';
+              const shippingStatus = latest.deliveryStatus || 'Converted';
               const shipColor = shippingStatus === 'Material Reached' ? '#10b981' : shippingStatus === 'Material Dispatched' ? '#3b82f6' : '#94a3b8';
               const payColor = latest.paymentStatus === 'Paid' ? '#10b981' : latest.paymentStatus === 'Partial' ? '#f59e0b' : '#ef4444';
               const expanded = expandedVersions.has(inv.invoiceNumber);
@@ -158,15 +157,13 @@ export default function Invoices() {
                     </select>
                   </td>
                   <td>
-                    {lead && inv.leadId && (
-                      <select className="table-inline-select" value={shippingStatus}
-                        onChange={e => { updateLeadStatus(inv.leadId, e.target.value); }}
-                        style={{ fontWeight: 600, color: shipColor, width: 130 }}>
-                        <option value="Converted">Order Placed</option>
-                        <option value="Material Dispatched">In Transit</option>
-                        <option value="Material Reached">Delivered</option>
-                      </select>
-                    )}
+                    <select className="table-inline-select" value={shippingStatus}
+                      onChange={e => { updateInvoiceField(inv.invoiceNumber, 'deliveryStatus', e.target.value); }}
+                      style={{ fontWeight: 600, color: shipColor, width: 130 }}>
+                      <option value="Converted">Order Placed</option>
+                      <option value="Material Dispatched">In Transit</option>
+                      <option value="Material Reached">Delivered</option>
+                    </select>
                   </td>
                   <td>
                     <select className="table-inline-select" value={latest.status || 'Pending'}

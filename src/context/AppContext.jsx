@@ -308,11 +308,8 @@ export function AppProvider({ children }) {
           newStatus = 'Won';
         }
       } else {
-        // Invoice exists but no payment received yet → Quoted
+        // Invoice exists but no payment received yet
         if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
-          newStatus = 'Quoted';
-        } else if (DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
-          // Lead was marked Won but has zero payment — demote to Quoted
           newStatus = 'Quoted';
         }
       }

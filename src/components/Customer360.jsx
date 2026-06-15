@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { X, Phone, MapPin, TrendingUp, FileText, Star, Clock, MessageCircle, Plus, Trash2, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { X, Phone, MapPin, TrendingUp, FileText, Clock, MessageCircle, Plus, Trash2, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
 
@@ -64,16 +64,20 @@ export default function Customer360({ customer, onClose }) {
   const lastContact = dates[0] ? normalizeDisplayDate(dates[0]) : '—';
 
   // Best status of all leads
-  const allStatuses = custLeads.map(l => l.status);
-  const wonStatuses = DATA_CONFIG.getWonStatusLabels();
   const isVip = totalBilled >= 100000 || custInvoices.length >= 3;
 
   // Notes stored per lead — we attach to the first/latest lead for simplicity
-  const latestLead = custLeads.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  const latestLead = custLeads.sort((a, b) => {
+    const timeA = a.date ? new Date(a.date).getTime() : 0;
+    const timeB = b.date ? new Date(b.date).getTime() : 0;
+    return timeB - timeA;
+  })[0];
 
   const addNote = () => {
     if (!noteText.trim() || !latestLead) return;
-    const note = { id: Date.now(), text: noteText.trim(), type: noteType, timestamp: Date.now() };
+    // eslint-disable-next-line react-hooks/purity
+    const now = Date.now();
+    const note = { id: now, text: noteText.trim(), type: noteType, timestamp: now };
     const notes = [...(latestLead.activityNotes || []), note];
     updateLead(latestLead.id, { activityNotes: notes });
     setNoteText('');

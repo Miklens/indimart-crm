@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, RefreshCw, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut, X } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { signOutUser, isFirebaseConfigured, getCurrentUser } from '../firebase';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
@@ -19,7 +19,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onThemeToggle }) {
-  const { currentSection, setCurrentSection, leads, syncStatus, isSyncing, autoSyncEnabled, toggleAutoSync, gsUrl, addLead, invoiceHistory, showBanner, companySettings, products } = useApp();
+  const { currentSection, setCurrentSection, leads, syncStatus, isSyncing, autoSyncEnabled, toggleAutoSync, gsUrl, addLead, invoiceHistory, showBanner } = useApp();
   const [collapsed, setCollapsed] = useState(false);
   const csvRef = useRef(null);
 
@@ -511,7 +511,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
   const SyncIcon = isSyncing ? Loader : syncStatus.status === 'connected' ? Wifi : syncStatus.status === 'error' ? WifiOff : Wifi;
   const syncColor = syncStatus.status === 'connected' ? '#10b981' : syncStatus.status === 'error' ? '#ef4444' : syncStatus.status === 'syncing' ? '#f59e0b' : '#94a3b8';
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+
 
   return (
     <aside style={{

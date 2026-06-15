@@ -37,7 +37,9 @@ export default function FirebaseSetup({ onComplete, onSkip }) {
         setPasteMode(false);
         setPasteText('');
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Auto-parse config failed', err);
+    }
   };
 
   const isComplete = FIELD_META.filter(f => ['apiKey', 'projectId', 'appId'].includes(f.key)).every(f => cfg[f.key]);

@@ -1,19 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, Link, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useAppUI } from '../App';
+import { useAppUI } from '../context/AppUIContext';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
 import LeadModal from '../components/LeadModal';
 import LeadDetails from '../components/LeadDetails';
 import ProductPicker from '../components/ProductPicker';
 import InvoiceModal from '../components/InvoiceModal';
 
-const TABS = [
-  { id: 'all', label: 'All' },
-  { id: 'payment', label: 'Pending Payment' },
-  { id: 'dispatch', label: 'In Transit' },
-  { id: 'delivered', label: 'Delivered' },
-];
 
 export default function Leads() {
   const { leads, invoiceHistory, updateLeadStatus, updateLead, deleteLead, addLead, showBanner, products, addProduct, companySettings, saveSettings } = useApp();
@@ -25,10 +19,12 @@ export default function Leads() {
   const [modalLeadId, setModalLeadId] = useState(undefined);
   const [showModal, setShowModal] = useState(false);
   const [visibleCount, setVisibleCount] = useState(50);
+  const [prevFilters, setPrevFilters] = useState({ search, statusFilter, sourceFilter, activeTab });
 
-  useEffect(() => {
+  if (search !== prevFilters.search || statusFilter !== prevFilters.statusFilter || sourceFilter !== prevFilters.sourceFilter || activeTab !== prevFilters.activeTab) {
+    setPrevFilters({ search, statusFilter, sourceFilter, activeTab });
     setVisibleCount(50);
-  }, [search, statusFilter, sourceFilter, activeTab]);
+  }
 
   const STATUS_FILTERS = DATA_CONFIG.getStatusFilterOptions();
   const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
@@ -105,13 +101,6 @@ export default function Leads() {
     setPickerLead(null);
   };
 
-  const handleReorder = (lead) => {
-    const newLead = { ...lead, id: undefined, date: new Date().toISOString().split('T')[0], status: 'New Enquiry', followUpDate: '', remarks: `Reorder from ${lead.id}`, history: [], timestamp: Date.now() };
-    delete newLead.id;
-    addLead(newLead);
-    showBanner(`✅ Reorder lead created for ${lead.customerName}`, 'success');
-  };
-
   const handleImportCSV = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -164,16 +153,6 @@ export default function Leads() {
       leadCountsByContact[key] = (leadCountsByContact[key] || 0) + 1;
     }
   });
-
-  // Leads that have at least one invoice and are not fully paid
-  const billedLeadIds = new Set(
-    invoiceHistory
-      .map(inv => {
-        const lead = DATA_CONFIG.getLeadForInvoice(inv, leads);
-        return lead ? lead.id : null;
-      })
-      .filter(Boolean)
-  );
   const unpaidBilledLeadIds = new Set(
     invoiceHistory
       .filter(inv => {

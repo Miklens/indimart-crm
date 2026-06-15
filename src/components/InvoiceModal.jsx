@@ -1,9 +1,8 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { X, Printer, Save, Edit3, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { numberToWords, formatDate } from '../utils/dataConfig';
 
-const BD = ({ children, style }) => <div style={{ borderBottom: '1px solid #000', ...style }}>{children}</div>;
 const CE = ({ id, style, children, onBlur }) => <span id={id} contentEditable suppressContentEditableWarning onBlur={onBlur} style={{ outline: 'none', ...style }}>{children}</span>;
 
 export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose, initialItems }) {
@@ -12,14 +11,16 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const inv = existingInvoice;
   const latest = inv?.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
 
-  const cust = lead ? lead : inv ? {
-    customerName: inv.customerName || latest?.customerName || '',
-    contact: inv.customerContact || inv.contact || latest?.customerContact || '',
-    gst: inv.customerGst || inv.gst || latest?.customerGst || '',
-    city: inv.customerCity || inv.city || latest?.customerCity || '',
-    state: inv.customerState || inv.state || latest?.customerState || '',
-    id: inv.leadId || '',
-  } : {};
+  const cust = useMemo(() => {
+    return lead ? lead : inv ? {
+      customerName: inv.customerName || latest?.customerName || '',
+      contact: inv.customerContact || inv.contact || latest?.customerContact || '',
+      gst: inv.customerGst || inv.gst || latest?.customerGst || '',
+      city: inv.customerCity || inv.city || latest?.customerCity || '',
+      state: inv.customerState || inv.state || latest?.customerState || '',
+      id: inv.leadId || '',
+    } : {};
+  }, [lead, inv, latest]);
 
   // Resolve items — exact same logic as old HTML generateInvoice()
   const resolvedItems = (() => {
@@ -80,7 +81,6 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const [saving, setSaving] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
   const [isDirty, setIsDirty] = useState(!existingInvoice); // new invoices start dirty
-  const printRootRef = useRef(null);
 
   // Consignee state — separate from buyer, defaults to same
   const [consigneeName, setConsigneeName] = useState(cust.customerName || '');
@@ -111,6 +111,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const page2Items = rawItems.slice(PAGE1_ROWS);
   const showPage2 = page2Items.length > 0;
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const saveVersion = useCallback(async () => {
     if (saving) return; // prevent double-save
     setSaving(true);
@@ -139,7 +140,8 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
     } finally {
       setSaving(false);
     }
-  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner]);
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty]);
 
   const handlePrint = () => {
     // Save if: new invoice (not yet in history) OR user made changes (isDirty)
@@ -212,15 +214,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
       const thin = { style: 'thin' };
       const bord = { border: { top: thin, bottom: thin, left: thin, right: thin } };
       const boldF = { bold: true };
-      const applyRow = (rowNum, styles) => {
-        for (let col = 1; col <= 8; col++) {
-          const cl = ws.getCell(rowNum, col);
-          if (styles.border) cl.border = styles.border;
-          if (styles.fill) cl.fill = styles.fill;
-          if (styles.font) cl.font = { ...cl.font, ...styles.font };
-          if (styles.alignment) cl.alignment = styles.alignment;
-        }
-      };
+
       const setCell = (r, col, val, font, align, fill, border) => {
         const cl = ws.getCell(r, col);
         cl.value = val;
@@ -757,8 +751,8 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
         </div>
 
         <div id="printRoot" style={{ padding: '1rem', overflowY: 'auto', maxHeight: 'calc(95vh - 56px)', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-          <InvoicePage items={page1Items} pageNum={1} totalPages={showPage2 ? 2 : 1} />
-          {showPage2 && <InvoicePage items={page2Items} pageNum={2} totalPages={2} />}
+          {InvoicePage({ items: page1Items, pageNum: 1, totalPages: showPage2 ? 2 : 1 })}
+          {showPage2 && InvoicePage({ items: page2Items, pageNum: 2, totalPages: 2 })}
         </div>
       </div>
     </div>

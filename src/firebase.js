@@ -72,7 +72,7 @@ export function getDb() {
 
 export async function reinitFirebase(config) {
   if (_app) {
-    try { await deleteApp(_app); } catch {}
+    try { await deleteApp(_app); } catch { /* ignore */ }
     _app = null;
     _db = null;
   }

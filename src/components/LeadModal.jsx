@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
@@ -10,18 +10,9 @@ export default function LeadModal({ leadId, onClose }) {
   const [autofillToast, setAutofillToast] = useState(false);
   const existing = leadId ? leads.find(l => l.id === leadId) : null;
 
-  const [form, setForm] = useState({
-    date: new Date().toISOString().split('T')[0],
-    customerName: '', contact: '', city: '', state: '', gst: '',
-    source: 'IndiaMART Direct', status: 'New Enquiry',
-    followUpDate: '', remarks: '', lostReason: '',
-  });
-  const [productRows, setProductRows] = useState([{ ...EMPTY_ROW }]);
-  const [orderValue, setOrderValue] = useState(0);
-
-  useEffect(() => {
+  const [form, setForm] = useState(() => {
     if (existing) {
-      setForm({
+      return {
         date: existing.date?.includes('T') ? existing.date.split('T')[0] : (existing.date || ''),
         customerName: existing.customerName || '',
         contact: existing.contact || '',
@@ -33,25 +24,30 @@ export default function LeadModal({ leadId, onClose }) {
         followUpDate: existing.followUpDate || '',
         remarks: existing.remarks || '',
         lostReason: existing.lostReason || '',
-      });
-      if (existing.productList?.length) {
-        setProductRows(existing.productList);
-      } else {
-        setProductRows([{ name: existing.product || '', qty: 1, price: existing.orderValue || 0, gst: '5', hsn: '' }]);
-      }
-      setOrderValue(existing.orderValue || 0);
+      };
     }
-  }, [existing]);
+    return {
+      date: new Date().toISOString().split('T')[0],
+      customerName: '', contact: '', city: '', state: '', gst: '',
+      source: 'IndiaMART Direct', status: 'New Enquiry',
+      followUpDate: '', remarks: '', lostReason: '',
+    };
+  });
 
-  // Recalculate order value when product rows change
-  useEffect(() => {
-    const total = productRows.reduce((sum, row) => {
-      const base = (parseFloat(row.price) || 0) * (parseFloat(row.qty) || 0);
-      const tax = base * ((parseFloat(row.gst) || 0) / 100);
-      return sum + base + tax;
-    }, 0);
-    setOrderValue(parseFloat(total.toFixed(2)));
-  }, [productRows]);
+  const [productRows, setProductRows] = useState(() => {
+    if (existing) {
+      return existing.productList?.length
+        ? existing.productList
+        : [{ name: existing.product || '', qty: 1, price: existing.orderValue || 0, gst: '5', hsn: '' }];
+    }
+    return [{ ...EMPTY_ROW }];
+  });
+
+  const orderValue = parseFloat(productRows.reduce((sum, row) => {
+    const base = (parseFloat(row.price) || 0) * (parseFloat(row.qty) || 0);
+    const tax = base * ((parseFloat(row.gst) || 0) / 100);
+    return sum + base + tax;
+  }, 0).toFixed(2));
 
   const updateRow = (idx, field, value) => {
     setProductRows(prev => {
@@ -140,7 +136,6 @@ export default function LeadModal({ leadId, onClose }) {
     onClose();
   };
 
-  const simpleStatus = DATA_CONFIG.getSimpleStatusLabel(form.status);
   const isLost = DATA_CONFIG.getLostStatusLabels().includes(form.status);
 
   // Build unique customer suggestions from existing leads

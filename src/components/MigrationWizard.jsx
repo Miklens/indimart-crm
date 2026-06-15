@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Database, ArrowRight, CheckCircle, XCircle, Loader, FileText, Users, Package, MessageSquare, Settings, Flame } from 'lucide-react';
+import { Database, ArrowRight, CheckCircle, XCircle, FileText, Users, Package, MessageSquare, Settings, Flame } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { fsMigrateAll } from '../services/firestoreService';
 import { gsPullAll } from '../services/gsBackupService';

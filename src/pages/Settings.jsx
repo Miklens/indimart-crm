@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Save, Upload, X, Wifi, Download, Upload as UploadIcon, RefreshCw, Trash2, Flame, CheckCircle, AlertCircle, Settings2, Eye, EyeOff, Bookmark } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { getStoredFirebaseConfig, saveFirebaseConfig, clearFirebaseConfig, reinitFirebase, isFirebaseConfigured, getFirebaseConfig } from '../firebase';
+import { getStoredFirebaseConfig, clearFirebaseConfig, reinitFirebase, isFirebaseConfigured, getFirebaseConfig } from '../firebase';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
 import MigrationWizard from '../components/MigrationWizard';
 import { generateBookmarkletCode } from '../utils/bookmarklet';

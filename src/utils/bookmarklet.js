@@ -207,7 +207,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             const parts = locationLine.split(',').map(p => p.trim());
             const cleanParts = parts.filter(p => {
               const lower = p.toLowerCase();
-              return lower !== 'india' && !/^\d{6}$/.test(lower) && !lower.startsWith('india -') && !/^\d+$/.test(lower);
+              return lower !== 'india' && !/^\\d{6}$/.test(lower) && !lower.startsWith('india -') && !/^\\d+$/.test(lower);
             });
             if (cleanParts.length >= 2) {
               const lastPart = cleanParts[cleanParts.length - 1];
@@ -288,7 +288,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           
           let matched = null;
           if (Array.isArray(catalogProducts) && catalogProducts.length > 0) {
-            const clean = s => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+            const clean = s => String(s || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(w => w.length > 2);
             const scrapedTokens = clean(product);
             
             let bestScore = 0;

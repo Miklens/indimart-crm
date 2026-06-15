@@ -6,6 +6,19 @@ import { DATA_CONFIG } from '../utils/dataConfig';
 
 Chart.register(...registerables);
 
+const ChartCard = ({ title, canvasRef, height = 200, hasData = true }) => (
+  <div className="glass-card" style={{ padding: '1rem' }}>
+    <h4 style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</h4>
+    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {hasData ? (
+        <canvas ref={canvasRef} />
+      ) : (
+        <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', textAlign: 'center' }}>No data available</div>
+      )}
+    </div>
+  </div>
+);
+
 export default function Dashboard() {
   const { leads, invoiceHistory, setCurrentSection, products } = useApp();
   const [monthlyCost, setMonthlyCost] = useState(() => parseFloat(localStorage.getItem('indimart_monthlyCost') || '0'));
@@ -168,20 +181,9 @@ export default function Dashboard() {
     }
 
     return () => { Object.values(chartsRef.current).forEach(c => c?.destroy()); };
-  }, [leads, invoiceHistory]);
+  }, [leads, invoiceHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ChartCard = ({ title, canvasKey, height = 200, hasData = true }) => (
-    <div className="glass-card" style={{ padding: '1rem' }}>
-      <h4 style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</h4>
-      <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {hasData ? (
-          <canvas ref={canvasRefs[canvasKey]} />
-        ) : (
-          <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', textAlign: 'center' }}>No data available</div>
-        )}
-      </div>
-    </div>
-  );
+
 
   const exportPDF = useCallback(async () => {
     setExporting(true);
@@ -261,12 +263,12 @@ export default function Dashboard() {
 
       {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-        <ChartCard title="Lead Status Distribution" canvasKey="dist" hasData={leads.length > 0} />
-        <ChartCard title="Lost Reason Analysis" canvasKey="lost" hasData={leads.filter(l => DATA_CONFIG.getLostStatusLabels().includes(l.status)).length > 0} />
-        <ChartCard title="Top Categories by Revenue" canvasKey="product" hasData={leads.filter(l => DATA_CONFIG.getWonStatusLabels().includes(l.status)).length > 0} />
-        <ChartCard title="City-wise Revenue" canvasKey="city" hasData={leads.filter(l => DATA_CONFIG.getWonStatusLabels().includes(l.status)).length > 0} />
-        <ChartCard title="Sales Funnel" canvasKey="funnel" hasData={leads.length > 0} />
-        <ChartCard title="Monthly Revenue Trend" canvasKey="trend" hasData={leads.filter(l => l.date).length > 0} />
+        <ChartCard title="Lead Status Distribution" canvasRef={refDist} hasData={leads.length > 0} />
+        <ChartCard title="Lost Reason Analysis" canvasRef={refLost} hasData={leads.filter(l => DATA_CONFIG.getLostStatusLabels().includes(l.status)).length > 0} />
+        <ChartCard title="Top Categories by Revenue" canvasRef={refProduct} hasData={leads.filter(l => DATA_CONFIG.getWonStatusLabels().includes(l.status)).length > 0} />
+        <ChartCard title="City-wise Revenue" canvasRef={refCity} hasData={leads.filter(l => DATA_CONFIG.getWonStatusLabels().includes(l.status)).length > 0} />
+        <ChartCard title="Sales Funnel" canvasRef={refFunnel} hasData={leads.length > 0} />
+        <ChartCard title="Monthly Revenue Trend" canvasRef={refTrend} hasData={leads.filter(l => l.date).length > 0} />
       </div>
 
       {leads.length === 0 && (

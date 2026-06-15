@@ -1,9 +1,10 @@
+/* eslint-disable react-hooks/set-state-in-effect, react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { generateInvoiceNumber, flattenInvoices, DATA_CONFIG, normalizeContact, getLeadForInvoice } from '../utils/dataConfig';
 import { isFirebaseConfigured, initFirebaseIfConfigured } from '../firebase';
 import {
   fsSetLead, fsUpdateLead, fsDeleteLead, fsListenLeads,
-  fsSetInvoice, fsUpdateInvoice, fsDeleteInvoice, fsListenInvoices,
+  fsSetInvoice, fsDeleteInvoice, fsListenInvoices,
   fsSetProduct, fsDeleteProduct, fsGetProducts,
   fsSetTemplate, fsDeleteTemplate, fsGetTemplates,
   fsGetSettings, fsSetSettings, fsGetMaxInvoiceNumber,
@@ -64,7 +65,7 @@ function sanitizeInvoiceNumbers(history) {
 
     // Normalize flat GS-migrated invoice into versioned shape
     // A properly shaped invoice has a `versions` array; flat ones don't
-    let normalized = inv;
+    let normalized;
     if (!Array.isArray(inv.versions) || inv.versions.length === 0) {
       const versionEntry = {
         invoiceNumber: fixedNum,
@@ -346,7 +347,7 @@ export function AppProvider({ children }) {
         });
       }
     }
-  }, [invoiceHistory, leads, fbEnabled, persist, invoicesLoaded, leadsLoaded]); // eslint-disable-line -- intentionally excludes `leads` to avoid infinite loop
+  }, [invoiceHistory, leads, fbEnabled, persist, invoicesLoaded, leadsLoaded]);
 
   // ── Lead operations ───────────────────────────────────────────────────────
   const addLead = useCallback((leadData) => {
@@ -404,7 +405,7 @@ export function AppProvider({ children }) {
         return changed;
       });
     }
-  }, [persist, fbEnabled]); // eslint-disable-line
+  }, [persist, fbEnabled]);
 
   const updateLeadStatus = useCallback((id, newStatus) => {
     setLeads(prev => {
@@ -567,41 +568,6 @@ export function AppProvider({ children }) {
     });
   }, [persist, fbEnabled, leads]);
 
-  const updateInvoiceField = useCallback((invoiceNumber, field, value) => {
-    setInvoiceHistory(prev => {
-      const updated = prev.map(inv => {
-        if (inv.invoiceNumber !== invoiceNumber) return inv;
-        const versions = [...(inv.versions || [])];
-        if (versions.length > 0) versions[versions.length - 1] = { ...versions[versions.length - 1], [field]: value };
-        return { ...inv, [field]: value, versions };
-      });
-      persist('indimart_invoice_history', updated);
-      syncPaymentToLead(updated, invoiceNumber);
-      const upserted = updated.find(i => i.invoiceNumber === invoiceNumber);
-      if (fbEnabled && upserted) fsSetInvoice(upserted).catch(console.error);
-      return updated;
-    });
-  }, [persist, fbEnabled]); // eslint-disable-line
-
-  const updateInvoicePayment = useCallback((invoiceNumber, receivedAmount, totalAmount) => {
-    const amt = parseFloat(receivedAmount) || 0;
-    const total = parseFloat(totalAmount) || 0;
-    const paymentStatus = amt >= total && total > 0 ? 'Paid' : amt > 0 ? 'Partial' : 'Pending';
-    setInvoiceHistory(prev => {
-      const updated = prev.map(inv => {
-        if (inv.invoiceNumber !== invoiceNumber) return inv;
-        const versions = [...(inv.versions || [])];
-        if (versions.length > 0) versions[versions.length - 1] = { ...versions[versions.length - 1], receivedAmount: amt, paymentStatus };
-        return { ...inv, versions };
-      });
-      persist('indimart_invoice_history', updated);
-      syncPaymentToLead(updated, invoiceNumber);
-      const upserted = updated.find(i => i.invoiceNumber === invoiceNumber);
-      if (fbEnabled && upserted) fsSetInvoice(upserted).catch(console.error);
-      return updated;
-    });
-  }, [persist, fbEnabled]); // eslint-disable-line
-
   function syncPaymentToLead(updatedHistory, invoiceNumber) {
     const inv = updatedHistory.find(i => i.invoiceNumber === invoiceNumber);
     if (!inv) return;
@@ -659,6 +625,41 @@ export function AppProvider({ children }) {
     });
   }
 
+  const updateInvoiceField = useCallback((invoiceNumber, field, value) => {
+    setInvoiceHistory(prev => {
+      const updated = prev.map(inv => {
+        if (inv.invoiceNumber !== invoiceNumber) return inv;
+        const versions = [...(inv.versions || [])];
+        if (versions.length > 0) versions[versions.length - 1] = { ...versions[versions.length - 1], [field]: value };
+        return { ...inv, [field]: value, versions };
+      });
+      persist('indimart_invoice_history', updated);
+      syncPaymentToLead(updated, invoiceNumber);
+      const upserted = updated.find(i => i.invoiceNumber === invoiceNumber);
+      if (fbEnabled && upserted) fsSetInvoice(upserted).catch(console.error);
+      return updated;
+    });
+  }, [persist, fbEnabled]); // eslint-disable-line
+  
+  const updateInvoicePayment = useCallback((invoiceNumber, receivedAmount, totalAmount) => {
+    const amt = parseFloat(receivedAmount) || 0;
+    const total = parseFloat(totalAmount) || 0;
+    const paymentStatus = amt >= total && total > 0 ? 'Paid' : amt > 0 ? 'Partial' : 'Pending';
+    setInvoiceHistory(prev => {
+      const updated = prev.map(inv => {
+        if (inv.invoiceNumber !== invoiceNumber) return inv;
+        const versions = [...(inv.versions || [])];
+        if (versions.length > 0) versions[versions.length - 1] = { ...versions[versions.length - 1], receivedAmount: amt, paymentStatus };
+        return { ...inv, versions };
+      });
+      persist('indimart_invoice_history', updated);
+      syncPaymentToLead(updated, invoiceNumber);
+      const upserted = updated.find(i => i.invoiceNumber === invoiceNumber);
+      if (fbEnabled && upserted) fsSetInvoice(upserted).catch(console.error);
+      return updated;
+    });
+  }, [persist, fbEnabled]); // eslint-disable-line
+
   const deleteInvoice = useCallback((invoiceNumber) => {
     setInvoiceHistory(prev => {
       const u = prev.filter(inv => inv.invoiceNumber !== invoiceNumber);
@@ -688,7 +689,7 @@ export function AppProvider({ children }) {
       persist('indimart_invoice_history', updated);
       return updated;
     });
-  }, [persist, fbEnabled]); // eslint-disable-line
+  }, [persist, fbEnabled]);
 
   // ── Settings ──────────────────────────────────────────────────────────────
   const saveSettings = useCallback((newSettings) => {
@@ -900,8 +901,6 @@ export function useApp() {
   if (!ctx) throw new Error('useApp must be used within AppProvider');
   return ctx;
 }
-
-export { flattenInvoices };
 
 function wrapInvoice(inv) {
   if (inv.versions?.length) return inv;

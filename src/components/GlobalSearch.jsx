@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, X, Users, FileText, User, TrendingUp, Bell, ChevronRight } from 'lucide-react';
+import { Search, X, Users, FileText, User, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 
@@ -105,8 +105,6 @@ export default function GlobalSearch({ onClose, onOpenCustomer360 }) {
     return out.slice(0, 12);
   }, [query, leads, invoiceHistory]);
 
-  useEffect(() => { setCursor(0); }, [query]);
-
   const handleKeyDown = (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, items.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(c => Math.max(c - 1, 0)); }
@@ -148,11 +146,11 @@ export default function GlobalSearch({ onClose, onOpenCustomer360 }) {
             className="gsearch-input"
             placeholder="Search leads, invoices, customers..."
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => { setQuery(e.target.value); setCursor(0); }}
             onKeyDown={handleKeyDown}
           />
           {query && (
-            <button className="gsearch-clear" onClick={() => setQuery('')}><X size={14} /></button>
+            <button className="gsearch-clear" onClick={() => { setQuery(''); setCursor(0); }}><X size={14} /></button>
           )}
           <kbd className="gsearch-esc" onClick={onClose}>Esc</kbd>
         </div>

@@ -8,7 +8,7 @@ import ProductPicker from './ProductPicker';
 const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
 
 export default function LeadDetails({ leadId, onBack, onEdit }) {
-  const { leads, invoiceHistory, updateLeadStatus, updateLead, addLead, setCurrentSection, showBanner } = useApp();
+  const { leads, invoiceHistory, updateLeadStatus, updateLead, addLead, showBanner } = useApp();
   const [showInvoice, setShowInvoice] = useState(false);
   const [viewInvoice, setViewInvoice] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -38,7 +38,10 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
 
   const reorder = () => {
     if (!window.confirm(`Create a new enquiry for ${lead.customerName}?`)) return;
-    const { id: _id, history: _h, ...rest } = lead;
+    const rest = { ...lead };
+    delete rest.id;
+    delete rest.history;
+    // eslint-disable-next-line react-hooks/purity
     addLead({ ...rest, date: new Date().toISOString().split('T')[0], status: 'New Enquiry', paymentStatus: 'Pending', paymentReceivedAmount: 0, transactionId: '', dispatchDate: '', dispatchMethod: '', trackingId: '', materialReachedDate: '', remarks: `Reorder from ${lead.id}`, history: [{ status: 'New Enquiry', timestamp: Date.now() }] });
     showBanner(`✅ Reorder enquiry created for ${lead.customerName}`, 'success');
     onBack();

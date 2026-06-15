@@ -13,7 +13,7 @@
 import {
   collection, doc, setDoc, getDoc, getDocs, updateDoc,
   deleteDoc, writeBatch, onSnapshot, serverTimestamp,
-  query, orderBy, limit, where
+  query, orderBy
 } from 'firebase/firestore';
 import { getDb } from '../firebase';
 

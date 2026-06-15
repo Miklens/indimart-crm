@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Search, FileText, Trash2, Download, RefreshCw, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { useAppUI } from '../App';
+import { useAppUI } from '../context/AppUIContext';
 import InvoiceModal from '../components/InvoiceModal';
 import LeadDetails from '../components/LeadDetails';
 
@@ -13,10 +13,12 @@ export default function Invoices() {
   const [viewLeadId, setViewLeadId] = useState(null);
   const [expandedVersions, setExpandedVersions] = useState(new Set());
   const [visibleCount, setVisibleCount] = useState(50);
+  const [prevSearch, setPrevSearch] = useState(search);
 
-  useEffect(() => {
+  if (search !== prevSearch) {
+    setPrevSearch(search);
     setVisibleCount(50);
-  }, [search]);
+  }
 
   const toggleVersions = (invNo) => setExpandedVersions(prev => {
     const next = new Set(prev);

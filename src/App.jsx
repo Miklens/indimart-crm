@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, Bell, FileText, Menu, Sun, Moon, Search } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import Sidebar from './components/Sidebar';
@@ -6,7 +6,8 @@ import SyncBanner from './components/SyncBanner';
 import GlobalSearch from './components/GlobalSearch';
 import Customer360 from './components/Customer360';
 // FirebaseSetup is kept for manual settings only; the app no longer forces first-run setup.
-import LoginPage, { getLocalSession, clearLocalSession } from './pages/LoginPage';
+import LoginPage from './pages/LoginPage';
+import { getLocalSession } from './utils/localAuth';
 import { isFirebaseConfigured, onAuthStateChanged, initFirebaseIfConfigured } from './firebase';
 import { DATA_CONFIG } from './utils/dataConfig';
 
@@ -22,8 +23,7 @@ import Templates from './pages/Templates';
 import Insights from './pages/Insights';
 import Settings from './pages/Settings';
 
-export const AppUIContext = createContext({ openCustomer360: () => {} });
-export function useAppUI() { return useContext(AppUIContext); }
+import { AppUIContext } from './context/AppUIContext';
 
 const PAGES = {
   dashboard: Dashboard,
@@ -130,7 +130,7 @@ function AppInner() {
 
   return (
     <AppUIContext.Provider value={{ openCustomer360: setCustomer360 }}>
-    <div style={{ display: 'flex', flex: 1, height: '100vh', height: '100dvh', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ display: 'flex', flex: 1, height: '100dvh', overflow: 'hidden', position: 'relative' }}>
       <Sidebar
         mobileOpen={drawerOpen}
         onMobileClose={() => setDrawerOpen(false)}

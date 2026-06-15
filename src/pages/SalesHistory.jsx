@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -6,10 +6,12 @@ export default function SalesHistory() {
   const { invoiceHistory, leads, addLead, showBanner } = useApp();
   const [search, setSearch] = useState('');
   const [visibleCount, setVisibleCount] = useState(50);
+  const [prevSearch, setPrevSearch] = useState(search);
 
-  useEffect(() => {
+  if (search !== prevSearch) {
+    setPrevSearch(search);
     setVisibleCount(50);
-  }, [search]);
+  }
 
   const normC = r => { const d = String(r||'').replace(/\D/g,''); return d.length===12&&d.startsWith('91')?d.slice(2):d.slice(-10)||r.trim(); };
   const handleReorder = (contact, name) => {

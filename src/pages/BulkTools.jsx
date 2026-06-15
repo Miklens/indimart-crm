@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageCircle, X, Upload, CheckCircle, Trash2 } from 'lucide-react';
+import { MessageCircle, X, Upload, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 import { fsSetLead } from '../services/firestoreService';
@@ -41,7 +41,7 @@ export default function BulkTools() {
   });
 
   const duplicateGroups = Object.entries(groupedContacts)
-    .filter(([_, group]) => group.length > 1)
+    .filter(([, group]) => group.length > 1)
     .map(([contact, group]) => ({ contact, group }));
 
   const handleMerge = async (contact, group) => {
@@ -91,6 +91,7 @@ export default function BulkTools() {
       combinedHistory.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
       combinedHistory.push({
         status: masterLead.status,
+        // eslint-disable-next-line react-hooks/purity
         timestamp: Date.now(),
         note: `Merged duplicate leads: ${duplicates.map(d => d.id).join(', ')}`
       });

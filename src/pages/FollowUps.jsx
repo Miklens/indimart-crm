@@ -4,6 +4,9 @@ import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 import LeadModal from '../components/LeadModal';
 
+const getTodayString = () => new Date().toISOString().split('T')[0];
+const getNext7DaysString = () => new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+
 export default function FollowUps() {
   const { leads, updateLeadStatus, updateLead, showBanner } = useApp();
   const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
@@ -14,14 +17,13 @@ export default function FollowUps() {
   const [draggedId, setDraggedId] = useState(null);
   const [dragOverDay, setDragOverDay] = useState(null);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayString();
   const dead = DATA_CONFIG.getDeadStatusLabels();
   const allTasks = leads.filter(l => l.followUpDate && !dead.includes(l.status));
   const overdue = allTasks.filter(t => t.followUpDate < today).length;
   const todayCount = allTasks.filter(t => t.followUpDate === today).length;
-  const upcoming = allTasks.filter(t => t.followUpDate > today && t.followUpDate <= new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]).length;
-
-  const next7 = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+  const next7 = getNext7DaysString();
+  const upcoming = allTasks.filter(t => t.followUpDate > today && t.followUpDate <= next7).length;
   const shown = allTasks
     .filter(t => {
       if (filter === 'overdue') return t.followUpDate < today;

@@ -576,6 +576,7 @@ export function AppProvider({ children }) {
       if (!matchedLead) return prevLeads;
       
       const leadInvoices = updatedHistory.filter(i => {
+        if (i.leadId && matchedLead.id) return i.leadId === matchedLead.id;
         const targetLead = getLeadForInvoice(i, prevLeads);
         return targetLead && targetLead.id === matchedLead.id;
       });

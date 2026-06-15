@@ -61,13 +61,13 @@ export const DATA_CONFIG = {
   },
   getStatusGroupStatuses(group) {
     const groups = {
-      all: ['New Enquiry', 'Contacted', 'Quoted', 'Not Responding', 'Won', 'Lost', 'Not Interested'],
-      pipeline: ['New Enquiry', 'Contacted'],
-      quoted: ['Quoted'],
-      won: ['Won'],
-      inTransit: [],
-      delivered: [],
-      lost: ['Not Responding', 'Lost', 'Not Interested'],
+      all: ['New Enquiry', 'Contacted', 'Quoted', 'Not Responding', 'Won', 'Lost', 'Not Interested', 'Converted', 'Purchased', 'Repeat Customer', 'Material Dispatched', 'Material Reached'],
+      pipeline: ['New Enquiry', 'Contacted', 'Requirement Discussed'],
+      quoted: ['Quoted', 'Quotation Requested', 'Quotation Sent', 'Negotiation'],
+      won: ['Won', 'Converted', 'Purchased', 'Repeat Customer', 'Material Dispatched', 'Material Reached'],
+      inTransit: ['Material Dispatched'],
+      delivered: ['Material Reached'],
+      lost: ['Not Responding', 'Lost', 'Not Interested', 'Closed Lost', 'Invalid Lead', 'No Response', 'No Current Requirement'],
     };
     return groups[group] || [];
   },

@@ -231,20 +231,22 @@ export function AppProvider({ children }) {
       invoicesByLeadId[inv.leadId].push(inv);
     });
 
-    setLeads(prevLeads => {
-      if (!prevLeads || !prevLeads.length) return prevLeads;
-      let needsUpdate = false;
-      const updated = prevLeads.map(l => {
-        const leadInvoices = invoicesByLeadId[l.id] || [];
+    let needsUpdate = false;
+    const fsUpdates = [];
+
+    const updatedLeadsList = leads.map(l => {
+      const leadInvoices = invoicesByLeadId[l.id] || [];
+      
+      if (leadInvoices.length === 0) {
+        const isWon = DATA_CONFIG.getWonStatusLabels().includes(l.status);
+        const isQuoted = DATA_CONFIG.getStatusGroupStatuses('quoted').includes(l.status);
+        const hasPayment = l.paymentStatus !== 'Pending' || l.paymentReceivedAmount > 0;
         
-        if (leadInvoices.length === 0) {
-          // Skip if the lead does not have a Won/Quoted status or paid paymentStatus
-          const isWon = DATA_CONFIG.getWonStatusLabels().includes(l.status);
-          const isQuoted = DATA_CONFIG.getStatusGroupStatuses('quoted').includes(l.status);
-          const hasPayment = l.paymentStatus !== 'Pending' || l.paymentReceivedAmount > 0;
+        if (isWon || isQuoted || hasPayment) {
+          needsUpdate = true;
+          let newStatus = l.status;
           
-          if (isWon || isQuoted || hasPayment) {
-            needsUpdate = true;
+          if (isWon || isQuoted) {
             let fallback = 'Contacted';
             const nonWonQuotedHistory = (l.history || [])
               .slice()
@@ -256,96 +258,100 @@ export function AppProvider({ children }) {
             if (nonWonQuotedHistory) {
               fallback = nonWonQuotedHistory.status;
             }
-            
-            const history = [...(l.history || [])];
+            newStatus = fallback;
+          }
+          
+          const history = [...(l.history || [])];
+          if (newStatus !== l.status) {
             history.push({ 
-              status: fallback, 
+              status: newStatus, 
               timestamp: Date.now(), 
               note: `Demoted because no linked invoices exist` 
             });
-            
-            const updatedLead = {
-              ...l,
-              paymentReceivedAmount: 0,
-              paymentStatus: 'Pending',
-              status: fallback,
-              history
-            };
-            if (fbEnabled) {
-              fsUpdateLead(l.id, {
-                status: updatedLead.status,
-                paymentReceivedAmount: updatedLead.paymentReceivedAmount,
-                paymentStatus: updatedLead.paymentStatus,
-                history: updatedLead.history
-              }).catch(console.error);
-            }
-            return updatedLead;
           }
-          return l;
-        }
-
-        // Process leads WITH invoices
-        const totalReceived = leadInvoices.reduce((sum, inv) => {
-          const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
-          return sum + (parseFloat(v.receivedAmount) || 0);
-        }, 0);
-        const totalValue = leadInvoices.reduce((sum, inv) => {
-          const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
-          return sum + (parseFloat(v.totalAmount) || 0);
-        }, 0);
-        const paymentStatus = totalReceived >= totalValue && totalValue > 0 ? 'Paid' : totalReceived > 0 ? 'Partial' : 'Pending';
-        
-        let newStatus = l.status;
-        if (totalReceived > 0) {
-          // Payment received → Won (if not already a won-level status)
-          if (!DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
-            newStatus = 'Won';
-          }
-        } else {
-          // Invoice exists but no payment received yet → Quoted
-          if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
-            newStatus = 'Quoted';
-          } else if (DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
-            // Lead was marked Won but has zero payment — demote to Quoted
-            newStatus = 'Quoted';
-          }
-        }
-        
-        const statusDiff = newStatus !== l.status;
-        const amountDiff = l.paymentReceivedAmount !== totalReceived;
-        const statusPayDiff = l.paymentStatus !== paymentStatus;
-        
-        if (statusDiff || amountDiff || statusPayDiff) {
-          needsUpdate = true;
-          const history = [...(l.history || [])];
-          if (statusDiff) {
-            history.push({ status: newStatus, timestamp: Date.now(), note: `Status auto-synced to ${newStatus} based on invoice payments` });
-          }
+          
           const updatedLead = {
             ...l,
-            paymentReceivedAmount: totalReceived,
-            paymentStatus: paymentStatus,
+            paymentReceivedAmount: 0,
+            paymentStatus: 'Pending',
             status: newStatus,
             history
           };
-          if (fbEnabled) {
-            fsUpdateLead(l.id, {
-              status: updatedLead.status,
-              paymentReceivedAmount: updatedLead.paymentReceivedAmount,
-              paymentStatus: updatedLead.paymentStatus,
-              history: updatedLead.history
-            }).catch(console.error);
-          }
+          fsUpdates.push({ id: l.id, data: {
+            status: updatedLead.status,
+            paymentReceivedAmount: updatedLead.paymentReceivedAmount,
+            paymentStatus: updatedLead.paymentStatus,
+            history: updatedLead.history
+          }});
           return updatedLead;
         }
         return l;
-      });
-      if (needsUpdate) {
-        persist('indimart_leads', updated);
-        return updated;
       }
-      return prevLeads;
+
+      // Process leads WITH invoices
+      const totalReceived = leadInvoices.reduce((sum, inv) => {
+        const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+        return sum + (parseFloat(v.receivedAmount) || 0);
+      }, 0);
+      const totalValue = leadInvoices.reduce((sum, inv) => {
+        const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+        return sum + (parseFloat(v.totalAmount) || 0);
+      }, 0);
+      const paymentStatus = totalReceived >= totalValue && totalValue > 0 ? 'Paid' : totalReceived > 0 ? 'Partial' : 'Pending';
+      
+      let newStatus = l.status;
+      if (totalReceived > 0) {
+        // Payment received → Won (if not already a won-level status)
+        if (!DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+          newStatus = 'Won';
+        }
+      } else {
+        // Invoice exists but no payment received yet → Quoted
+        if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
+          newStatus = 'Quoted';
+        } else if (DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+          // Lead was marked Won but has zero payment — demote to Quoted
+          newStatus = 'Quoted';
+        }
+      }
+      
+      const statusDiff = newStatus !== l.status;
+      const amountDiff = l.paymentReceivedAmount !== totalReceived;
+      const statusPayDiff = l.paymentStatus !== paymentStatus;
+      
+      if (statusDiff || amountDiff || statusPayDiff) {
+        needsUpdate = true;
+        const history = [...(l.history || [])];
+        if (statusDiff) {
+          history.push({ status: newStatus, timestamp: Date.now(), note: `Status auto-synced to ${newStatus} based on invoice payments` });
+        }
+        const updatedLead = {
+          ...l,
+          paymentReceivedAmount: totalReceived,
+          paymentStatus: paymentStatus,
+          status: newStatus,
+          history
+        };
+        fsUpdates.push({ id: l.id, data: {
+          status: updatedLead.status,
+          paymentReceivedAmount: updatedLead.paymentReceivedAmount,
+          paymentStatus: updatedLead.paymentStatus,
+          history: updatedLead.history
+        }});
+        return updatedLead;
+      }
+      return l;
     });
+
+    if (needsUpdate) {
+      setLeads(updatedLeadsList);
+      persist('indimart_leads', updatedLeadsList);
+      if (fbEnabled) {
+        fsUpdates.forEach(up => {
+          fsUpdateLead(up.id, up.data).catch(console.error);
+        });
+      }
+    }
   }, [invoiceHistory, leads, fbEnabled, persist, invoicesLoaded, leadsLoaded]); // eslint-disable-line -- intentionally excludes `leads` to avoid infinite loop
 
   // ── Lead operations ───────────────────────────────────────────────────────

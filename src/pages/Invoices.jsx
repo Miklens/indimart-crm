@@ -158,7 +158,7 @@ export default function Invoices() {
                     </select>
                   </td>
                   <td>
-                    {lead && (
+                    {lead && inv.leadId && (
                       <select className="table-inline-select" value={shippingStatus}
                         onChange={e => { updateLeadStatus(inv.leadId, e.target.value); }}
                         style={{ fontWeight: 600, color: shipColor, width: 130 }}>

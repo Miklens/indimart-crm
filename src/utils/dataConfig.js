@@ -190,26 +190,22 @@ export function normalizeContact(raw) {
 
 export function getLeadForInvoice(inv, leadsList) {
   if (!inv || !leadsList) return null;
-  const normInvContact = normalizeContact(inv.customerContact || inv.contact);
   
+  // 1. Exact leadId match (highest priority, avoids matching incorrect duplicate customer leads)
+  if (inv.leadId) {
+    const lead = leadsList.find(l => l.id === inv.leadId);
+    if (lead) return lead;
+  }
+  
+  // 2. Fallback matching by normalized contact number
+  const normInvContact = normalizeContact(inv.customerContact || inv.contact);
   if (normInvContact) {
     const matchingLeads = leadsList.filter(l => normalizeContact(l.contact) === normInvContact);
     if (matchingLeads.length > 0) {
-      const exactMatch = matchingLeads.find(l => l.id === inv.leadId);
-      if (exactMatch) return exactMatch;
       return matchingLeads.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
     }
   }
   
-  if (inv.leadId) {
-    const lead = leadsList.find(l => l.id === inv.leadId);
-    if (lead) {
-      const normLeadContact = normalizeContact(lead.contact);
-      if (!normLeadContact || !normInvContact || normLeadContact === normInvContact) {
-        return lead;
-      }
-    }
-  }
   return null;
 }
 

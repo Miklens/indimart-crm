@@ -215,55 +215,100 @@ export function AppProvider({ children }) {
 
   // Retroactive sync of lead statuses based on invoice payment history to ensure all counts match perfectly
   useEffect(() => {
-    if (!invoiceHistory.length) return;
     setLeads(prevLeads => {
       if (!prevLeads.length) return prevLeads;
       let needsUpdate = false;
       const updated = prevLeads.map(l => {
         const leadInvoices = invoiceHistory.filter(inv => inv.leadId === l.id);
-        if (!leadInvoices.length) return l;
         
-        const totalReceived = leadInvoices.reduce((sum, inv) => {
-          const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
-          return sum + (parseFloat(v.receivedAmount) || 0);
-        }, 0);
-        const totalValue = leadInvoices.reduce((sum, inv) => {
-          const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
-          return sum + (parseFloat(v.totalAmount) || 0);
-        }, 0);
-        const paymentStatus = totalReceived >= totalValue && totalValue > 0 ? 'Paid' : totalReceived > 0 ? 'Partial' : 'Pending';
-        
-        let newStatus = l.status;
-        if (totalReceived > 0 && !DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
-          newStatus = 'Won';
-        }
-        
-        const statusDiff = newStatus !== l.status;
-        const amountDiff = l.paymentReceivedAmount !== totalReceived;
-        const statusPayDiff = l.paymentStatus !== paymentStatus;
-        
-        if (statusDiff || amountDiff || statusPayDiff) {
-          needsUpdate = true;
-          const history = [...(l.history || [])];
-          if (statusDiff) {
-            history.push({ status: newStatus, timestamp: Date.now(), note: 'Status auto-synced to Won based on invoice payments' });
+        if (leadInvoices.length > 0) {
+          const totalReceived = leadInvoices.reduce((sum, inv) => {
+            const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+            return sum + (parseFloat(v.receivedAmount) || 0);
+          }, 0);
+          const totalValue = leadInvoices.reduce((sum, inv) => {
+            const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+            return sum + (parseFloat(v.totalAmount) || 0);
+          }, 0);
+          const paymentStatus = totalReceived >= totalValue && totalValue > 0 ? 'Paid' : totalReceived > 0 ? 'Partial' : 'Pending';
+          
+          let newStatus = l.status;
+          if (totalReceived > 0) {
+            if (!DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+              newStatus = 'Won';
+            }
+          } else {
+            // Invoice exists but no payment received yet -> should be Quoted
+            if (['New Enquiry', 'Contacted', 'Requirement Discussed', ...DATA_CONFIG.getWonStatusLabels()].includes(l.status)) {
+              newStatus = 'Quoted';
+            }
           }
-          const updatedLead = {
-            ...l,
-            paymentReceivedAmount: totalReceived,
-            paymentStatus: paymentStatus,
-            status: newStatus,
-            history
-          };
-          if (fbEnabled) {
-            fsUpdateLead(l.id, {
-              status: updatedLead.status,
-              paymentReceivedAmount: updatedLead.paymentReceivedAmount,
-              paymentStatus: updatedLead.paymentStatus,
-              history: updatedLead.history
-            }).catch(console.error);
+          
+          const statusDiff = newStatus !== l.status;
+          const amountDiff = l.paymentReceivedAmount !== totalReceived;
+          const statusPayDiff = l.paymentStatus !== paymentStatus;
+          
+          if (statusDiff || amountDiff || statusPayDiff) {
+            needsUpdate = true;
+            const history = [...(l.history || [])];
+            if (statusDiff) {
+              history.push({ status: newStatus, timestamp: Date.now(), note: `Status auto-synced to ${newStatus} based on invoice payments` });
+            }
+            const updatedLead = {
+              ...l,
+              paymentReceivedAmount: totalReceived,
+              paymentStatus: paymentStatus,
+              status: newStatus,
+              history
+            };
+            if (fbEnabled) {
+              fsUpdateLead(l.id, {
+                status: updatedLead.status,
+                paymentReceivedAmount: updatedLead.paymentReceivedAmount,
+                paymentStatus: updatedLead.paymentStatus,
+                history: updatedLead.history
+              }).catch(console.error);
+            }
+            return updatedLead;
           }
-          return updatedLead;
+        } else {
+          // No invoices generated for this lead
+          const totalReceived = 0;
+          const paymentStatus = 'Pending';
+          let newStatus = l.status;
+          
+          // If no invoice is generated and no payment is received, it should NOT be Won
+          if (DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+            newStatus = 'Contacted'; // Reset to Contacted
+          }
+          
+          const statusDiff = newStatus !== l.status;
+          const amountDiff = l.paymentReceivedAmount !== totalReceived;
+          const statusPayDiff = l.paymentStatus !== paymentStatus;
+          
+          if (statusDiff || amountDiff || statusPayDiff) {
+            needsUpdate = true;
+            const history = [...(l.history || [])];
+            if (statusDiff) {
+              history.push({ status: newStatus, timestamp: Date.now(), note: `Status auto-synced to ${newStatus} because no invoice exists` });
+            }
+            const updatedLead = {
+              ...l,
+              paymentReceivedAmount: totalReceived,
+              paymentStatus: paymentStatus,
+              status: newStatus,
+              history
+            };
+            if (fbEnabled) {
+              fsUpdateLead(l.id, {
+                status: updatedLead.status,
+                paymentReceivedAmount: updatedLead.paymentReceivedAmount,
+                paymentStatus: updatedLead.paymentStatus,
+                history: updatedLead.history
+              }).catch(console.error);
+            }
+            return updatedLead;
+          }
         }
         return l;
       });
@@ -468,13 +513,16 @@ export function AppProvider({ children }) {
             
             if (['Paid', 'Partial'].includes(newPayStatus)) {
               newStatus = 'Won';
-            } else if (['New Enquiry', 'Contacted', 'Requirement Discussed'].includes(l.status)) {
-              newStatus = 'Quoted';
+            } else {
+              // If payment is pending, set status to Quoted if it is currently Won or pipeline
+              if (['New Enquiry', 'Contacted', 'Requirement Discussed', ...DATA_CONFIG.getWonStatusLabels()].includes(l.status)) {
+                newStatus = 'Quoted';
+              }
             }
             
             const history = [...(l.history || [])];
             if (newStatus !== l.status) {
-              history.push({ status: newStatus, timestamp: Date.now(), note: 'Status auto-updated via Invoice generation' });
+              history.push({ status: newStatus, timestamp: Date.now(), note: `Status auto-updated to ${newStatus} via Invoice generation` });
             }
             const updatedLead = { ...l, paymentStatus: newPayStatus, status: newStatus, history };
             if (fbEnabled) fsSetLead(updatedLead).catch(console.error);
@@ -543,13 +591,20 @@ export function AppProvider({ children }) {
         if (l.id !== inv.leadId) return l;
         
         let newStatus = l.status;
-        if (['Paid', 'Partial'].includes(newPayStatus) && !DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
-          newStatus = 'Won';
+        if (['Paid', 'Partial'].includes(newPayStatus)) {
+          if (!DATA_CONFIG.getWonStatusLabels().includes(l.status)) {
+            newStatus = 'Won';
+          }
+        } else {
+          // If payment is pending, set status to Quoted if it is currently Won or pipeline
+          if (['New Enquiry', 'Contacted', 'Requirement Discussed', ...DATA_CONFIG.getWonStatusLabels()].includes(l.status)) {
+            newStatus = 'Quoted';
+          }
         }
         
         const history = [...(l.history || [])];
         if (newStatus !== l.status) {
-          history.push({ status: newStatus, timestamp: Date.now(), note: 'Status auto-updated to Won via payment sync' });
+          history.push({ status: newStatus, timestamp: Date.now(), note: `Status auto-updated to ${newStatus} via payment sync` });
         }
         
         return { ...l, paymentReceivedAmount: totalReceived, paymentStatus: newPayStatus, status: newStatus, history };

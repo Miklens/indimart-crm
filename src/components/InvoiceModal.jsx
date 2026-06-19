@@ -598,6 +598,14 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                           <option key={a.id} value={a.id}>{a.label}</option>
                         ))}
                       </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowManageModal(true)}
+                        title="Manage Saved Locations"
+                        style={{ fontSize: '7pt', background: '#4a5568', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                      >
+                        ⚙️ Manage
+                      </button>
                       {selectedBillingLoc && selectedBillingLoc !== 'default' && (lead?.addresses || []).some(a => a.id === selectedBillingLoc) ? (
                         <>
                           <button
@@ -712,6 +720,14 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                           <option key={a.id} value={a.id}>{a.label}</option>
                         ))}
                       </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowManageModal(true)}
+                        title="Manage Saved Locations"
+                        style={{ fontSize: '7pt', background: '#4a5568', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                      >
+                        ⚙️ Manage
+                      </button>
                       {selectedDeliveryLoc && selectedDeliveryLoc !== 'default' && (lead?.addresses || []).some(a => a.id === selectedDeliveryLoc) ? (
                         <>
                           <button
@@ -1068,6 +1084,164 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
           {InvoicePage({ items: page1Items, pageNum: 1, totalPages: showPage2 ? 2 : 1 })}
           {showPage2 && InvoicePage({ items: page2Items, pageNum: 2, totalPages: 2 })}
         </div>
+
+        {/* Manage Saved Locations Modal */}
+        {showManageModal && (
+          <div className="no-print" style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backdropFilter: 'blur(4px)',
+            padding: '1rem'
+          }}>
+            <div style={{
+              background: '#1e293b',
+              color: '#f8fafc',
+              padding: '1.5rem',
+              borderRadius: '8px',
+              width: '100%',
+              maxWidth: '650px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              border: '1px solid rgba(255,255,255,0.1)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: '#fff' }}>⚙️ Manage Saved Address Locations</h3>
+                <button 
+                  onClick={() => setShowManageModal(false)}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.5rem', padding: '0 0.5rem' }}
+                >
+                  &times;
+                </button>
+              </div>
+
+              {(!lead?.addresses || lead.addresses.length === 0) ? (
+                <div style={{ color: '#94a3b8', fontSize: '0.9rem', textAlign: 'center', padding: '2rem 0' }}>
+                  No saved address locations yet. Use the "Save New" button under Billing or Delivery Address to save a location first.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {(lead.addresses).map(addr => (
+                    <div key={addr.id} style={{ border: '1px solid rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '6px', background: '#0f172a' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                        <div>
+                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>Location Name/Label (e.g. Warehouse 1)</label>
+                          <input 
+                            type="text" 
+                            value={addr.label || ''} 
+                            onChange={e => {
+                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, label: e.target.value } : a);
+                              updateLead(lead.id, { addresses: updated });
+                            }}
+                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>Consignee/Buyer Name</label>
+                          <input 
+                            type="text" 
+                            value={addr.consigneeName || ''} 
+                            onChange={e => {
+                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeName: e.target.value } : a);
+                              updateLead(lead.id, { addresses: updated });
+                            }}
+                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>Address/City Details</label>
+                        <textarea 
+                          value={addr.consigneeAddr || ''} 
+                          onChange={e => {
+                            const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeAddr: e.target.value } : a);
+                            updateLead(lead.id, { addresses: updated });
+                          }}
+                          rows={2}
+                          style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none', resize: 'vertical' }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                        <div>
+                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>State</label>
+                          <input 
+                            type="text" 
+                            value={addr.consigneeState || ''} 
+                            onChange={e => {
+                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeState: e.target.value } : a);
+                              updateLead(lead.id, { addresses: updated });
+                            }}
+                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>Mobile</label>
+                          <input 
+                            type="text" 
+                            value={addr.consigneeMob || ''} 
+                            onChange={e => {
+                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeMob: e.target.value } : a);
+                              updateLead(lead.id, { addresses: updated });
+                            }}
+                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>GSTIN</label>
+                          <input 
+                            type="text" 
+                            value={addr.consigneeGst || ''} 
+                            onChange={e => {
+                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeGst: e.target.value } : a);
+                              updateLead(lead.id, { addresses: updated });
+                            }}
+                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm("Are you sure you want to delete this saved location?")) {
+                              const updated = lead.addresses.filter(a => a.id !== addr.id);
+                              updateLead(lead.id, { addresses: updated });
+                              if (selectedBillingLoc === addr.id) setSelectedBillingLoc('');
+                              if (selectedDeliveryLoc === addr.id) setSelectedDeliveryLoc('');
+                              showBanner(`Location deleted!`, 'success');
+                            }
+                          }}
+                          style={{ fontSize: '7.5pt', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                          Delete Location
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+                <button 
+                  onClick={() => setShowManageModal(false)}
+                  style={{ background: '#475569', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer', fontSize: '8.5pt', fontWeight: 'bold' }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

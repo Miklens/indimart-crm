@@ -118,18 +118,40 @@ function sanitizeInvoiceNumbers(history) {
         updatedAt: inv.updatedAt || new Date().toISOString(),
         versions: [versionEntry],
       };
-    } else if (fixedNum !== inv.invoiceNumber) {
-      // Just fix the invoice number, keep versions
+    } else {
+      const fixedVersions = rawVersions.map(v => ({
+        ...v,
+        invoiceNumber: fixedNum,
+        items: parseItems(v.items)
+      }));
+      const latest = fixedVersions[fixedVersions.length - 1];
       normalized = {
         ...inv,
         invoiceNumber: fixedNum,
-        versions: rawVersions.map(v => ({ ...v, invoiceNumber: fixedNum, items: parseItems(v.items) })),
-      };
-    } else {
-      // Already properly shaped — just ensure items are parsed in each version
-      normalized = {
-        ...inv,
-        versions: rawVersions.map(v => ({ ...v, items: parseItems(v.items) })),
+        customerName: inv.customerName || latest.customerName || '',
+        customerContact: normalizeContact(inv.customerContact || inv.contact || latest.customerContact || ''),
+        customerGst: inv.customerGst || latest.customerGst || '',
+        customerCity: inv.customerCity || latest.customerCity || '',
+        customerState: inv.customerState || latest.customerState || '',
+        leadId: inv.leadId || latest.leadId || '',
+        consigneeName: inv.consigneeName || latest.consigneeName || '',
+        consigneeAddr: inv.consigneeAddr || latest.consigneeAddr || '',
+        consigneeState: inv.consigneeState || latest.consigneeState || '',
+        consigneeMob: inv.consigneeMob || latest.consigneeMob || '',
+        consigneeGst: inv.consigneeGst || latest.consigneeGst || '',
+        invoiceDate: latest.invoiceDate || inv.invoiceDate || '',
+        items: latest.items || [],
+        totalAmount: parseFloat(latest.totalAmount) || 0,
+        otherCharges: parseFloat(latest.otherCharges) || 0,
+        roundOff: parseFloat(latest.roundOff) || 0,
+        receivedAmount: parseFloat(latest.receivedAmount) || 0,
+        paymentStatus: latest.paymentStatus || 'Pending',
+        status: latest.status || 'Pending',
+        deliveryStatus: latest.deliveryStatus || inv.deliveryStatus || 'Converted',
+        versions: fixedVersions,
+        latestVersion: fixedVersions.length,
+        createdAt: inv.createdAt || latest.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
     }
     return normalized;
@@ -538,7 +560,7 @@ export function AppProvider({ children }) {
         if (!Array.isArray(existingVersions)) {
           existingVersions = [];
         }
-        const nextVersion = (existingVersions.length || 0) + 1;
+        const nextVersion = existingVersions.length > 0 ? existingVersions.length + 1 : 2;
         const versionEntry = { ...invoiceData, customerContact: normContact, leadId: resolvedLeadId, version: nextVersion, createdAt: new Date().toISOString(), id: `INV${Date.now()}`, deliveryStatus: invoiceData.deliveryStatus || existing.deliveryStatus || 'Converted' };
         const versions = existingVersions.length > 0
           ? [...existingVersions, versionEntry]
@@ -556,6 +578,14 @@ export function AppProvider({ children }) {
           consigneeState: invoiceData.consigneeState || '',
           consigneeMob: invoiceData.consigneeMob || '',
           consigneeGst: invoiceData.consigneeGst || '',
+          invoiceDate: invoiceData.invoiceDate,
+          items: invoiceData.items,
+          totalAmount: invoiceData.totalAmount,
+          otherCharges: invoiceData.otherCharges,
+          roundOff: invoiceData.roundOff,
+          receivedAmount: invoiceData.receivedAmount,
+          paymentStatus: invoiceData.paymentStatus,
+          status: invoiceData.status,
           updatedAt: new Date().toISOString(), versions, latestVersion: nextVersion };
         updated = prev.map(inv => inv.invoiceNumber === invoiceData.invoiceNumber ? upserted : inv);
       } else {
@@ -574,6 +604,14 @@ export function AppProvider({ children }) {
           consigneeState: invoiceData.consigneeState || '',
           consigneeMob: invoiceData.consigneeMob || '',
           consigneeGst: invoiceData.consigneeGst || '',
+          invoiceDate: invoiceData.invoiceDate,
+          items: invoiceData.items,
+          totalAmount: invoiceData.totalAmount,
+          otherCharges: invoiceData.otherCharges,
+          roundOff: invoiceData.roundOff,
+          receivedAmount: invoiceData.receivedAmount,
+          paymentStatus: invoiceData.paymentStatus,
+          status: invoiceData.status,
           createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
           versions: [{ ...invoiceData, customerContact: normContact, leadId: resolvedLeadId, version: 1, createdAt: new Date().toISOString(), id: `INV${Date.now()}`, deliveryStatus: initialDeliveryStatus }],
         };
@@ -940,13 +978,22 @@ export function useApp() {
 }
 
 function wrapInvoice(inv) {
+  const parseItems = (raw) => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    try { return JSON.parse(raw); } catch { return []; }
+  };
   let parsedVersions = inv.versions;
   if (typeof parsedVersions === 'string') {
     try { parsedVersions = JSON.parse(parsedVersions); } catch { parsedVersions = []; }
   }
   if (Array.isArray(parsedVersions) && parsedVersions.length > 0) {
-    return { ...inv, versions: parsedVersions };
+    return {
+      ...inv,
+      versions: parsedVersions.map(v => ({ ...v, items: parseItems(v.items) })),
+    };
   }
+  const items = parseItems(inv.items);
   return {
     invoiceNumber: inv.invoiceNumber, customerName: inv.customerName, customerContact: inv.customerContact, customerGst: inv.customerGst, customerCity: inv.customerCity, customerState: inv.customerState, leadId: inv.leadId, latestVersion: 1, createdAt: inv.createdAt, updatedAt: inv.updatedAt,
     consigneeName: inv.consigneeName || inv.customerName || '',
@@ -958,7 +1005,7 @@ function wrapInvoice(inv) {
       id: inv.id || `INV${Date.now()}`, 
       invoiceNumber: inv.invoiceNumber, 
       invoiceDate: inv.invoiceDate || '', 
-      items: inv.items, 
+      items, 
       totalAmount: inv.totalAmount, 
       otherCharges: inv.otherCharges || 0, 
       roundOff: inv.roundOff || 0, 

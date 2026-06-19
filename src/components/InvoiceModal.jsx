@@ -578,11 +578,13 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                           const val = e.target.value;
                           if (!val) return;
                           if (val === 'default') {
-                            setConsigneeName(cust.customerName || '');
-                            setConsigneeAddr(cust.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : '');
-                            setConsigneeState(cust.state || '');
-                            setConsigneeMob(cust.contact || '');
-                            setConsigneeGst(cust.gst || cust.customerGst || '-');
+                            // Copy from CURRENT buyer fields (not raw lead data)
+                            // so edits to buyer name/address are reflected
+                            setConsigneeName(buyerName || '');
+                            setConsigneeAddr(buyerCity ? `${buyerCity}${buyerState ? ', ' + buyerState : ''}` : '');
+                            setConsigneeState(buyerState || '');
+                            setConsigneeMob(buyerContact || '');
+                            setConsigneeGst(buyerGst || '-');
                             markDirty();
                           } else {
                             const found = (lead?.addresses || []).find(a => a.id === val);

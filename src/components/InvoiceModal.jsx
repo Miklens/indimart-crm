@@ -96,6 +96,31 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const [buyerCity, setBuyerCity] = useState(() => latest?.customerCity || inv?.customerCity || cust.city || '');
   const [buyerState, setBuyerState] = useState(() => latest?.customerState || inv?.customerState || cust.state || '');
 
+  // Company details state
+  const [compName, setCompName] = useState(() => latest?.companyName || c.name || '');
+  const [compAddress, setCompAddress] = useState(() => latest?.companyAddress || c.address || '');
+  const [compGst, setCompGst] = useState(() => latest?.companyGst || c.companyGst || c.gst || '');
+  const [compMobile, setCompMobile] = useState(() => latest?.companyMobile || c.mobile || '');
+  const [compEmail, setCompEmail] = useState(() => latest?.companyEmail || c.email || '');
+  const [compBankName, setCompBankName] = useState(() => latest?.companyBankName || c.bankName || '');
+  const [compAccNo, setCompAccNo] = useState(() => latest?.companyAccNo || c.accNo || '');
+  const [compBranch, setCompBranch] = useState(() => latest?.companyBranch || c.branch || '');
+  const [compIfsc, setCompIfsc] = useState(() => latest?.companyIfsc || c.ifsc || '');
+  const [compVat, setCompVat] = useState(() => latest?.companyVat || c.vat || '');
+  const [compCst, setCompCst] = useState(() => latest?.companyCst || c.cst || '');
+  const [compPan, setCompPan] = useState(() => latest?.companyPan || c.pan || '');
+
+  // Metadata fields state
+  const [deliveryNote, setDeliveryNote] = useState(() => latest?.deliveryNote || '');
+  const [paymentTerms, setPaymentTerms] = useState(() => latest?.paymentTerms || 'Advance');
+  const [supplierRef, setSupplierRef] = useState(() => latest?.supplierRef || '');
+  const [otherRef, setOtherRef] = useState(() => latest?.otherRef || 'Freight Terms- To Pay Basis');
+  const [buyerOrderNo, setBuyerOrderNo] = useState(() => latest?.buyerOrderNo || '');
+  const [buyerOrderDate, setBuyerOrderDate] = useState(() => latest?.buyerOrderDate || '');
+  const [despatchedThrough, setDespatchedThrough] = useState(() => latest?.despatchedThrough || lead?.dispatchMethod || '');
+  const [destination, setDestination] = useState(() => latest?.destination || cust.city || '');
+  const [termsOfDelivery, setTermsOfDelivery] = useState(() => latest?.termsOfDelivery || '');
+
   // Totals calc
   let subtotal = 0, totalQty = 0;
   const taxGroups = {};
@@ -141,6 +166,29 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
           consigneeState,
           consigneeMob,
           consigneeGst,
+          // Company details
+          companyName: compName,
+          companyAddress: compAddress,
+          companyGst: compGst,
+          companyMobile: compMobile,
+          companyEmail: compEmail,
+          companyBankName: compBankName,
+          companyAccNo: compAccNo,
+          companyBranch: compBranch,
+          companyIfsc: compIfsc,
+          companyVat: compVat,
+          companyCst: compCst,
+          companyPan: compPan,
+          // Metadata
+          deliveryNote,
+          paymentTerms,
+          supplierRef,
+          otherRef,
+          buyerOrderNo,
+          buyerOrderDate,
+          despatchedThrough,
+          destination,
+          termsOfDelivery,
         });
         resolve();
       });
@@ -154,7 +202,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
       setSaving(false);
     }
     // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty, consigneeName, consigneeAddr, consigneeState, consigneeMob, consigneeGst, buyerName, buyerContact, buyerGst, buyerCity, buyerState, isDuplicate]);
+  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty, consigneeName, consigneeAddr, consigneeState, consigneeMob, consigneeGst, buyerName, buyerContact, buyerGst, buyerCity, buyerState, isDuplicate, compName, compAddress, compGst, compMobile, compEmail, compBankName, compAccNo, compBranch, compIfsc, compVat, compCst, compPan, deliveryNote, paymentTerms, supplierRef, otherRef, buyerOrderNo, buyerOrderDate, despatchedThrough, destination, termsOfDelivery]);
 
   const handlePrint = () => {
     // Save if: new invoice (not yet in history) OR user made changes (isDirty)
@@ -459,15 +507,15 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
               {/* LEFT: Company + Buyer + Consignee */}
               <td style={{ width: '50%', padding: '6px 8px', borderRight: '1px solid #000', verticalAlign: 'top' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '10.5pt', marginBottom: 2 }}>
-                  <CE style={{ fontWeight: 'bold', fontSize: '10.5pt' }}>{c.name || 'Your Company'}</CE>
+                  <CE onBlur={e => { markDirty(); setCompName(e.target.innerText.trim()); }} style={{ fontWeight: 'bold', fontSize: '10.5pt' }}>{compName}</CE>
                 </div>
                 <div style={{ fontSize: '7.5pt', lineHeight: 1.3, marginBottom: 3 }}>
-                  <CE style={{ whiteSpace: 'pre-line', fontSize: '7.5pt' }}>{c.address || ''}</CE>
+                  <CE onBlur={e => { markDirty(); setCompAddress(e.target.innerText.trim()); }} style={{ whiteSpace: 'pre-line', fontSize: '7.5pt' }}>{compAddress}</CE>
                 </div>
                 <div style={{ fontSize: '7.5pt', lineHeight: 1.4, marginBottom: 2 }}>
-                  <div>GSTIN/UIN: <CE>{c.companyGst || c.gst || '-'}</CE></div>
-                  <div>Mob:- <CE>{c.mobile || '-'}</CE></div>
-                  <div>E-Mail: <CE>{c.email || '-'}</CE></div>
+                  <div>GSTIN/UIN: <CE onBlur={e => { markDirty(); setCompGst(e.target.innerText.trim()); }}>{compGst}</CE></div>
+                  <div>Mob:- <CE onBlur={e => { markDirty(); setCompMobile(e.target.innerText.trim()); }}>{compMobile}</CE></div>
+                  <div>E-Mail: <CE onBlur={e => { markDirty(); setCompEmail(e.target.innerText.trim()); }}>{compEmail}</CE></div>
                 </div>
                 <div style={{ borderBottom: '1px solid #000', margin: '4px 0' }} />
                 <div style={{ fontWeight: 'bold', fontSize: '8.5pt', marginBottom: 2 }}>Buyer :</div>
@@ -556,22 +604,22 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   <div style={{ fontSize: '7.5pt', borderLeft: '1px solid #000', paddingLeft: 8 }}><strong>Dated</strong><br /><span contentEditable suppressContentEditableWarning onBlur={e => { markDirty(); setInvDate(e.target.innerText.trim()); }} style={{ outline: 'none', fontWeight: 'bold', fontSize: '8pt' }}>{invDate}</span></div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #000', padding: '2px 0', marginBottom: 3 }}>
-                  <div style={{ fontSize: '7.5pt', paddingRight: 6 }}>Delivery Note<br /><CE>&nbsp;</CE></div>
-                  <div style={{ fontSize: '7.5pt', borderLeft: '1px solid #000', paddingLeft: 8 }}>Mode/Terms of Payment<br /><CE style={{ fontWeight: 'bold' }}>Advance</CE></div>
+                  <div style={{ fontSize: '7.5pt', paddingRight: 6 }}>Delivery Note<br /><CE onBlur={e => { markDirty(); setDeliveryNote(e.target.innerText.trim()); }}>{deliveryNote}</CE></div>
+                  <div style={{ fontSize: '7.5pt', borderLeft: '1px solid #000', paddingLeft: 8 }}>Mode/Terms of Payment<br /><CE onBlur={e => { markDirty(); setPaymentTerms(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{paymentTerms}</CE></div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #000', padding: '2px 0', marginBottom: 3 }}>
-                  <div style={{ fontSize: '7.5pt', paddingRight: 6 }}>Supplier's Ref.<br /><CE>&nbsp;</CE></div>
-                  <div style={{ fontSize: '7.5pt', borderLeft: '1px solid #000', paddingLeft: 8 }}>Other Reference(s)<br /><CE style={{ fontWeight: 'bold' }}>Freight Terms- To Pay Basis</CE></div>
+                  <div style={{ fontSize: '7.5pt', paddingRight: 6 }}>Supplier's Ref.<br /><CE onBlur={e => { markDirty(); setSupplierRef(e.target.innerText.trim()); }}>{supplierRef}</CE></div>
+                  <div style={{ fontSize: '7.5pt', borderLeft: '1px solid #000', paddingLeft: 8 }}>Other Reference(s)<br /><CE onBlur={e => { markDirty(); setOtherRef(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{otherRef}</CE></div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #000', padding: '2px 0', marginBottom: 3 }}>
-                  <div style={{ fontSize: '7.5pt', paddingRight: 6 }}>Buyer's Order No.<br /><CE>&nbsp;</CE></div>
-                  <div style={{ fontSize: '7.5pt', borderLeft: '1px solid #000', paddingLeft: 8 }}>Dated<br /><CE>&nbsp;</CE></div>
+                  <div style={{ fontSize: '7.5pt', paddingRight: 6 }}>Buyer's Order No.<br /><CE onBlur={e => { markDirty(); setBuyerOrderNo(e.target.innerText.trim()); }}>{buyerOrderNo}</CE></div>
+                  <div style={{ fontSize: '7.5pt', borderLeft: '1px solid #000', paddingLeft: 8 }}>Dated<br /><CE onBlur={e => { markDirty(); setBuyerOrderDate(e.target.innerText.trim()); }}>{buyerOrderDate}</CE></div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #000', padding: '2px 0', marginBottom: 3 }}>
-                  <div style={{ fontSize: '7.5pt' }}>Despatched through<br /><CE>{lead?.dispatchMethod || ''}</CE></div>
-                  <div style={{ fontSize: '7.5pt' }}>Destination<br /><CE>{cust.city || ''}</CE></div>
+                  <div style={{ fontSize: '7.5pt' }}>Despatched through<br /><CE onBlur={e => { markDirty(); setDespatchedThrough(e.target.innerText.trim()); }}>{despatchedThrough}</CE></div>
+                  <div style={{ fontSize: '7.5pt' }}>Destination<br /><CE onBlur={e => { markDirty(); setDestination(e.target.innerText.trim()); }}>{destination}</CE></div>
                 </div>
-                <div style={{ fontSize: '7.5pt', padding: '1px 0' }}>Terms of Delivery <CE>&nbsp;</CE></div>
+                <div style={{ fontSize: '7.5pt', padding: '1px 0' }}>Terms of Delivery <CE onBlur={e => { markDirty(); setTermsOfDelivery(e.target.innerText.trim()); }}>{termsOfDelivery}</CE></div>
               </td>
             </tr>
           </tbody>
@@ -712,19 +760,19 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   <td style={{ width: '50%', padding: '4px 6px', borderRight: '1px solid #000', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: 2 }}>Company's Bank Details</div>
                     <div style={{ fontSize: '7pt' }}>
-                      <div>Bank Name : <CE style={{ fontWeight: 'bold' }}>{c.bankName || '-'}</CE></div>
-                      <div>A/c No. : <CE style={{ fontWeight: 'bold' }}>{c.accNo || '-'}</CE></div>
-                      <div>Branch : <CE>{c.branch || '-'}</CE></div>
-                      <div>IFS Code : <CE style={{ fontWeight: 'bold' }}>{c.ifsc || '-'}</CE></div>
+                      <div>Bank Name : <CE onBlur={e => { markDirty(); setCompBankName(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compBankName || '-'}</CE></div>
+                      <div>A/c No. : <CE onBlur={e => { markDirty(); setCompAccNo(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compAccNo || '-'}</CE></div>
+                      <div>Branch : <CE onBlur={e => { markDirty(); setCompBranch(e.target.innerText.trim()); }}>{compBranch || '-'}</CE></div>
+                      <div>IFS Code : <CE onBlur={e => { markDirty(); setCompIfsc(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compIfsc || '-'}</CE></div>
                     </div>
                   </td>
                   <td style={{ width: '50%', padding: '4px 6px', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: 2 }}>Company's Tax Registration</div>
                     <div style={{ fontSize: '7pt' }}>
-                      <div>Company's VAT TIN: <CE style={{ fontWeight: 'bold' }}>{c.vat || '-'}</CE></div>
-                      <div>Company's CST No. : <CE style={{ fontWeight: 'bold' }}>{c.cst || '-'}</CE></div>
-                      <div>Company's GST No. : <CE style={{ fontWeight: 'bold' }}>{c.companyGst || c.gst || '-'}</CE></div>
-                      <div>Company's PAN : <CE style={{ fontWeight: 'bold' }}>{c.pan || '-'}</CE></div>
+                      <div>Company's VAT TIN: <CE onBlur={e => { markDirty(); setCompVat(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compVat || '-'}</CE></div>
+                      <div>Company's CST No. : <CE onBlur={e => { markDirty(); setCompCst(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compCst || '-'}</CE></div>
+                      <div>Company's GST No. : <CE onBlur={e => { markDirty(); setCompGst(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compGst || '-'}</CE></div>
+                      <div>Company's PAN : <CE onBlur={e => { markDirty(); setCompPan(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compPan || '-'}</CE></div>
                     </div>
                   </td>
                 </tr>

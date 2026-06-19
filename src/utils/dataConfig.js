@@ -156,6 +156,35 @@ export function flattenInvoices(invoiceHistory) {
       receivedAmount: latest.receivedAmount || 0, paymentStatus: latest.paymentStatus || 'Pending',
       status: latest.status, versions, latestVersion: inv.latestVersion || versions.length,
       createdAt: inv.createdAt, updatedAt: inv.updatedAt,
+      // Consignee fields
+      consigneeName: inv.consigneeName || '',
+      consigneeAddr: inv.consigneeAddr || '',
+      consigneeState: inv.consigneeState || '',
+      consigneeMob: inv.consigneeMob || '',
+      consigneeGst: inv.consigneeGst || '',
+      // Company details
+      companyName: inv.companyName || '',
+      companyAddress: inv.companyAddress || '',
+      companyGst: inv.companyGst || '',
+      companyMobile: inv.companyMobile || '',
+      companyEmail: inv.companyEmail || '',
+      companyBankName: inv.companyBankName || '',
+      companyAccNo: inv.companyAccNo || '',
+      companyBranch: inv.companyBranch || '',
+      companyIfsc: inv.companyIfsc || '',
+      companyVat: inv.companyVat || '',
+      companyCst: inv.companyCst || '',
+      companyPan: inv.companyPan || '',
+      // Metadata
+      deliveryNote: inv.deliveryNote || '',
+      paymentTerms: inv.paymentTerms || '',
+      supplierRef: inv.supplierRef || '',
+      otherRef: inv.otherRef || '',
+      buyerOrderNo: inv.buyerOrderNo || '',
+      buyerOrderDate: inv.buyerOrderDate || '',
+      despatchedThrough: inv.despatchedThrough || '',
+      destination: inv.destination || '',
+      termsOfDelivery: inv.termsOfDelivery || '',
     };
   });
 }

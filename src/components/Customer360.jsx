@@ -294,7 +294,7 @@ export default function Customer360({ customer, onClose }) {
         )}
       </div>
 
-      {viewInvoice && <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
+      {viewInvoice && <InvoiceModal invoice={invoiceHistory.find(i => i.invoiceNumber === viewInvoice.invoiceNumber) || viewInvoice} onClose={() => setViewInvoice(null)} />}
     </div>
   );
 }

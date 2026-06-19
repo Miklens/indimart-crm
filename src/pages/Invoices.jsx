@@ -247,7 +247,7 @@ export default function Invoices() {
         </div>
       )}
 
-      {viewInvoice && <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
+      {viewInvoice && <InvoiceModal invoice={invoiceHistory.find(i => i.invoiceNumber === viewInvoice.invoiceNumber) || viewInvoice} onClose={() => setViewInvoice(null)} />}
       {duplicateInvoice && <InvoiceModal invoice={duplicateInvoice} isDuplicate={true} onClose={() => setDuplicateInvoice(null)} />}
       {viewLeadId && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewLeadId(null)} style={{ overflowY: 'auto', padding: '1rem' }}>

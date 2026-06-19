@@ -255,7 +255,7 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
 
       {pickerOpen && <ProductPicker lead={lead} onConfirm={(items) => { setInvoiceItems(items); setPickerOpen(false); setShowInvoice(true); }} onClose={() => setPickerOpen(false)} />}
       {showInvoice && <InvoiceModal leadId={leadId} initialItems={invoiceItems} onClose={() => { setShowInvoice(false); setInvoiceItems(null); }} />}
-      {viewInvoice && <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
+      {viewInvoice && <InvoiceModal invoice={invoiceHistory.find(i => i.invoiceNumber === viewInvoice.invoiceNumber) || viewInvoice} onClose={() => setViewInvoice(null)} />}
     </div>
   );
 }

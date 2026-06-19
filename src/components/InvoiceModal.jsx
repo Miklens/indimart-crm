@@ -132,6 +132,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   });
   const [selectedBillingLoc, setSelectedBillingLoc] = useState('');
   const [selectedDeliveryLoc, setSelectedDeliveryLoc] = useState('');
+  const [showManageModal, setShowManageModal] = useState(false);
 
   // Company details state
   const [compName, setCompName] = useState(() => latest?.companyName || c.name || '');

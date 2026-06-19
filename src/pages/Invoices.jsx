@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, FileText, Trash2, Download, RefreshCw, Eye } from 'lucide-react';
+import { Search, FileText, Trash2, Download, RefreshCw, Eye, Copy } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../context/AppUIContext';
 import InvoiceModal from '../components/InvoiceModal';
@@ -10,6 +10,7 @@ export default function Invoices() {
   const { openCustomer360 } = useAppUI();
   const [search, setSearch] = useState('');
   const [viewInvoice, setViewInvoice] = useState(null);
+  const [duplicateInvoice, setDuplicateInvoice] = useState(null);
   const [viewLeadId, setViewLeadId] = useState(null);
   const [expandedVersions, setExpandedVersions] = useState(new Set());
   const [visibleCount, setVisibleCount] = useState(50);
@@ -178,6 +179,9 @@ export default function Invoices() {
                       <button className="btn-icon" style={{ color: '#f59e0b' }} title="View Invoice" onClick={() => setViewInvoice(inv)}>
                         <FileText size={15} />
                       </button>
+                      <button className="btn-icon" style={{ color: '#10b981' }} title="Duplicate Invoice" onClick={() => setDuplicateInvoice(inv)}>
+                        <Copy size={15} />
+                      </button>
                       {inv.leadId && (
                         <button className="btn-icon" style={{ color: '#3b82f6' }} title="Customer Profile" onClick={() => setViewLeadId(inv.leadId)}>
                           <Eye size={15} />
@@ -244,6 +248,7 @@ export default function Invoices() {
       )}
 
       {viewInvoice && <InvoiceModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
+      {duplicateInvoice && <InvoiceModal invoice={duplicateInvoice} isDuplicate={true} onClose={() => setDuplicateInvoice(null)} />}
       {viewLeadId && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewLeadId(null)} style={{ overflowY: 'auto', padding: '1rem' }}>
           <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', padding: '1.5rem', maxWidth: 900, width: '100%', margin: 'auto', border: '1px solid var(--glass-border)' }}>

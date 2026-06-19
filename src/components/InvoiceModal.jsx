@@ -5,7 +5,7 @@ import { numberToWords, formatDate } from '../utils/dataConfig';
 
 const CE = ({ id, style, children, onBlur }) => <span id={id} contentEditable suppressContentEditableWarning onBlur={onBlur} style={{ outline: 'none', ...style }}>{children}</span>;
 
-export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose, initialItems }) {
+export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose, initialItems, isDuplicate }) {
   const { leads, invoiceHistory, products, companySettings: c, saveInvoiceToHistory, getNextInvoiceNumber, showBanner, updateLead } = useApp();
   const inv = existingInvoice;
   const lead = (leadId || inv?.leadId) ? leads.find(l => l.id === (leadId || inv.leadId)) : null;
@@ -55,7 +55,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const [rawItems, setRawItems] = useState(() =>
     resolvedItems.length ? resolvedItems : [{ name: '', qty: 1, price: 0, gst: '5', hsn: '', unit: 'Ltr' }]
   );
-  const [invNo, setInvNo] = useState(latest?.invoiceNumber || inv?.invoiceNumber || '');
+  const [invNo, setInvNo] = useState(() => isDuplicate ? '' : (latest?.invoiceNumber || inv?.invoiceNumber || ''));
   const [invDate, setInvDate] = useState(() => latest?.invoiceDate || formatDate(new Date()));
 
   // Fetch invoice number from Firestore (async, cross-device safe)
@@ -80,7 +80,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const [editMode, setEditMode] = useState(!hasRealItems);
   const [saving, setSaving] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
-  const [isDirty, setIsDirty] = useState(!existingInvoice); // new invoices start dirty
+  const [isDirty, setIsDirty] = useState(!existingInvoice || isDuplicate); // new or duplicated invoices start dirty
 
   // Consignee state — separate from buyer, defaults to same or loaded from invoice/version
   const [consigneeName, setConsigneeName] = useState(() => latest?.consigneeName || inv?.consigneeName || cust.customerName || '');
@@ -133,7 +133,8 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
           customerCity: buyerCity || '', customerState: buyerState || '',
           leadId: cust.id || leadId, items: rawItems, totalAmount: grandTotal,
           otherCharges: parseFloat(freight) || 0, roundOff,
-          receivedAmount: latest?.receivedAmount || 0, paymentStatus: latest?.paymentStatus || 'Pending',
+          receivedAmount: isDuplicate ? 0 : (latest?.receivedAmount || 0),
+          paymentStatus: isDuplicate ? 'Pending' : (latest?.paymentStatus || 'Pending'),
           status: 'Sent',
           consigneeName,
           consigneeAddr,
@@ -153,7 +154,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
       setSaving(false);
     }
     // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty, consigneeName, consigneeAddr, consigneeState, consigneeMob, consigneeGst, buyerName, buyerContact, buyerGst, buyerCity, buyerState]);
+  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty, consigneeName, consigneeAddr, consigneeState, consigneeMob, consigneeGst, buyerName, buyerContact, buyerGst, buyerCity, buyerState, isDuplicate]);
 
   const handlePrint = () => {
     // Save if: new invoice (not yet in history) OR user made changes (isDirty)

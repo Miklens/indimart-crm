@@ -130,6 +130,8 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
     if (hasSavedVersion && latest.customerState !== undefined) return latest.customerState;
     return inv?.customerState || cust.state || '';
   });
+  const [selectedBillingLoc, setSelectedBillingLoc] = useState('');
+  const [selectedDeliveryLoc, setSelectedDeliveryLoc] = useState('');
 
   // Company details state
   const [compName, setCompName] = useState(() => latest?.companyName || c.name || '');
@@ -564,9 +566,10 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   {lead && (
                     <div className="no-print" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                       <select 
-                        value="" 
+                        value={selectedBillingLoc} 
                         onChange={e => {
                           const val = e.target.value;
+                          setSelectedBillingLoc(val);
                           if (!val) return;
                           if (val === 'default') {
                             setBuyerName(lead.customerName || '');
@@ -586,7 +589,6 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                               markDirty();
                             }
                           }
-                          e.target.value = "";
                         }}
                         style={{ fontSize: '7.5pt', padding: '1px 4px', background: '#2d3748', color: '#fff', border: '1px solid #4a5568', borderRadius: '4px', cursor: 'pointer' }}
                       >
@@ -596,28 +598,72 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                           <option key={a.id} value={a.id}>{a.label}</option>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const label = prompt("Enter a label for this address location (e.g. Head Office, Mumbai):");
-                          if (!label) return;
-                          const newAddr = {
-                            id: 'addr_' + Date.now(),
-                            label: label.trim(),
-                            consigneeName: buyerName,
-                            consigneeAddr: buyerCity,
-                            consigneeState: buyerState,
-                            consigneeMob: buyerContact,
-                            consigneeGst: buyerGst
-                          };
-                          const updatedAddresses = [...(lead?.addresses || []), newAddr];
-                          updateLead(lead.id, { addresses: updatedAddresses });
-                          showBanner(`Location "${label.trim()}" saved!`, 'success');
-                        }}
-                        style={{ fontSize: '7pt', background: '#319795', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                      >
-                        Save Location
-                      </button>
+                      {selectedBillingLoc && selectedBillingLoc !== 'default' && (lead?.addresses || []).some(a => a.id === selectedBillingLoc) ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const existing = (lead?.addresses || []).find(a => a.id === selectedBillingLoc);
+                              if (!existing) return;
+                              const newLabel = prompt("Update label/name for this location:", existing.label);
+                              if (newLabel === null) return;
+                              const labelVal = newLabel.trim() || existing.label;
+                              const updated = (lead?.addresses || []).map(a => a.id === selectedBillingLoc ? {
+                                ...a,
+                                label: labelVal,
+                                consigneeName: buyerName,
+                                consigneeAddr: buyerCity,
+                                consigneeState: buyerState,
+                                consigneeMob: buyerContact,
+                                consigneeGst: buyerGst
+                              } : a);
+                              updateLead(lead.id, { addresses: updated });
+                              showBanner(`Location "${labelVal}" updated!`, 'success');
+                            }}
+                            title="Save current details to this location"
+                            style={{ fontSize: '7pt', background: '#319795', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                          >
+                            Update
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!confirm("Are you sure you want to delete this saved location?")) return;
+                              const updated = (lead?.addresses || []).filter(a => a.id !== selectedBillingLoc);
+                              updateLead(lead.id, { addresses: updated });
+                              setSelectedBillingLoc('');
+                              showBanner(`Location deleted!`, 'success');
+                            }}
+                            style={{ fontSize: '7pt', background: '#e53e3e', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const label = prompt("Enter a label for this address location (e.g. Head Office, Mumbai):");
+                            if (!label) return;
+                            const newAddr = {
+                              id: 'addr_' + Date.now(),
+                              label: label.trim(),
+                              consigneeName: buyerName,
+                              consigneeAddr: buyerCity,
+                              consigneeState: buyerState,
+                              consigneeMob: buyerContact,
+                              consigneeGst: buyerGst
+                            };
+                            const updatedAddresses = [...(lead?.addresses || []), newAddr];
+                            updateLead(lead.id, { addresses: updatedAddresses });
+                            setSelectedBillingLoc(newAddr.id);
+                            showBanner(`Location "${label.trim()}" saved!`, 'success');
+                          }}
+                          style={{ fontSize: '7pt', background: '#3182ce', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                          Save New
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -634,9 +680,10 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   {lead && (
                     <div className="no-print" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                       <select 
-                        value="" 
+                        value={selectedDeliveryLoc} 
                         onChange={e => {
                           const val = e.target.value;
+                          setSelectedDeliveryLoc(val);
                           if (!val) return;
                           if (val === 'default') {
                             setConsigneeName(buyerName || '');
@@ -656,7 +703,6 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                               markDirty();
                             }
                           }
-                          e.target.value = "";
                         }}
                         style={{ fontSize: '7.5pt', padding: '1px 4px', background: '#2d3748', color: '#fff', border: '1px solid #4a5568', borderRadius: '4px', cursor: 'pointer' }}
                       >
@@ -666,28 +712,72 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                           <option key={a.id} value={a.id}>{a.label}</option>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const label = prompt("Enter a label for this address location (e.g. Warehouse 1, Chennai Office):");
-                          if (!label) return;
-                          const newAddr = {
-                            id: 'addr_' + Date.now(),
-                            label: label.trim(),
-                            consigneeName,
-                            consigneeAddr,
-                            consigneeState,
-                            consigneeMob,
-                            consigneeGst
-                          };
-                          const updatedAddresses = [...(lead?.addresses || []), newAddr];
-                          updateLead(lead.id, { addresses: updatedAddresses });
-                          showBanner(`Location "${label.trim()}" saved!`, 'success');
-                        }}
-                        style={{ fontSize: '7pt', background: '#319795', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                      >
-                        Save Location
-                      </button>
+                      {selectedDeliveryLoc && selectedDeliveryLoc !== 'default' && (lead?.addresses || []).some(a => a.id === selectedDeliveryLoc) ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const existing = (lead?.addresses || []).find(a => a.id === selectedDeliveryLoc);
+                              if (!existing) return;
+                              const newLabel = prompt("Update label/name for this location:", existing.label);
+                              if (newLabel === null) return;
+                              const labelVal = newLabel.trim() || existing.label;
+                              const updated = (lead?.addresses || []).map(a => a.id === selectedDeliveryLoc ? {
+                                ...a,
+                                label: labelVal,
+                                consigneeName,
+                                consigneeAddr,
+                                consigneeState,
+                                consigneeMob,
+                                consigneeGst
+                              } : a);
+                              updateLead(lead.id, { addresses: updated });
+                              showBanner(`Location "${labelVal}" updated!`, 'success');
+                            }}
+                            title="Save current details to this location"
+                            style={{ fontSize: '7pt', background: '#319795', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                          >
+                            Update
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!confirm("Are you sure you want to delete this saved location?")) return;
+                              const updated = (lead?.addresses || []).filter(a => a.id !== selectedDeliveryLoc);
+                              updateLead(lead.id, { addresses: updated });
+                              setSelectedDeliveryLoc('');
+                              showBanner(`Location deleted!`, 'success');
+                            }}
+                            style={{ fontSize: '7pt', background: '#e53e3e', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const label = prompt("Enter a label for this address location (e.g. Warehouse 1, Chennai Office):");
+                            if (!label) return;
+                            const newAddr = {
+                              id: 'addr_' + Date.now(),
+                              label: label.trim(),
+                              consigneeName,
+                              consigneeAddr,
+                              consigneeState,
+                              consigneeMob,
+                              consigneeGst
+                            };
+                            const updatedAddresses = [...(lead?.addresses || []), newAddr];
+                            updateLead(lead.id, { addresses: updatedAddresses });
+                            setSelectedDeliveryLoc(newAddr.id);
+                            showBanner(`Location "${label.trim()}" saved!`, 'success');
+                          }}
+                          style={{ fontSize: '7pt', background: '#3182ce', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                          Save New
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

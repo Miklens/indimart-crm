@@ -3,7 +3,7 @@ import { X, Printer, Save, Edit3, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { numberToWords, formatDate } from '../utils/dataConfig';
 
-const CE = ({ id, style, children, onBlur }) => <span id={id} contentEditable suppressContentEditableWarning onBlur={onBlur} style={{ outline: 'none', ...style }}>{children}</span>;
+const CE = ({ id, style, children, onBlur }) => <span id={id} contentEditable suppressContentEditableWarning onBlur={onBlur} style={{ outline: 'none', whiteSpace: 'pre-wrap', ...style }}>{children}</span>;
 
 export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose, initialItems, isDuplicate }) {
   const { leads, invoiceHistory, products, companySettings: c, saveInvoiceToHistory, getNextInvoiceNumber, showBanner, updateLead } = useApp();
@@ -11,6 +11,8 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const lead = (leadId || inv?.leadId) ? leads.find(l => l.id === (leadId || inv.leadId)) : null;
   const latest = inv?.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
 
+  // `cust` is ONLY used as a fallback for NEW invoices (no saved version data).
+  // For existing invoices, all fields come directly from `latest` (the saved version).
   const cust = useMemo(() => {
     return lead ? lead : inv ? {
       customerName: inv.customerName || latest?.customerName || '',
@@ -21,6 +23,9 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
       id: inv.leadId || '',
     } : {};
   }, [lead, inv, latest]);
+
+  // Helper: check if this invoice has been saved before (has version data)
+  const hasSavedVersion = !!(latest && inv?.versions?.length);
 
   // Resolve items — exact same logic as old HTML generateInvoice()
   const resolvedItems = (() => {
@@ -82,19 +87,49 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const [savedToast, setSavedToast] = useState(false);
   const [isDirty, setIsDirty] = useState(!existingInvoice || isDuplicate); // new or duplicated invoices start dirty
 
-  // Consignee state — separate from buyer, defaults to same or loaded from invoice/version
-  const [consigneeName, setConsigneeName] = useState(() => latest?.consigneeName || inv?.consigneeName || cust.customerName || '');
-  const [consigneeAddr, setConsigneeAddr] = useState(() => latest?.consigneeAddr || inv?.consigneeAddr || (cust.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : ''));
-  const [consigneeState, setConsigneeState] = useState(() => latest?.consigneeState || inv?.consigneeState || cust.state || '');
-  const [consigneeMob, setConsigneeMob] = useState(() => latest?.consigneeMob || inv?.consigneeMob || cust.contact || '');
-  const [consigneeGst, setConsigneeGst] = useState(() => latest?.consigneeGst || inv?.consigneeGst || cust.gst || cust.customerGst || '-');
+  // Consignee state — saved version data takes absolute priority over lead data
+  const [consigneeName, setConsigneeName] = useState(() => {
+    if (hasSavedVersion && latest.consigneeName !== undefined) return latest.consigneeName;
+    return inv?.consigneeName || cust.customerName || '';
+  });
+  const [consigneeAddr, setConsigneeAddr] = useState(() => {
+    if (hasSavedVersion && latest.consigneeAddr !== undefined) return latest.consigneeAddr;
+    return inv?.consigneeAddr || (cust.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : '');
+  });
+  const [consigneeState, setConsigneeState] = useState(() => {
+    if (hasSavedVersion && latest.consigneeState !== undefined) return latest.consigneeState;
+    return inv?.consigneeState || cust.state || '';
+  });
+  const [consigneeMob, setConsigneeMob] = useState(() => {
+    if (hasSavedVersion && latest.consigneeMob !== undefined) return latest.consigneeMob;
+    return inv?.consigneeMob || cust.contact || '';
+  });
+  const [consigneeGst, setConsigneeGst] = useState(() => {
+    if (hasSavedVersion && latest.consigneeGst !== undefined) return latest.consigneeGst;
+    return inv?.consigneeGst || cust.gst || cust.customerGst || '-';
+  });
 
-  // Buyer state — tracks live edits to the Buyer fields
-  const [buyerName, setBuyerName] = useState(() => latest?.customerName || inv?.customerName || cust.customerName || '');
-  const [buyerContact, setBuyerContact] = useState(() => latest?.customerContact || inv?.customerContact || cust.contact || '');
-  const [buyerGst, setBuyerGst] = useState(() => latest?.customerGst || inv?.customerGst || cust.gst || cust.customerGst || '-');
-  const [buyerCity, setBuyerCity] = useState(() => latest?.customerCity || inv?.customerCity || cust.city || '');
-  const [buyerState, setBuyerState] = useState(() => latest?.customerState || inv?.customerState || cust.state || '');
+  // Buyer state — saved version data takes absolute priority over lead data
+  const [buyerName, setBuyerName] = useState(() => {
+    if (hasSavedVersion && latest.customerName !== undefined) return latest.customerName;
+    return inv?.customerName || cust.customerName || '';
+  });
+  const [buyerContact, setBuyerContact] = useState(() => {
+    if (hasSavedVersion && latest.customerContact !== undefined) return latest.customerContact;
+    return inv?.customerContact || cust.contact || '';
+  });
+  const [buyerGst, setBuyerGst] = useState(() => {
+    if (hasSavedVersion && latest.customerGst !== undefined) return latest.customerGst;
+    return inv?.customerGst || cust.gst || cust.customerGst || '-';
+  });
+  const [buyerCity, setBuyerCity] = useState(() => {
+    if (hasSavedVersion && latest.customerCity !== undefined) return latest.customerCity;
+    return inv?.customerCity || cust.city || '';
+  });
+  const [buyerState, setBuyerState] = useState(() => {
+    if (hasSavedVersion && latest.customerState !== undefined) return latest.customerState;
+    return inv?.customerState || cust.state || '';
+  });
 
   // Company details state
   const [compName, setCompName] = useState(() => latest?.companyName || c.name || '');
@@ -110,16 +145,22 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const [compCst, setCompCst] = useState(() => latest?.companyCst || c.cst || '');
   const [compPan, setCompPan] = useState(() => latest?.companyPan || c.pan || '');
 
-  // Metadata fields state
-  const [deliveryNote, setDeliveryNote] = useState(() => latest?.deliveryNote || '');
-  const [paymentTerms, setPaymentTerms] = useState(() => latest?.paymentTerms || 'Advance');
-  const [supplierRef, setSupplierRef] = useState(() => latest?.supplierRef || '');
-  const [otherRef, setOtherRef] = useState(() => latest?.otherRef || 'Freight Terms- To Pay Basis');
-  const [buyerOrderNo, setBuyerOrderNo] = useState(() => latest?.buyerOrderNo || '');
-  const [buyerOrderDate, setBuyerOrderDate] = useState(() => latest?.buyerOrderDate || '');
-  const [despatchedThrough, setDespatchedThrough] = useState(() => latest?.despatchedThrough || lead?.dispatchMethod || '');
-  const [destination, setDestination] = useState(() => latest?.destination || cust.city || '');
-  const [termsOfDelivery, setTermsOfDelivery] = useState(() => latest?.termsOfDelivery || '');
+  // Metadata fields state — saved version data takes priority, NO hardcoded defaults that override saves
+  const [deliveryNote, setDeliveryNote] = useState(() => latest?.deliveryNote ?? '');
+  const [paymentTerms, setPaymentTerms] = useState(() => latest?.paymentTerms ?? (hasSavedVersion ? '' : 'Advance'));
+  const [supplierRef, setSupplierRef] = useState(() => latest?.supplierRef ?? '');
+  const [otherRef, setOtherRef] = useState(() => latest?.otherRef ?? (hasSavedVersion ? '' : 'Freight Terms- To Pay Basis'));
+  const [buyerOrderNo, setBuyerOrderNo] = useState(() => latest?.buyerOrderNo ?? '');
+  const [buyerOrderDate, setBuyerOrderDate] = useState(() => latest?.buyerOrderDate ?? '');
+  const [despatchedThrough, setDespatchedThrough] = useState(() => {
+    if (hasSavedVersion && latest.despatchedThrough !== undefined) return latest.despatchedThrough;
+    return lead?.dispatchMethod || '';
+  });
+  const [destination, setDestination] = useState(() => {
+    if (hasSavedVersion && latest.destination !== undefined) return latest.destination;
+    return cust.city || '';
+  });
+  const [termsOfDelivery, setTermsOfDelivery] = useState(() => latest?.termsOfDelivery ?? '');
 
   // Totals calc
   let subtotal = 0, totalQty = 0;

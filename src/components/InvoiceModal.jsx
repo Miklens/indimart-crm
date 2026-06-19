@@ -89,6 +89,13 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const [consigneeMob, setConsigneeMob] = useState(() => latest?.consigneeMob || inv?.consigneeMob || cust.contact || '');
   const [consigneeGst, setConsigneeGst] = useState(() => latest?.consigneeGst || inv?.consigneeGst || cust.gst || cust.customerGst || '-');
 
+  // Buyer state — tracks live edits to the Buyer fields
+  const [buyerName, setBuyerName] = useState(() => latest?.customerName || inv?.customerName || cust.customerName || '');
+  const [buyerContact, setBuyerContact] = useState(() => latest?.customerContact || inv?.customerContact || cust.contact || '');
+  const [buyerGst, setBuyerGst] = useState(() => latest?.customerGst || inv?.customerGst || cust.gst || cust.customerGst || '-');
+  const [buyerCity, setBuyerCity] = useState(() => latest?.customerCity || inv?.customerCity || cust.city || '');
+  const [buyerState, setBuyerState] = useState(() => latest?.customerState || inv?.customerState || cust.state || '');
+
   // Totals calc
   let subtotal = 0, totalQty = 0;
   const taxGroups = {};
@@ -121,9 +128,9 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
       await new Promise(resolve => {
         saveInvoiceToHistory({
           invoiceNumber: finalNo, invoiceDate: finalDate,
-          customerName: cust.customerName, customerContact: cust.contact,
-          customerGst: cust.gst || cust.customerGst || '-',
-          customerCity: cust.city || '', customerState: cust.state || '',
+          customerName: buyerName, customerContact: buyerContact,
+          customerGst: buyerGst || '-',
+          customerCity: buyerCity || '', customerState: buyerState || '',
           leadId: cust.id || leadId, items: rawItems, totalAmount: grandTotal,
           otherCharges: parseFloat(freight) || 0, roundOff,
           receivedAmount: latest?.receivedAmount || 0, paymentStatus: latest?.paymentStatus || 'Pending',
@@ -146,7 +153,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
       setSaving(false);
     }
     // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty, consigneeName, consigneeAddr, consigneeState, consigneeMob, consigneeGst]);
+  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty, consigneeName, consigneeAddr, consigneeState, consigneeMob, consigneeGst, buyerName, buyerContact, buyerGst, buyerCity, buyerState]);
 
   const handlePrint = () => {
     // Save if: new invoice (not yet in history) OR user made changes (isDirty)
@@ -463,12 +470,12 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                 </div>
                 <div style={{ borderBottom: '1px solid #000', margin: '4px 0' }} />
                 <div style={{ fontWeight: 'bold', fontSize: '8.5pt', marginBottom: 2 }}>Buyer :</div>
-                <div style={{ fontWeight: 'bold', fontSize: '8pt', marginBottom: 1 }}><CE>{cust.customerName || '-'}</CE></div>
+                <div style={{ fontWeight: 'bold', fontSize: '8pt', marginBottom: 1 }}><CE onBlur={e => { markDirty(); setBuyerName(e.target.innerText.trim()); }}>{buyerName || '-'}</CE></div>
                 <div style={{ fontSize: '7.5pt', lineHeight: 1.3 }}>
-                  <div><CE>{cust.city || ''}{cust.state ? `, ${cust.state}` : ''}</CE></div>
-                  <div>State: <CE>{cust.state || '-'}</CE></div>
-                  <div>Mob:- <CE>{cust.contact || '-'}</CE></div>
-                  <div>GSTN- <CE>{cust.gst || '-'}</CE></div>
+                  <div><CE onBlur={e => { markDirty(); setBuyerCity(e.target.innerText.trim()); }}>{buyerCity || ''}</CE></div>
+                  <div>State: <CE onBlur={e => { markDirty(); setBuyerState(e.target.innerText.trim()); }}>{buyerState || '-'}</CE></div>
+                  <div>Mob:- <CE onBlur={e => { markDirty(); setBuyerContact(e.target.innerText.trim()); }}>{buyerContact || '-'}</CE></div>
+                  <div>GSTN- <CE onBlur={e => { markDirty(); setBuyerGst(e.target.innerText.trim()); }}>{buyerGst || '-'}</CE></div>
                 </div>
                 <div style={{ borderBottom: '1px solid #000', margin: '4px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, flexWrap: 'wrap', gap: '4px' }}>

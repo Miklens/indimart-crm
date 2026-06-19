@@ -359,19 +359,19 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
 
       row++; // spacer
 
-      // ── BUYER / INVOICE META ───────────────────────────────────────────────
-      // Left 4 cols = buyer/consignee, Right 4 cols = invoice fields
+      // ── BILLING / DELIVERY ADDRESSES & INVOICE META ───────────────────────────────────────────────
+      // Left 4 cols = billing/delivery addresses, Right 4 cols = invoice fields
       const metaData = [
-        ['Buyer:', cust.customerName || '-', 'Invoice No.:', invNo],
-        [cust.gst ? `GSTIN: ${cust.gst}` : '', `${cust.city || ''}${cust.state ? ', '+cust.state : ''}`, 'Date:', invDate],
-        [`Mob: ${cust.contact || '-'}`, '', 'Payment Terms:', 'Advance'],
-        ['', '', 'Freight Terms:', 'To Pay Basis'],
-        ['Consignee:', consigneeName || cust.customerName || '-', 'Dispatched Through:', lead?.dispatchMethod || '-'],
-        [`Mob: ${consigneeMob || cust.contact || '-'}`, consigneeAddr || '', 'Destination:', cust.city || '-'],
-        [`GSTIN: ${consigneeGst || '-'}`, '', 'Supplier Ref:', '-'],
+        ['Billing Address:', buyerName || cust.customerName || '-', 'Invoice No.:', invNo],
+        [buyerGst ? `GSTIN: ${buyerGst}` : '', `${buyerCity || ''}${buyerState ? ', '+buyerState : ''}`, 'Date:', invDate],
+        [`Mob: ${buyerContact || '-'}`, '', 'Payment Terms:', paymentTerms || 'Advance'],
+        ['', '', 'Freight Terms:', otherRef || 'Freight Terms- To Pay Basis'],
+        ['Delivery Address:', consigneeName || buyerName || cust.customerName || '-', 'Dispatched Through:', despatchedThrough || '-'],
+        [`Mob: ${consigneeMob || buyerContact || '-'}`, consigneeAddr || '', 'Destination:', destination || '-'],
+        [`GSTIN: ${consigneeGst || '-'}`, '', 'Supplier Ref:', supplierRef || '-'],
       ];
       metaData.forEach(([la, lb, ra, rb]) => {
-        m(row, 1, row, 2); setCell(row, 1, la, la.endsWith(':') || la === 'Buyer:' || la === 'Consignee:' ? boldF : null, leftM);
+        m(row, 1, row, 2); setCell(row, 1, la, la.endsWith(':') || la === 'Billing Address:' || la === 'Delivery Address:' ? boldF : null, leftM);
         m(row, 3, row, 4); setCell(row, 3, lb, null, leftM);
         m(row, 5, row, 6); setCell(row, 5, ra, boldF, leftM);
         m(row, 7, row, 8); setCell(row, 7, rb, null, leftM);
@@ -559,7 +559,68 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   <div>E-Mail: <CE onBlur={e => { markDirty(); setCompEmail(e.target.innerText.trim()); }}>{compEmail}</CE></div>
                 </div>
                 <div style={{ borderBottom: '1px solid #000', margin: '4px 0' }} />
-                <div style={{ fontWeight: 'bold', fontSize: '8.5pt', marginBottom: 2 }}>Buyer :</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, flexWrap: 'wrap', gap: '4px' }}>
+                  <span style={{ fontWeight: 'bold', fontSize: '8.5pt' }}>Billing Address:</span>
+                  {lead && (
+                    <div className="no-print" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                      <select 
+                        value="" 
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (!val) return;
+                          if (val === 'default') {
+                            setBuyerName(lead.customerName || '');
+                            setBuyerCity(lead.city || '');
+                            setBuyerState(lead.state || '');
+                            setBuyerContact(lead.contact || '');
+                            setBuyerGst(lead.gst || lead.customerGst || '-');
+                            markDirty();
+                          } else {
+                            const found = (lead?.addresses || []).find(a => a.id === val);
+                            if (found) {
+                              setBuyerName(found.consigneeName);
+                              setBuyerCity(found.consigneeAddr);
+                              setBuyerState(found.consigneeState);
+                              setBuyerContact(found.consigneeMob);
+                              setBuyerGst(found.consigneeGst);
+                              markDirty();
+                            }
+                          }
+                          e.target.value = "";
+                        }}
+                        style={{ fontSize: '7.5pt', padding: '1px 4px', background: '#2d3748', color: '#fff', border: '1px solid #4a5568', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        <option value="">-- Select Saved Location --</option>
+                        <option value="default">Default (Lead Data)</option>
+                        {(lead?.addresses || []).map(a => (
+                          <option key={a.id} value={a.id}>{a.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const label = prompt("Enter a label for this address location (e.g. Head Office, Mumbai):");
+                          if (!label) return;
+                          const newAddr = {
+                            id: 'addr_' + Date.now(),
+                            label: label.trim(),
+                            consigneeName: buyerName,
+                            consigneeAddr: buyerCity,
+                            consigneeState: buyerState,
+                            consigneeMob: buyerContact,
+                            consigneeGst: buyerGst
+                          };
+                          const updatedAddresses = [...(lead?.addresses || []), newAddr];
+                          updateLead(lead.id, { addresses: updatedAddresses });
+                          showBanner(`Location "${label.trim()}" saved!`, 'success');
+                        }}
+                        style={{ fontSize: '7pt', background: '#319795', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                      >
+                        Save Location
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div style={{ fontWeight: 'bold', fontSize: '8pt', marginBottom: 1 }}><CE onBlur={e => { markDirty(); setBuyerName(e.target.innerText.trim()); }}>{buyerName || '-'}</CE></div>
                 <div style={{ fontSize: '7.5pt', lineHeight: 1.3 }}>
                   <div><CE onBlur={e => { markDirty(); setBuyerCity(e.target.innerText.trim()); }}>{buyerCity || ''}</CE></div>
@@ -569,7 +630,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                 </div>
                 <div style={{ borderBottom: '1px solid #000', margin: '4px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, flexWrap: 'wrap', gap: '4px' }}>
-                  <span style={{ fontWeight: 'bold', fontSize: '8.5pt' }}>Consignee:</span>
+                  <span style={{ fontWeight: 'bold', fontSize: '8.5pt' }}>Delivery Address:</span>
                   {lead && (
                     <div className="no-print" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                       <select 
@@ -578,8 +639,6 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                           const val = e.target.value;
                           if (!val) return;
                           if (val === 'default') {
-                            // Copy from CURRENT buyer fields (not raw lead data)
-                            // so edits to buyer name/address are reflected
                             setConsigneeName(buyerName || '');
                             setConsigneeAddr(buyerCity ? `${buyerCity}${buyerState ? ', ' + buyerState : ''}` : '');
                             setConsigneeState(buyerState || '');
@@ -597,12 +656,12 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                               markDirty();
                             }
                           }
-                          e.target.value = ""; // reset dropdown
+                          e.target.value = "";
                         }}
                         style={{ fontSize: '7.5pt', padding: '1px 4px', background: '#2d3748', color: '#fff', border: '1px solid #4a5568', borderRadius: '4px', cursor: 'pointer' }}
                       >
                         <option value="">-- Select Saved Location --</option>
-                        <option value="default">Default (Same as Buyer)</option>
+                        <option value="default">Default (Same as Billing Address)</option>
                         {(lead?.addresses || []).map(a => (
                           <option key={a.id} value={a.id}>{a.label}</option>
                         ))}
@@ -633,7 +692,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   )}
                 </div>
                 <div style={{ fontSize: '7.5pt', lineHeight: 1.3 }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '8pt' }}><CE onBlur={e => { markDirty(); setConsigneeName(e.target.innerText.trim()); }}>{consigneeName || 'Same as Buyer'}</CE></div>
+                  <div style={{ fontWeight: 'bold', fontSize: '8pt' }}><CE onBlur={e => { markDirty(); setConsigneeName(e.target.innerText.trim()); }}>{consigneeName || 'Same as Billing Address'}</CE></div>
                   <CE onBlur={e => { markDirty(); setConsigneeAddr(e.target.innerText.trim()); }}>{consigneeAddr}</CE>
                   <div>State: <CE onBlur={e => { markDirty(); setConsigneeState(e.target.innerText.trim()); }}>{consigneeState || '-'}</CE></div>
                   <div>Mob:- <CE onBlur={e => { markDirty(); setConsigneeMob(e.target.innerText.trim()); }}>{consigneeMob || '-'}</CE></div>
@@ -849,7 +908,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
         {pageNum === 2 && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #000', padding: '6px 8px', fontSize: '8pt' }}>
-              <div><strong>Buyer:</strong> <span style={{ display: 'block', marginTop: 2 }}>{cust.customerName}</span></div>
+              <div><strong>Billing Address:</strong> <span style={{ display: 'block', marginTop: 2 }}>{buyerName || cust.customerName || '-'}</span></div>
               <div style={{ textAlign: 'right' }}><strong>Page 2 of 2</strong></div>
             </div>
             {/* Bank + Tax repeated on page 2 */}

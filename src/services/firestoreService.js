@@ -73,7 +73,10 @@ export async function fsGetInvoices() {
 export async function fsSetInvoice(invoice) {
   const id = safeInvoiceId(invoice.invoiceNumber);
   if (!id) throw new Error('invoiceNumber required');
-  await setDoc(ref('invoices', id), clean({ ...invoice, _updatedAt: serverTimestamp() }), { merge: true });
+  // IMPORTANT: Do NOT use merge:true for invoices.
+  // merge:true does deep-merge on arrays, so removed items/versions persist in Firestore
+  // and overwrite local state when the listener fires. Full overwrite ensures deletions stick.
+  await setDoc(ref('invoices', id), clean({ ...invoice, _updatedAt: serverTimestamp() }));
 }
 
 export async function fsUpdateInvoice(invoiceNumber, updates) {

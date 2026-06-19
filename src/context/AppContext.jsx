@@ -125,20 +125,23 @@ function sanitizeInvoiceNumbers(history) {
         items: parseItems(v.items)
       }));
       const latest = fixedVersions[fixedVersions.length - 1];
+      // IMPORTANT: Latest version values MUST take priority over old top-level values.
+      // The whole point of versioning is that the latest version represents current state.
+      // Using inv.field || latest.field would cause old values to override new version edits.
       normalized = {
         ...inv,
         invoiceNumber: fixedNum,
-        customerName: inv.customerName || latest.customerName || '',
-        customerContact: normalizeContact(inv.customerContact || inv.contact || latest.customerContact || ''),
-        customerGst: inv.customerGst || latest.customerGst || '',
-        customerCity: inv.customerCity || latest.customerCity || '',
-        customerState: inv.customerState || latest.customerState || '',
-        leadId: inv.leadId || latest.leadId || '',
-        consigneeName: inv.consigneeName || latest.consigneeName || '',
-        consigneeAddr: inv.consigneeAddr || latest.consigneeAddr || '',
-        consigneeState: inv.consigneeState || latest.consigneeState || '',
-        consigneeMob: inv.consigneeMob || latest.consigneeMob || '',
-        consigneeGst: inv.consigneeGst || latest.consigneeGst || '',
+        customerName: latest.customerName || inv.customerName || '',
+        customerContact: normalizeContact(latest.customerContact || inv.customerContact || inv.contact || ''),
+        customerGst: latest.customerGst || inv.customerGst || '',
+        customerCity: latest.customerCity || inv.customerCity || '',
+        customerState: latest.customerState || inv.customerState || '',
+        leadId: latest.leadId || inv.leadId || '',
+        consigneeName: latest.consigneeName || inv.consigneeName || '',
+        consigneeAddr: latest.consigneeAddr || inv.consigneeAddr || '',
+        consigneeState: latest.consigneeState || inv.consigneeState || '',
+        consigneeMob: latest.consigneeMob || inv.consigneeMob || '',
+        consigneeGst: latest.consigneeGst || inv.consigneeGst || '',
         companyName: latest.companyName || inv.companyName || '',
         companyAddress: latest.companyAddress || inv.companyAddress || '',
         companyGst: latest.companyGst || inv.companyGst || '',
@@ -788,7 +791,7 @@ export function AppProvider({ children }) {
         if (inv.invoiceNumber !== invoiceNumber) return inv;
         const versions = [...(inv.versions || [])];
         if (versions.length > 0) versions[versions.length - 1] = { ...versions[versions.length - 1], receivedAmount: amt, paymentStatus };
-        return { ...inv, versions };
+        return { ...inv, receivedAmount: amt, paymentStatus, versions };
       });
       persist('indimart_invoice_history', updated);
       syncPaymentToLead(updated, invoiceNumber);
@@ -819,8 +822,52 @@ export function AppProvider({ children }) {
         if (fbEnabled) fsDeleteInvoice(invoiceNumber).catch(console.error);
       } else {
         const latest = versions[versions.length - 1];
-        const upserted = { ...inv, versions, latestVersion: versions.length, updatedAt: new Date().toISOString(),
-          customerName: latest.customerName || inv.customerName };
+        // Sync ALL top-level fields from the new latest version
+        const upserted = {
+          ...inv,
+          versions,
+          latestVersion: versions.length,
+          updatedAt: new Date().toISOString(),
+          customerName: latest.customerName || inv.customerName || '',
+          customerContact: latest.customerContact || inv.customerContact || '',
+          customerGst: latest.customerGst || inv.customerGst || '',
+          customerCity: latest.customerCity || inv.customerCity || '',
+          customerState: latest.customerState || inv.customerState || '',
+          consigneeName: latest.consigneeName || '',
+          consigneeAddr: latest.consigneeAddr || '',
+          consigneeState: latest.consigneeState || '',
+          consigneeMob: latest.consigneeMob || '',
+          consigneeGst: latest.consigneeGst || '',
+          invoiceDate: latest.invoiceDate || inv.invoiceDate || '',
+          items: latest.items || [],
+          totalAmount: parseFloat(latest.totalAmount) || 0,
+          otherCharges: parseFloat(latest.otherCharges) || 0,
+          roundOff: parseFloat(latest.roundOff) || 0,
+          receivedAmount: parseFloat(latest.receivedAmount) || 0,
+          paymentStatus: latest.paymentStatus || 'Pending',
+          status: latest.status || 'Pending',
+          companyName: latest.companyName || inv.companyName || '',
+          companyAddress: latest.companyAddress || inv.companyAddress || '',
+          companyGst: latest.companyGst || inv.companyGst || '',
+          companyMobile: latest.companyMobile || inv.companyMobile || '',
+          companyEmail: latest.companyEmail || inv.companyEmail || '',
+          companyBankName: latest.companyBankName || inv.companyBankName || '',
+          companyAccNo: latest.companyAccNo || inv.companyAccNo || '',
+          companyBranch: latest.companyBranch || inv.companyBranch || '',
+          companyIfsc: latest.companyIfsc || inv.companyIfsc || '',
+          companyVat: latest.companyVat || inv.companyVat || '',
+          companyCst: latest.companyCst || inv.companyCst || '',
+          companyPan: latest.companyPan || inv.companyPan || '',
+          deliveryNote: latest.deliveryNote || '',
+          paymentTerms: latest.paymentTerms || '',
+          supplierRef: latest.supplierRef || '',
+          otherRef: latest.otherRef || '',
+          buyerOrderNo: latest.buyerOrderNo || '',
+          buyerOrderDate: latest.buyerOrderDate || '',
+          despatchedThrough: latest.despatchedThrough || '',
+          destination: latest.destination || '',
+          termsOfDelivery: latest.termsOfDelivery || '',
+        };
         updated = prev.map(i => i.invoiceNumber === invoiceNumber ? upserted : i);
         if (fbEnabled) fsSetInvoice(upserted).catch(console.error);
       }

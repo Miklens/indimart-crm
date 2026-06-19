@@ -63,10 +63,24 @@ function sanitizeInvoiceNumbers(history) {
       try { return JSON.parse(raw); } catch { return []; }
     };
 
+    // Parse versions if stored as JSON string
+    const parseVersions = (raw) => {
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw;
+      try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const rawVersions = parseVersions(inv.versions);
+
     // Normalize flat GS-migrated invoice into versioned shape
     // A properly shaped invoice has a `versions` array; flat ones don't
     let normalized;
-    if (!Array.isArray(inv.versions) || inv.versions.length === 0) {
+    if (!Array.isArray(rawVersions) || rawVersions.length === 0) {
       const versionEntry = {
         invoiceNumber: fixedNum,
         invoiceDate: inv.invoiceDate || inv.date || '',
@@ -80,6 +94,11 @@ function sanitizeInvoiceNumbers(history) {
         version: 1,
         createdAt: inv.createdAt || new Date().toISOString(),
         id: inv.id || inv.invoiceNumber,
+        consigneeName: inv.consigneeName || inv.customerName || '',
+        consigneeAddr: inv.consigneeAddr || (inv.customerCity ? `${inv.customerCity}${inv.customerState ? ', ' + inv.customerState : ''}` : ''),
+        consigneeState: inv.consigneeState || inv.customerState || '',
+        consigneeMob: inv.consigneeMob || inv.customerContact || '',
+        consigneeGst: inv.consigneeGst || inv.customerGst || '-',
       };
       normalized = {
         invoiceNumber: fixedNum,
@@ -90,6 +109,11 @@ function sanitizeInvoiceNumbers(history) {
         customerState: inv.customerState || inv.state || '',
         leadId: inv.leadId || '',
         latestVersion: 1,
+        consigneeName: inv.consigneeName || inv.customerName || '',
+        consigneeAddr: inv.consigneeAddr || (inv.customerCity ? `${inv.customerCity}${inv.customerState ? ', ' + inv.customerState : ''}` : ''),
+        consigneeState: inv.consigneeState || inv.customerState || '',
+        consigneeMob: inv.consigneeMob || inv.customerContact || '',
+        consigneeGst: inv.consigneeGst || inv.customerGst || '-',
         createdAt: inv.createdAt || new Date().toISOString(),
         updatedAt: inv.updatedAt || new Date().toISOString(),
         versions: [versionEntry],
@@ -99,13 +123,13 @@ function sanitizeInvoiceNumbers(history) {
       normalized = {
         ...inv,
         invoiceNumber: fixedNum,
-        versions: inv.versions.map(v => ({ ...v, invoiceNumber: fixedNum, items: parseItems(v.items) })),
+        versions: rawVersions.map(v => ({ ...v, invoiceNumber: fixedNum, items: parseItems(v.items) })),
       };
     } else {
       // Already properly shaped — just ensure items are parsed in each version
       normalized = {
         ...inv,
-        versions: inv.versions.map(v => ({ ...v, items: parseItems(v.items) })),
+        versions: rawVersions.map(v => ({ ...v, items: parseItems(v.items) })),
       };
     }
     return normalized;
@@ -507,10 +531,17 @@ export function AppProvider({ children }) {
       const existing = prev.find(inv => inv.invoiceNumber === invoiceData.invoiceNumber);
       let updated, upserted;
       if (existing) {
-        const nextVersion = (existing.versions?.length || 0) + 1;
+        let existingVersions = existing.versions;
+        if (typeof existingVersions === 'string') {
+          try { existingVersions = JSON.parse(existingVersions); } catch { existingVersions = []; }
+        }
+        if (!Array.isArray(existingVersions)) {
+          existingVersions = [];
+        }
+        const nextVersion = (existingVersions.length || 0) + 1;
         const versionEntry = { ...invoiceData, customerContact: normContact, leadId: resolvedLeadId, version: nextVersion, createdAt: new Date().toISOString(), id: `INV${Date.now()}`, deliveryStatus: invoiceData.deliveryStatus || existing.deliveryStatus || 'Converted' };
-        const versions = existing.versions
-          ? [...existing.versions, versionEntry]
+        const versions = existingVersions.length > 0
+          ? [...existingVersions, versionEntry]
           : [{ ...existing, version: 1, createdAt: existing.createdAt || new Date().toISOString() }, versionEntry];
         upserted = { ...existing,
           customerName: invoiceData.customerName,
@@ -520,6 +551,11 @@ export function AppProvider({ children }) {
           customerState: invoiceData.customerState,
           leadId: resolvedLeadId || existing.leadId || '',
           deliveryStatus: invoiceData.deliveryStatus || existing.deliveryStatus || 'Converted',
+          consigneeName: invoiceData.consigneeName || '',
+          consigneeAddr: invoiceData.consigneeAddr || '',
+          consigneeState: invoiceData.consigneeState || '',
+          consigneeMob: invoiceData.consigneeMob || '',
+          consigneeGst: invoiceData.consigneeGst || '',
           updatedAt: new Date().toISOString(), versions, latestVersion: nextVersion };
         updated = prev.map(inv => inv.invoiceNumber === invoiceData.invoiceNumber ? upserted : inv);
       } else {
@@ -533,6 +569,11 @@ export function AppProvider({ children }) {
           customerState: invoiceData.customerState,
           leadId: resolvedLeadId, latestVersion: 1,
           deliveryStatus: initialDeliveryStatus,
+          consigneeName: invoiceData.consigneeName || '',
+          consigneeAddr: invoiceData.consigneeAddr || '',
+          consigneeState: invoiceData.consigneeState || '',
+          consigneeMob: invoiceData.consigneeMob || '',
+          consigneeGst: invoiceData.consigneeGst || '',
           createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
           versions: [{ ...invoiceData, customerContact: normContact, leadId: resolvedLeadId, version: 1, createdAt: new Date().toISOString(), id: `INV${Date.now()}`, deliveryStatus: initialDeliveryStatus }],
         };
@@ -899,9 +940,38 @@ export function useApp() {
 }
 
 function wrapInvoice(inv) {
-  if (inv.versions?.length) return inv;
+  let parsedVersions = inv.versions;
+  if (typeof parsedVersions === 'string') {
+    try { parsedVersions = JSON.parse(parsedVersions); } catch { parsedVersions = []; }
+  }
+  if (Array.isArray(parsedVersions) && parsedVersions.length > 0) {
+    return { ...inv, versions: parsedVersions };
+  }
   return {
     invoiceNumber: inv.invoiceNumber, customerName: inv.customerName, customerContact: inv.customerContact, customerGst: inv.customerGst, customerCity: inv.customerCity, customerState: inv.customerState, leadId: inv.leadId, latestVersion: 1, createdAt: inv.createdAt, updatedAt: inv.updatedAt,
-    versions: [{ id: inv.id, invoiceNumber: inv.invoiceNumber, invoiceDate: inv.invoiceDate, items: inv.items, totalAmount: inv.totalAmount, otherCharges: inv.otherCharges || 0, roundOff: inv.roundOff || 0, status: inv.status, receivedAmount: inv.receivedAmount || 0, paymentStatus: inv.paymentStatus || 'Pending', version: 1, createdAt: inv.createdAt }],
+    consigneeName: inv.consigneeName || inv.customerName || '',
+    consigneeAddr: inv.consigneeAddr || (inv.customerCity ? `${inv.customerCity}${inv.customerState ? ', ' + inv.customerState : ''}` : ''),
+    consigneeState: inv.consigneeState || inv.customerState || '',
+    consigneeMob: inv.consigneeMob || inv.customerContact || '',
+    consigneeGst: inv.consigneeGst || inv.customerGst || '-',
+    versions: [{ 
+      id: inv.id || `INV${Date.now()}`, 
+      invoiceNumber: inv.invoiceNumber, 
+      invoiceDate: inv.invoiceDate || '', 
+      items: inv.items, 
+      totalAmount: inv.totalAmount, 
+      otherCharges: inv.otherCharges || 0, 
+      roundOff: inv.roundOff || 0, 
+      status: inv.status || 'Pending', 
+      receivedAmount: inv.receivedAmount || 0, 
+      paymentStatus: inv.paymentStatus || 'Pending', 
+      version: 1, 
+      createdAt: inv.createdAt || new Date().toISOString(),
+      consigneeName: inv.consigneeName || inv.customerName || '',
+      consigneeAddr: inv.consigneeAddr || (inv.customerCity ? `${inv.customerCity}${inv.customerState ? ', ' + inv.customerState : ''}` : ''),
+      consigneeState: inv.consigneeState || inv.customerState || '',
+      consigneeMob: inv.consigneeMob || inv.customerContact || '',
+      consigneeGst: inv.consigneeGst || inv.customerGst || '-',
+    }],
   };
 }

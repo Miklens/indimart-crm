@@ -6,9 +6,9 @@ import { numberToWords, formatDate } from '../utils/dataConfig';
 const CE = ({ id, style, children, onBlur }) => <span id={id} contentEditable suppressContentEditableWarning onBlur={onBlur} style={{ outline: 'none', ...style }}>{children}</span>;
 
 export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose, initialItems }) {
-  const { leads, invoiceHistory, products, companySettings: c, saveInvoiceToHistory, getNextInvoiceNumber, showBanner } = useApp();
-  const lead = leadId ? leads.find(l => l.id === leadId) : null;
+  const { leads, invoiceHistory, products, companySettings: c, saveInvoiceToHistory, getNextInvoiceNumber, showBanner, updateLead } = useApp();
   const inv = existingInvoice;
+  const lead = (leadId || inv?.leadId) ? leads.find(l => l.id === (leadId || inv.leadId)) : null;
   const latest = inv?.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
 
   const cust = useMemo(() => {
@@ -82,12 +82,12 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const [savedToast, setSavedToast] = useState(false);
   const [isDirty, setIsDirty] = useState(!existingInvoice); // new invoices start dirty
 
-  // Consignee state — separate from buyer, defaults to same
-  const [consigneeName, setConsigneeName] = useState(cust.customerName || '');
-  const [consigneeAddr, setConsigneeAddr] = useState(cust.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : '');
-  const [consigneeState, setConsigneeState] = useState(cust.state || '');
-  const [consigneeMob, setConsigneeMob] = useState(cust.contact || '');
-  const [consigneeGst, setConsigneeGst] = useState(cust.gst || cust.customerGst || '-');
+  // Consignee state — separate from buyer, defaults to same or loaded from invoice/version
+  const [consigneeName, setConsigneeName] = useState(() => latest?.consigneeName || inv?.consigneeName || cust.customerName || '');
+  const [consigneeAddr, setConsigneeAddr] = useState(() => latest?.consigneeAddr || inv?.consigneeAddr || (cust.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : ''));
+  const [consigneeState, setConsigneeState] = useState(() => latest?.consigneeState || inv?.consigneeState || cust.state || '');
+  const [consigneeMob, setConsigneeMob] = useState(() => latest?.consigneeMob || inv?.consigneeMob || cust.contact || '');
+  const [consigneeGst, setConsigneeGst] = useState(() => latest?.consigneeGst || inv?.consigneeGst || cust.gst || cust.customerGst || '-');
 
   // Totals calc
   let subtotal = 0, totalQty = 0;
@@ -128,6 +128,11 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
           otherCharges: parseFloat(freight) || 0, roundOff,
           receivedAmount: latest?.receivedAmount || 0, paymentStatus: latest?.paymentStatus || 'Pending',
           status: 'Sent',
+          consigneeName,
+          consigneeAddr,
+          consigneeState,
+          consigneeMob,
+          consigneeGst,
         });
         resolve();
       });
@@ -141,7 +146,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
       setSaving(false);
     }
     // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty]);
+  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty, consigneeName, consigneeAddr, consigneeState, consigneeMob, consigneeGst]);
 
   const handlePrint = () => {
     // Save if: new invoice (not yet in history) OR user made changes (isDirty)
@@ -466,7 +471,68 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   <div>GSTN- <CE>{cust.gst || '-'}</CE></div>
                 </div>
                 <div style={{ borderBottom: '1px solid #000', margin: '4px 0' }} />
-                <div style={{ fontWeight: 'bold', fontSize: '8.5pt', marginBottom: 2 }}>Consignee:</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, flexWrap: 'wrap', gap: '4px' }}>
+                  <span style={{ fontWeight: 'bold', fontSize: '8.5pt' }}>Consignee:</span>
+                  {lead && (
+                    <div className="no-print" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                      <select 
+                        value="" 
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (!val) return;
+                          if (val === 'default') {
+                            setConsigneeName(cust.customerName || '');
+                            setConsigneeAddr(cust.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : '');
+                            setConsigneeState(cust.state || '');
+                            setConsigneeMob(cust.contact || '');
+                            setConsigneeGst(cust.gst || cust.customerGst || '-');
+                            markDirty();
+                          } else {
+                            const found = (lead?.addresses || []).find(a => a.id === val);
+                            if (found) {
+                              setConsigneeName(found.consigneeName);
+                              setConsigneeAddr(found.consigneeAddr);
+                              setConsigneeState(found.consigneeState);
+                              setConsigneeMob(found.consigneeMob);
+                              setConsigneeGst(found.consigneeGst);
+                              markDirty();
+                            }
+                          }
+                          e.target.value = ""; // reset dropdown
+                        }}
+                        style={{ fontSize: '7.5pt', padding: '1px 4px', background: '#2d3748', color: '#fff', border: '1px solid #4a5568', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        <option value="">-- Select Saved Location --</option>
+                        <option value="default">Default (Same as Buyer)</option>
+                        {(lead?.addresses || []).map(a => (
+                          <option key={a.id} value={a.id}>{a.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const label = prompt("Enter a label for this address location (e.g. Warehouse 1, Chennai Office):");
+                          if (!label) return;
+                          const newAddr = {
+                            id: 'addr_' + Date.now(),
+                            label: label.trim(),
+                            consigneeName,
+                            consigneeAddr,
+                            consigneeState,
+                            consigneeMob,
+                            consigneeGst
+                          };
+                          const updatedAddresses = [...(lead?.addresses || []), newAddr];
+                          updateLead(lead.id, { addresses: updatedAddresses });
+                          showBanner(`Location "${label.trim()}" saved!`, 'success');
+                        }}
+                        style={{ fontSize: '7pt', background: '#319795', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
+                      >
+                        Save Location
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div style={{ fontSize: '7.5pt', lineHeight: 1.3 }}>
                   <div style={{ fontWeight: 'bold', fontSize: '8pt' }}><CE onBlur={e => { markDirty(); setConsigneeName(e.target.innerText.trim()); }}>{consigneeName || 'Same as Buyer'}</CE></div>
                   <CE onBlur={e => { markDirty(); setConsigneeAddr(e.target.innerText.trim()); }}>{consigneeAddr}</CE>

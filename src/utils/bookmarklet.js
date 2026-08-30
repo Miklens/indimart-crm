@@ -1,11 +1,11 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - Resilient date scanning (no early termination on single out-of-order dates, requires 12 consecutive older leads)
- * - "All Leads" & "Last 90D" presets for full catalogue extraction
- * - Robust click dispatching (triggers React synthetic events)
- * - Multi-stage phone extraction (header badges, tel: links, call logs, conversation text)
- * - Smooth step-by-step infinite scroll through all virtualized items
+ * - Guaranteed scroll-to-top on scan start (captures newest leads from today downwards)
+ * - Timezone-safe local date formatting and parsing
+ * - Resilient consecutive older date threshold (20 consecutive items before stopping)
+ * - Multi-stage phone extraction (conversation header badge, tel: links, call logs, chat body)
+ * - "All Leads", "90D", "30D", "7D", "Today" quick presets
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -63,9 +63,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       '</div>' +
     '</div>' +
     '<div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">' +
+      '<button id="preset-today" style="flex:1; padding:4px 6px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Today</button>' +
       '<button id="preset-7d" style="flex:1; padding:4px 6px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">7D</button>' +
       '<button id="preset-30d" style="flex:1; padding:4px 6px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">30D</button>' +
-      '<button id="preset-90d" style="flex:1; padding:4px 6px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">90D</button>' +
       '<button id="preset-all" style="flex:1; padding:4px 6px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#10b981; font-size:11px; cursor:pointer; font-weight:700;">All Leads</button>' +
     '</div>' +
     '<div style="display:flex; gap:8px; margin-bottom:12px;">' +
@@ -126,20 +126,27 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       };
     };
 
-    var today = new Date().toISOString().split('T')[0];
-    var past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    var past30 = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    var past90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    function formatLocalDate(d) {
+      var yr = d.getFullYear();
+      var mo = String(d.getMonth() + 1).padStart(2, '0');
+      var dy = String(d.getDate()).padStart(2, '0');
+      return yr + '-' + mo + '-' + dy;
+    }
+
+    var now = new Date();
+    var todayStr = formatLocalDate(now);
+    var past7Str = formatLocalDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
+    var past35Str = formatLocalDate(new Date(now.getTime() - 35 * 24 * 60 * 60 * 1000));
     
     var startInput = document.getElementById('sync-start-date');
     var endInput = document.getElementById('sync-end-date');
-    startInput.value = past30;
-    endInput.value = today;
+    startInput.value = past35Str;
+    endInput.value = todayStr;
 
-    document.getElementById('preset-7d').onclick = function() { startInput.value = past7; endInput.value = today; };
-    document.getElementById('preset-30d').onclick = function() { startInput.value = past30; endInput.value = today; };
-    document.getElementById('preset-90d').onclick = function() { startInput.value = past90; endInput.value = today; };
-    document.getElementById('preset-all').onclick = function() { startInput.value = ''; endInput.value = today; };
+    document.getElementById('preset-today').onclick = function() { startInput.value = todayStr; endInput.value = todayStr; };
+    document.getElementById('preset-7d').onclick = function() { startInput.value = past7Str; endInput.value = todayStr; };
+    document.getElementById('preset-30d').onclick = function() { startInput.value = past35Str; endInput.value = todayStr; };
+    document.getElementById('preset-all').onclick = function() { startInput.value = ''; endInput.value = todayStr; };
     document.getElementById('close-sync-panel').onclick = function() { panel.remove(); };
 
     function findContactCards() {
@@ -218,6 +225,19 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       return [];
     }
 
+    function scrollAllLeftToTop() {
+      var allLeft = Array.from(document.querySelectorAll('*')).filter(function(el) {
+        if (el.id && el.id.includes('indimart-sync')) return false;
+        var r = el.getBoundingClientRect();
+        return r.left < 500 && r.scrollHeight > r.clientHeight && r.clientHeight > 100;
+      });
+      for (var i = 0; i < allLeft.length; i++) {
+        allLeft[i].scrollTop = 0;
+        allLeft[i].dispatchEvent(new Event('scroll', { bubbles: true }));
+      }
+      window.scrollTo(0, 0);
+    }
+
     function findScrollContainer(firstCard) {
       if (firstCard) {
         var p = firstCard.parentElement;
@@ -244,15 +264,15 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     }
 
     function parseLeadDate(dateStr) {
-      var leadDate = new Date();
-      if (!dateStr) { return leadDate; }
-      var dLower = dateStr.toLowerCase().trim();
+      var n = new Date();
+      if (!dateStr) { return n; }
+      var dLower = String(dateStr).toLowerCase().trim();
       
-      if (dLower.includes('today') || dLower.includes('am') || dLower.includes('pm') || /\\b\\d{1,2}:\\d{2}\\b/.test(dLower)) {
-        return new Date();
+      if (dLower.includes('today') || /\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?)\\b/i.test(dLower)) {
+        return n;
       }
       if (dLower.includes('yesterday')) {
-        return new Date(Date.now() - 24 * 60 * 60 * 1000);
+        return new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1, 12, 0, 0);
       }
       
       var months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -264,22 +284,23 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         var dayMatch = dLower.match(/\\b(\\d{1,2})\\b/);
         var yearMatch = dLower.match(/\\b(20\\d{2})\\b/);
         var day = dayMatch ? parseInt(dayMatch[1], 10) : 1;
-        var year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+        var year = yearMatch ? parseInt(yearMatch[1], 10) : n.getFullYear();
         if (!isNaN(day) && mIndex !== -1) {
-          return new Date(year, mIndex, day);
+          return new Date(year, mIndex, day, 12, 0, 0);
         }
       }
       
-      var numDateMatch = dLower.match(/(\\d{1,2})[\\/\\-\\.](\\d{1,2})(?:[\\/\\-\\.](\\d{2,4}))?/);
-      if (numDateMatch) {
-        var d = parseInt(numDateMatch[1], 10);
-        var m = parseInt(numDateMatch[2], 10) - 1;
-        var y = numDateMatch[3] ? parseInt(numDateMatch[3], 10) : new Date().getFullYear();
-        if (y < 100) { y += 2000; }
-        return new Date(y, m, d);
+      var ymdMatch = dLower.match(/(\\d{4})[-\\/](\\d{1,2})[-\\/](\\d{1,2})/);
+      if (ymdMatch) {
+        return new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10), 12, 0, 0);
       }
       
-      return leadDate;
+      var dmyMatch = dLower.match(/(\\d{1,2})[-\\/](\\d{1,2})[-\\/](\\d{4})/);
+      if (dmyMatch) {
+        return new Date(parseInt(dmyMatch[3], 10), parseInt(dmyMatch[2], 10) - 1, parseInt(dmyMatch[1], 10), 12, 0, 0);
+      }
+      
+      return n;
     }
 
     function parseLocation(lines) {
@@ -331,7 +352,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     }
 
     function extractPhoneNumber(card, lines) {
-      /* Strategy 1: Header area of conversation */
       var headerElements = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
         var r = el.getBoundingClientRect();
@@ -346,7 +366,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
 
-      /* Strategy 2: All tel: links or clickable phone elements on page */
       var telLinks = Array.from(document.querySelectorAll('a[href^="tel:"], [data-mobile], [data-phone]'));
       for (var t = 0; t < telLinks.length; t++) {
         var href = telLinks[t].getAttribute('href') || telLinks[t].getAttribute('data-mobile') || telLinks[t].getAttribute('data-phone') || '';
@@ -359,7 +378,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
 
-      /* Strategy 3: Card text lines */
       for (var l = 0; l < lines.length; l++) {
         var cardPhoneMatch = lines[l].match(/(?:\\+91|91|0)?([6-9]\\d{9})\\b/);
         if (cardPhoneMatch && cardPhoneMatch[1] !== sellerMobileDigits) {
@@ -367,7 +385,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
 
-      /* Strategy 4: Search entire right conversation pane */
       var rightPane = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
         var r = el.getBoundingClientRect();
@@ -408,10 +425,15 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
       var startDateVal = document.getElementById('sync-start-date').value;
       var endDateVal = document.getElementById('sync-end-date').value;
-      var startLimit = startDateVal ? new Date(startDateVal) : null;
+      var startLimit = startDateVal ? parseLeadDate(startDateVal) : null;
       if (startLimit) { startLimit.setHours(0, 0, 0, 0); }
-      var endLimit = endDateVal ? new Date(endDateVal) : null;
+      var endLimit = endDateVal ? parseLeadDate(endDateVal) : null;
       if (endLimit) { endLimit.setHours(23, 59, 59, 999); }
+
+      /* Always scroll to the top first so we start from the most recent leads */
+      statusDiv.innerHTML += '<span style="color:#94a3b8;">[SCROLL] Resetting to top of message list...</span><br>';
+      scrollAllLeftToTop();
+      await new Promise(function(r) { setTimeout(r, 800); });
 
       var foundCards = findContactCards();
       
@@ -430,11 +452,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       }
 
       var scrollContainer = findScrollContainer(foundCards[0]);
-      if (scrollContainer && scrollContainer.scrollTop !== undefined) {
-        scrollContainer.scrollTop = 0;
-        scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
-      }
-      await new Promise(function(r) { setTimeout(r, 600); });
 
       var syncedCount = 0;
       var skippedCount = 0;
@@ -469,10 +486,22 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           }
 
           /* 2. Date extraction */
-          var leadDate = new Date();
-          var dateLine = lines.find(function(l) { return /\\b(\\d{1,2}:\\d{2}\\s*(am|pm)|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\\d{1,2}[\\/\\-]\\d{1,2})\\b/i.test(l); }) || lines[lines.length - 1] || '';
-          leadDate = parseLeadDate(dateLine);
-          var formattedDate = leadDate.toISOString().split('T')[0];
+          var dateLine = '';
+          var dateEl = card.querySelector('[class*="date"], [class*="time"], [class*="fs11"], [class*="fs12"], [class*="stamp"], .fr');
+          if (dateEl && dateEl.innerText.trim()) {
+            dateLine = dateEl.innerText.trim();
+          }
+          if (!dateLine) {
+            for (var li = 0; li < lines.length; li++) {
+              if (/\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\\d{1,2}[-\\/]\\d{1,2})\\b/i.test(lines[li])) {
+                dateLine = lines[li];
+                break;
+              }
+            }
+          }
+
+          var leadDate = parseLeadDate(dateLine);
+          var formattedDate = formatLocalDate(leadDate);
 
           var uniqueKey = customerName.toLowerCase() + '_' + formattedDate;
           if (processedUniqueKeys.has(uniqueKey)) {
@@ -488,9 +517,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             consecutiveOlderCount++;
             skippedCount++;
             document.getElementById('stat-skipped').innerText = String(skippedCount);
-            if (consecutiveOlderCount >= 15) {
+            if (consecutiveOlderCount >= 20) {
               reachedDateLimit = true;
-              statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached 15 consecutive leads older than Start Date (' + formattedDate + '). Completed scan.</span><br>';
+              statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached 20 consecutive leads older than Start Date (' + formattedDate + '). Completed scan.</span><br>';
               break;
             }
             continue;
@@ -511,7 +540,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           if (innerEl) {
             innerEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
           }
-          await new Promise(function(r) { setTimeout(r, 800); });
+          await new Promise(function(r) { setTimeout(r, 700); });
 
           /* 3. Phone Number Extraction */
           var contact = extractPhoneNumber(card, lines);
@@ -642,7 +671,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             if (response.ok) {
               syncedCount++;
               document.getElementById('stat-synced').innerText = String(syncedCount);
-              statusDiv.innerHTML += '<span style="color:#10b981;">[SYNCED] ' + customerName + ' (' + contact + ') — ' + displayProduct + '</span><br>';
+              statusDiv.innerHTML += '<span style="color:#10b981;">[SYNCED] ' + customerName + ' (' + contact + ') — ' + displayProduct + ' (' + formattedDate + ')</span><br>';
             } else {
               errorCount++;
               document.getElementById('stat-failed').innerText = String(errorCount);

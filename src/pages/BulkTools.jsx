@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageCircle, X, Upload, CheckCircle } from 'lucide-react';
+import { MessageCircle, X, Upload, CheckCircle, Trash2, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 import { fsSetLead } from '../services/firestoreService';
@@ -16,15 +16,33 @@ export default function BulkTools() {
   const STATUS_FILTERS = DATA_CONFIG.getStatusFilterOptions();
   const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
   const [bulkMessage, setBulkMessage] = useState('');
+  const [showInvalidPreview, setShowInvalidPreview] = useState(false);
 
-  // Invalid / Wrongly synced leads detection (e.g. 0000000000)
-  const invalidLeads = leads.filter(l => l.contact === '0000000000' || !l.contact || l.contact === '0');
+  // Helper to detect date banners or system text captured as buyer names
+  const isDummyName = (name) => {
+    if (!name) return true;
+    const n = name.trim();
+    return /^(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}/i.test(n) ||
+           /^\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(n) ||
+           n.toLowerCase().startsWith('contact added through');
+  };
+
+  const isDummyContact = (contact) => {
+    if (!contact) return true;
+    const digits = String(contact).replace(/\D/g, '');
+    return digits === '0000000000' || digits === '0' || digits.length < 5;
+  };
+
+  // Only flags dummy sync leads (never touches manual leads with non-IndiaMART source or valid names/phones)
+  const invalidLeads = leads.filter(l => 
+    l.source === 'IndiaMART Direct' && (isDummyContact(l.contact) || isDummyName(l.customerName))
+  );
 
   const handleCleanInvalidLeads = () => {
     if (!invalidLeads.length) return;
-    if (!window.confirm(`Are you sure you want to delete all ${invalidLeads.length} test/wrongly synced leads with invalid phone numbers (0000000000)?`)) return;
+    if (!window.confirm(`Delete ${invalidLeads.length} dummy/invalid sync leads (e.g. date header banners and 0000000000)? Your manual leads and valid customer leads will NOT be touched.`)) return;
     invalidLeads.forEach(l => deleteLead(l.id));
-    showBanner(`🧹 Successfully cleaned up ${invalidLeads.length} invalid leads!`, 'success');
+    showBanner(`🧹 Cleaned up ${invalidLeads.length} dummy leads!`, 'success');
   };
 
   // Excel Recovery States
@@ -106,7 +124,7 @@ export default function BulkTools() {
         note: `Merged duplicate leads: ${duplicates.map(d => d.id).join(', ')}`
       });
 
-      // 5. Fallback fields (if master doesn't have it, but one of duplicates does)
+      // 5. Fallback fields
       const updates = {
         productList: mergedProducts,
         product: mergedProducts.map(p => p.name).join(', '),
@@ -180,7 +198,7 @@ export default function BulkTools() {
       
       const parsedRows = [];
       worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-        if (rowNumber === 1) return; // skip header row
+        if (rowNumber === 1) return;
         const values = row.values;
         if (!values || values.length < 3) return;
         
@@ -210,7 +228,6 @@ export default function BulkTools() {
         return;
       }
 
-      // Group by ID
       const groupedLeads = {};
       parsedRows.forEach(row => {
         if (!row.id) return;
@@ -348,22 +365,62 @@ export default function BulkTools() {
 
       {/* ⚠️ Invalid / Wrongly Synced Leads Quick Cleaner */}
       {invalidLeads.length > 0 && (
-        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.6rem', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div>
-            <div style={{ fontWeight: 700, color: '#f87171', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              ⚠️ {invalidLeads.length} Wrongly Synced / Dummy Leads Detected
+        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.6rem', padding: '1.25rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <div style={{ fontWeight: 700, color: '#f87171', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertTriangle size={18} /> {invalidLeads.length} Dummy / Invalid Synced Leads Detected
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+                Detected {invalidLeads.length} records with date header names (e.g. <code>July 20, 2026</code>) or dummy phone numbers.
+                <span style={{ color: '#10b981', marginLeft: '6px', fontWeight: 600 }}>
+                  <ShieldCheck size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />
+                  Your manually created leads and valid customer records will NOT be touched.
+                </span>
+              </div>
             </div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-              Detected {invalidLeads.length} leads with dummy contact numbers (<code>0000000000</code>). You can remove them in 1 click.
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setShowInvalidPreview(!showInvalidPreview)}
+                style={{ fontSize: '0.8rem', padding: '0.5rem 0.9rem' }}
+              >
+                {showInvalidPreview ? 'Hide List' : 'Preview List'}
+              </button>
+              <button 
+                className="btn btn-danger" 
+                onClick={handleCleanInvalidLeads}
+                style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', border: 'none', padding: '0.5rem 1.2rem', fontSize: '0.82rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 700, boxShadow: '0 4px 12px rgba(239,68,68,0.3)' }}
+              >
+                🧹 Clean {invalidLeads.length} Dummy Leads
+              </button>
             </div>
           </div>
-          <button 
-            className="btn btn-danger" 
-            onClick={handleCleanInvalidLeads}
-            style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', border: 'none', padding: '0.5rem 1.2rem', fontSize: '0.82rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 700, boxShadow: '0 4px 12px rgba(239,68,68,0.3)' }}
-          >
-            🧹 Clean Up {invalidLeads.length} Invalid Leads
-          </button>
+
+          {showInvalidPreview && (
+            <div style={{ marginTop: '1rem', maxHeight: '180px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ color: 'var(--text-dim)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <th style={{ textAlign: 'left', padding: '4px 8px' }}>ID</th>
+                    <th style={{ textAlign: 'left', padding: '4px 8px' }}>Customer Name / Header</th>
+                    <th style={{ textAlign: 'left', padding: '4px 8px' }}>Contact</th>
+                    <th style={{ textAlign: 'left', padding: '4px 8px' }}>Product</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invalidLeads.map(l => (
+                    <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '4px 8px', color: 'var(--primary)' }}>{l.id}</td>
+                      <td style={{ padding: '4px 8px', color: '#f87171' }}>{l.customerName}</td>
+                      <td style={{ padding: '4px 8px' }}>{l.contact || 'None'}</td>
+                      <td style={{ padding: '4px 8px', color: 'var(--text-dim)' }}>{l.product}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -389,145 +446,54 @@ export default function BulkTools() {
             <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: 4 }}>SET FOLLOW-UP DATE</label>
             <input type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)} />
           </div>
-          <button className="btn btn-secondary" onClick={bulkUpdateFollowUp} disabled={!followUpDate || !selected.size}>Set Follow-up ({selected.size})</button>
+          <button className="btn btn-primary" onClick={bulkUpdateFollowUp} disabled={!followUpDate || !selected.size}>Set Follow-Up ({selected.size})</button>
         </div>
       </div>
 
-      {/* Excel Restore & Recovery Tool */}
-      <div className="glass-card" style={{ marginBottom: '1.25rem', border: '1px solid rgba(16,185,129,0.3)' }}>
-        <h4 style={{ marginBottom: '0.5rem', color: '#10b981', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          📂 Restore & Recover Leads from Excel
-        </h4>
-        <p style={{ margin: '0 0 1rem 0', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-          Restore and merge historical leads directly from an Excel report (e.g. <code>Indimart_CRM_Report_2026-05-27.xlsx</code>) using their original Lead IDs.
-        </p>
-        
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
-          <input 
-            type="file" 
-            accept=".xlsx" 
-            onChange={handleExcelUpload} 
-            style={{ display: 'none' }} 
-            id="excel-restore-input" 
-          />
-          <label 
-            htmlFor="excel-restore-input" 
-            className="btn btn-secondary" 
-            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-          >
-            <Upload size={14} /> Select Excel Report
-          </label>
-          
-          {fileLeads.length > 0 && (
-            <button 
-              className="btn btn-primary" 
-              onClick={handleRestoreSubmit} 
-              disabled={isRestoring}
-              style={{ background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none' }}
-            >
-              <CheckCircle size={14} /> {isRestoring ? 'Restoring...' : `Restore ${fileLeads.length} Leads`}
-            </button>
-          )}
+      {/* Duplicate Leads Merger */}
+      <div className="glass-card" style={{ marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <div>
+            <h4 style={{ margin: 0, color: 'var(--text-dim)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              🔍 Duplicate Contacts Merger
+            </h4>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
+              {duplicateGroups.length > 0
+                ? `Found ${duplicateGroups.length} contact numbers with multiple lead records.`
+                : 'No duplicate phone numbers found in leads list.'}
+            </div>
+          </div>
         </div>
 
-        {restoreStatus && (
-          <div style={{ 
-            fontSize: '0.78rem', 
-            background: 'rgba(0,0,0,0.15)', 
-            padding: '0.75rem', 
-            borderRadius: '0.4rem', 
-            border: '1px solid var(--glass-border)',
-            color: restoreStatus.startsWith('❌') ? '#fca5a5' : restoreStatus.startsWith('✅') || restoreStatus.startsWith('✔️') ? '#a7f3d0' : 'var(--text-dim)'
-          }}>
-            {restoreStatus}
-          </div>
-        )}
-
-        {fileLeads.length > 0 && (
-          <div style={{ marginTop: '1rem', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '0.4rem' }}>
-            <table style={{ margin: 0, fontSize: '0.75rem' }}>
-              <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <th>Lead ID</th>
-                  <th>Date</th>
-                  <th>Customer</th>
-                  <th>Contact</th>
-                  <th>Status</th>
-                  <th>Products</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fileLeads.map(lead => (
-                  <tr key={lead.id}>
-                    <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{lead.id}</td>
-                    <td>{lead.date}</td>
-                    <td style={{ fontWeight: 600 }}>{lead.customerName}</td>
-                    <td>{lead.contact}</td>
-                    <td>{lead.status}</td>
-                    <td>{lead.productList.map(p => `${p.name} (x${p.qty})`).join(', ')}</td>
-                    <td style={{ fontWeight: 600 }}>₹{lead.orderValue.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* 👯‍♂️ Duplicate Lead Merging */}
-      <div className="glass-card" style={{ marginBottom: '1.25rem', border: '1px solid rgba(139,92,246,0.3)' }}>
-        <h4 style={{ marginBottom: '0.5rem', color: '#8b5cf6', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          👯‍♂️ Duplicate Lead Merging &amp; Deduplication
-        </h4>
-        <p style={{ margin: '0 0 1rem 0', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-          Identify leads sharing the same normalized contact number. Merge them to consolidate product lists, order values, chronological histories, and update invoice links.
-        </p>
-
-        {duplicateGroups.length === 0 ? (
-          <div style={{ fontSize: '0.78rem', color: '#10b981', padding: '0.5rem 0', fontWeight: 600 }}>
-            ✓ No duplicate leads detected in your current database.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {duplicateGroups.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
             {duplicateGroups.map(({ contact, group }) => {
               const currentMasterId = masterSelections[contact] || group[0].id;
               return (
-                <div key={contact} style={{ border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.75rem', background: 'rgba(255,255,255,0.01)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem', borderBottom: '1px dashed var(--glass-border)', paddingBottom: '0.5rem' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>
-                      📞 Group: {contact} <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>({group.length} duplicates)</span>
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Master Lead:</span>
-                      <select 
-                        value={currentMasterId} 
-                        onChange={e => setMasterSelections(prev => ({ ...prev, [contact]: e.target.value }))}
-                        style={{ fontSize: '0.75rem', padding: '2px 8px', minWidth: 120 }}
-                      >
-                        {group.map(l => (
-                          <option key={l.id} value={l.id}>{l.id} - {l.customerName}</option>
-                        ))}
-                      </select>
-                      <button 
-                        className="btn btn-primary" 
-                        style={{ padding: '0.3rem 0.8rem', fontSize: '0.75rem', background: 'linear-gradient(135deg,#8b5cf6,#6366f1)', border: 'none' }}
-                        onClick={() => handleMerge(contact, group)}
-                      >
-                        Merge Group
-                      </button>
+                <div key={contact} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '0.85rem' }}>📞 {contact}</span>
+                      <span style={{ fontSize: '0.72rem', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{group.length} leads</span>
                     </div>
+                    <button 
+                      className="btn btn-primary" 
+                      onClick={() => handleMerge(contact, group)}
+                      style={{ fontSize: '0.75rem', padding: '0.3rem 0.7rem' }}
+                    >
+                      Merge into {currentMasterId}
+                    </button>
                   </div>
-                  
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ margin: 0, fontSize: '0.72rem' }}>
+
+                  <div className="table-wrapper" style={{ margin: 0 }}>
+                    <table style={{ fontSize: '0.75rem' }}>
                       <thead>
-                        <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
-                          <th style={{ width: 60 }}>Role</th>
+                        <tr>
+                          <th style={{ width: 60 }}>Master</th>
                           <th>Lead ID</th>
                           <th>Date</th>
-                          <th>Customer Name</th>
-                          <th>Product(s)</th>
+                          <th>Customer</th>
+                          <th>Product</th>
                           <th>Status</th>
                           <th>Value</th>
                           <th>Remarks</th>
@@ -537,16 +503,21 @@ export default function BulkTools() {
                         {group.map(lead => {
                           const isMaster = lead.id === currentMasterId;
                           return (
-                            <tr key={lead.id} style={{ background: isMaster ? 'rgba(139,92,246,0.05)' : undefined }}>
-                              <td style={{ fontWeight: 700, color: isMaster ? '#8b5cf6' : 'var(--text-dim)' }}>
-                                {isMaster ? '★ MASTER' : 'DUPLICATE'}
+                            <tr key={lead.id} style={{ background: isMaster ? 'rgba(16,185,129,0.08)' : undefined }}>
+                              <td>
+                                <input 
+                                  type="radio" 
+                                  name={`master_${contact}`} 
+                                  checked={isMaster} 
+                                  onChange={() => setMasterSelections(prev => ({ ...prev, [contact]: lead.id }))} 
+                                />
                               </td>
-                              <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{lead.id}</td>
+                              <td style={{ fontWeight: 600, color: isMaster ? 'var(--primary)' : undefined }}>{lead.id}</td>
                               <td>{lead.date}</td>
                               <td style={{ fontWeight: 600 }}>{lead.customerName}</td>
-                              <td>{lead.product || lead.productList?.map(p => p.name).join(', ')}</td>
+                              <td>{lead.product}</td>
                               <td>
-                                <span className="status-dot" style={{ background: DATA_CONFIG.getStatusColor(lead.status), marginRight: 4 }} />
+                                <span className="status-dot" style={{ background: DATA_CONFIG.getStatusColor(lead.status) }} />
                                 {DATA_CONFIG.getSimpleStatusLabel(lead.status)}
                               </td>
                               <td style={{ fontWeight: 600 }}>₹{(lead.orderValue || 0).toLocaleString()}</td>

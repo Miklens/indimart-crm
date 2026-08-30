@@ -1,10 +1,12 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - Aggressive multi-container scrolling (wheel events, scroll events, instant scrollIntoView)
- * - Resilient idle detector (15 retry rounds with varying scroll deltas)
- * - Safe card detection & date extraction
- * - Live UI stats and progress tracking
+ * - Phone-number-first deduplication (updates existing lead dates in-place without duplicating)
+ * - Safe protection for manually created leads (only updates matched IndiaMART leads)
+ * - Strict dummy name filter (ignores chat date separators like "July 20, 2026", "August 1, 2026")
+ * - Smart cleanup for "Contact added through Enquiry received"
+ * - Multi-container wheel & scroll engine with 12-round idle tolerance
+ * - Exact date parsing (20 Jul -> 2026-07-20)
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -13,7 +15,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
   const mappedLeads = (crmLeads || []).map(l => ({
     id: l.id,
     contact: l.contact || '',
-    date: l.date || ''
+    date: l.date || '',
+    customerName: l.customerName || '',
+    source: l.source || ''
   }));
   const existingLeadsStr = JSON.stringify(mappedLeads);
   
@@ -176,7 +180,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         if (els.length > 0) { return els; }
       }
 
-      /* Adaptive left sidebar detector (rect.left < 250px, rect.width 160-460px) */
+      /* Adaptive left sidebar detector (rect.left < 260px, rect.width 150-480px) */
       var allDivsAndLis = Array.from(document.querySelectorAll('div, li'));
       var timeRegex = /\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))\\b/i;
       
@@ -496,8 +500,19 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             }
           }
 
+          /* Clean up system phrases like "Contact added through Enquiry received" */
+          if (customerName.toLowerCase().startsWith('contact added')) {
+            var altName = lines.find(function(l) {
+              var low = l.toLowerCase();
+              return !low.startsWith('contact added') && !low.includes('enquiry received') && !low.includes('india') && !low.includes('pari') && !low.includes('trichoderma') && !/\\d{10}/.test(l) && l.length > 2;
+            });
+            if (altName) { customerName = altName; }
+            else { customerName = 'IndiaMART Buyer'; }
+          }
+
           /* Ignore chat date bubble headers */
-          if (/^(january|february|march|april|may|june|july|august|september|october|november|december)\\s+\\d{1,2}/i.test(customerName)) {
+          if (/^(january|february|march|april|may|june|july|august|september|october|november|december)\\s+\\d{1,2}/i.test(customerName) ||
+              /^\\d{1,2}\\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(customerName)) {
             continue;
           }
 
@@ -613,7 +628,10 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             syncStatus = 'New Enquiry';
           }
 
-          var existing = existingLeads.find(function(l) { return l.contact === contact && l.date === formattedDate && contact !== '0000000000'; });
+          /* Phone-first deduplication: Match existing lead by contact number to update date in-place */
+          var existing = existingLeads.find(function(l) { 
+            return l.contact === contact && contact !== '0000000000' && (l.source === 'IndiaMART Direct' || !l.source); 
+          });
           var docId = existing ? existing.id : 'IM' + String(nextIdNum++).padStart(3, '0');
 
           var leadPayload = { 

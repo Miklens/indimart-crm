@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageCircle, X, Upload, CheckCircle, Trash2, AlertTriangle, ShieldCheck, Layers, RefreshCw } from 'lucide-react';
+import { MessageCircle, X, Upload, CheckCircle, Trash2, AlertTriangle, ShieldCheck, Layers, RefreshCw, FileText } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 import { fsSetLead } from '../services/firestoreService';
@@ -23,6 +23,31 @@ export default function BulkTools() {
   const [isMergingAll, setIsMergingAll] = useState(false);
   const [mergeProgress, setMergeProgress] = useState('');
 
+  const normalizeContact = (raw) => {
+    if (!raw) return '';
+    const digits = String(raw).replace(/\D/g, '');
+    if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+    return digits.slice(-10);
+  };
+
+  // ── Bulletproof Protection for Invoice-Linked & Manual Leads ────────────────
+  const invoicedLeadIds = new Set(
+    (invoiceHistory || []).map(inv => inv.leadId).filter(Boolean)
+  );
+  const invoicedContacts = new Set(
+    (invoiceHistory || []).map(inv => normalizeContact(inv.customerContact)).filter(Boolean)
+  );
+
+  // A lead is strictly PROTECTED if it has an invoice or was created manually
+  const isProtectedLead = (lead) => {
+    if (!lead) return true;
+    if (invoicedLeadIds.has(lead.id)) return true;
+    const norm = normalizeContact(lead.contact);
+    if (norm && invoicedContacts.has(norm)) return true;
+    if (lead.source && lead.source !== 'IndiaMART Direct') return true;
+    return false;
+  };
+
   // Real 4 leads from Today (Aug 30)
   const TODAY_REAL_NAMES = ['ganesh', 'lingala vasudeva reddy', 'uttangi kariyappa', 'nrprajwal devru', 'prajwal devru'];
 
@@ -41,14 +66,14 @@ export default function BulkTools() {
     return digits === '0000000000' || digits === '0' || digits.length < 5;
   };
 
-  // 1. Dummy/Invalid Leads (date headers & dummy phones)
+  // 1. Dummy/Invalid Leads (date headers & dummy phones) - NEVER includes invoice leads or manual leads
   const invalidLeads = leads.filter(l => 
-    l.source === 'IndiaMART Direct' && (isDummyContact(l.contact) || isDummyName(l.customerName))
+    !isProtectedLead(l) && (isDummyContact(l.contact) || isDummyName(l.customerName))
   );
 
-  // 2. Stale test leads from early buggy runs that were incorrectly stamped with 30-08-2026 (except today's 4 genuine leads)
+  // 2. Stale test leads from early buggy runs (30-08-2026) - NEVER includes invoice leads, today's 4 real leads, or manual leads
   const staleAug30Leads = leads.filter(l => {
-    if (l.source !== 'IndiaMART Direct') return false;
+    if (isProtectedLead(l)) return false;
     const d = String(l.date || '').trim();
     const isAug30 = d === '30-08-2026' || d === '2026-08-30';
     if (!isAug30) return false;
@@ -59,16 +84,16 @@ export default function BulkTools() {
 
   const handleCleanInvalidLeads = () => {
     if (!invalidLeads.length) return;
-    if (!window.confirm(`Delete ${invalidLeads.length} dummy/invalid sync leads (e.g. date header banners and 0000000000)? Your manual leads and valid customer leads will NOT be touched.`)) return;
+    if (!window.confirm(`Delete ${invalidLeads.length} dummy/invalid sync leads (e.g. date header banners and 0000000000)?\n\n🛡️ All leads with Invoices and your manual leads are 100% PROTECTED and will NOT be touched.`)) return;
     invalidLeads.forEach(l => deleteLead(l.id));
     showBanner(`🧹 Cleaned up ${invalidLeads.length} dummy leads!`, 'success');
   };
 
   const handleCleanStaleAug30Leads = () => {
     if (!staleAug30Leads.length) return;
-    if (!window.confirm(`Delete ${staleAug30Leads.length} stale leads stamped with 30-08-2026 from earlier test runs?\n\nToday's 4 genuine leads (Ganesh, Lingala Vasudeva Reddy, Uttangi Kariyappa, NRPrajwal Devru) and your manual leads will be PRESERVED safely.`)) return;
+    if (!window.confirm(`Delete ${staleAug30Leads.length} un-invoiced stale test leads from earlier test runs?\n\n🛡️ All leads with INVOICES, Today's 4 genuine leads, and manual leads are 100% PROTECTED and will NOT be touched.`)) return;
     staleAug30Leads.forEach(l => deleteLead(l.id));
-    showBanner(`🧹 Cleaned up ${staleAug30Leads.length} stale Aug 30 test leads! Now resync from IndiaMART to pull their real dates.`, 'success');
+    showBanner(`🧹 Cleaned up ${staleAug30Leads.length} stale test leads!`, 'success');
   };
 
   // Excel Recovery States
@@ -77,13 +102,6 @@ export default function BulkTools() {
   const [isRestoring, setIsRestoring] = useState(false);
 
   const [masterSelections, setMasterSelections] = useState({});
-
-  const normalizeContact = (raw) => {
-    if (!raw) return '';
-    const digits = String(raw).replace(/\D/g, '');
-    if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
-    return digits.slice(-10);
-  };
 
   // Group leads by normalized contact numbers to find duplicates
   const groupedContacts = {};
@@ -99,7 +117,11 @@ export default function BulkTools() {
     .map(([contact, group]) => ({ contact, group }));
 
   const mergeSingleGroup = async (contact, group, prompt = false) => {
-    let masterLead = group.find(l => l.id === masterSelections[contact]);
+    // If one of the duplicate leads has an invoice attached, prioritize that lead as Master
+    let masterLead = group.find(l => invoicedLeadIds.has(l.id));
+    if (!masterLead) {
+      masterLead = group.find(l => l.id === masterSelections[contact]);
+    }
     if (!masterLead) {
       const realDateLead = group.find(l => l.date && !l.date.startsWith('2026-08-30') && l.date !== '30-08-2026');
       masterLead = realDateLead || group[0];
@@ -212,7 +234,7 @@ export default function BulkTools() {
 
   const handleMergeAllDuplicates = async () => {
     if (!duplicateGroups.length) return;
-    if (!window.confirm(`⚡ Merge all ${duplicateGroups.length} duplicate groups automatically?\n\nThis will combine all product enquiries, preserve genuine dates, update invoices, and remove duplicate entries in 1 click.`)) {
+    if (!window.confirm(`⚡ Merge all ${duplicateGroups.length} duplicate groups automatically?\n\nThis will preserve all attached Invoices, combine all product enquiries, preserve genuine dates, and clean duplicates in 1 click.`)) {
       return;
     }
 
@@ -450,7 +472,7 @@ export default function BulkTools() {
                 These {staleAug30Leads.length} leads were saved with today's date during early test runs.
                 <span style={{ color: '#10b981', marginLeft: '6px', fontWeight: 600 }}>
                   <ShieldCheck size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />
-                  Today's 4 genuine leads (Ganesh, Lingala, Uttangi, Prajwal) and your manual leads are SAFE.
+                  All leads with Invoices, Today's 4 genuine leads, and manual leads are 100% PROTECTED.
                 </span>
               </div>
             </div>
@@ -511,7 +533,7 @@ export default function BulkTools() {
                 Detected {invalidLeads.length} records with date header names (e.g. <code>July 20, 2026</code>) or dummy phone numbers.
                 <span style={{ color: '#10b981', marginLeft: '6px', fontWeight: 600 }}>
                   <ShieldCheck size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />
-                  Your manually created leads and valid customer records will NOT be touched.
+                  All leads with Invoices and manual leads are strictly PROTECTED.
                 </span>
               </div>
             </div>

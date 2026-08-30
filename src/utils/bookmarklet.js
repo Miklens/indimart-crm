@@ -1,9 +1,9 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
+ * - COMPREHENSIVE MULTI-FORMAT DATE ENGINE: Parses Month-First (Jul 31, July 31 2026), Day-First (31 Jul 2026), Numeric (27/07/2026, 27-07), and Chat Pane date pills!
  * - IN-PLACE DATE REWRITE ENGINE: Matches existing CRM leads by phone or buyer name and updates their date/timestamp directly in Firestore without deleting any records or breaking invoices.
  * - Multi-stage scroll & bounce triggers for complete 30-day scans.
- * - Exact date parser (20 Jul -> 2026-07-20).
  * - Safe protection for manual leads and invoice-linked leads.
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
@@ -185,7 +185,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       }
 
       var allDivsAndLis = Array.from(document.querySelectorAll('div, li'));
-      var timeRegex = /\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))\\b/i;
+      var timeRegex = /\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+[a-z]{3}|[a-z]{3}\\s+\\d{1,2}|\\d{1,2}[-/]\\d{1,2})\\b/i;
       
       var matchedCards = [];
       for (var i = 0; i < allDivsAndLis.length; i++) {
@@ -195,7 +195,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         var rect = el.getBoundingClientRect();
         if (rect.left < 280 && rect.width >= 140 && rect.width <= 490 && rect.height >= 40 && rect.height <= 260 && rect.top >= 40) {
           var txt = el.innerText || '';
-          if (timeRegex.test(txt) && txt.length >= 10 && txt.length <= 600 && !txt.startsWith('July ') && !txt.startsWith('August ')) {
+          if (timeRegex.test(txt) && txt.length >= 8 && txt.length <= 600 && !txt.startsWith('July ') && !txt.startsWith('August ')) {
             matchedCards.push(el);
           }
         }
@@ -270,46 +270,97 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       }
     }
 
-    function extractCardDate(cardText) {
+    function extractCardDate(cardText, rightPaneText) {
       var n = new Date();
-      if (!cardText) return n;
+      var combined = (cardText || '') + ' ' + (rightPaneText || '');
+      if (!combined.trim()) return n;
 
       var months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+      var monthNamesPattern = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
 
-      /* 1. Day Month Year: "20 Jul 2026" */
-      var dmyRegex = /\\b(\\d{1,2})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+(\\d{4})\\b/i;
-      var dmyMatch = cardText.match(dmyRegex);
+      /* 1. Month Day, Year: "Jul 31, 2026" or "July 31 2026" */
+      var mdyRegex = new RegExp('\\\\b(' + monthNamesPattern + ')[a-z]*\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?,?\\\\s+(\\\\d{4})\\\\b', 'i');
+      var mdyMatch = combined.match(mdyRegex);
+      if (mdyMatch) {
+        var mIdx = months.indexOf(mdyMatch[1].toLowerCase().slice(0, 3));
+        var day = parseInt(mdyMatch[2], 10);
+        var year = parseInt(mdyMatch[3], 10);
+        if (!isNaN(day) && mIdx !== -1 && day >= 1 && day <= 31) {
+          return new Date(year, mIdx, day, 12, 0, 0);
+        }
+      }
+
+      /* 2. Day Month Year: "31 Jul 2026" or "31 July 2026" */
+      var dmyRegex = new RegExp('\\\\b(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(' + monthNamesPattern + ')[a-z]*,?\\\\s+(\\\\d{4})\\\\b', 'i');
+      var dmyMatch = combined.match(dmyRegex);
       if (dmyMatch) {
-        var day = parseInt(dmyMatch[1], 10);
-        var mIndex = months.indexOf(dmyMatch[2].toLowerCase().slice(0, 3));
-        var year = parseInt(dmyMatch[3], 10);
-        if (!isNaN(day) && mIndex !== -1) {
-          return new Date(year, mIndex, day, 12, 0, 0);
+        var day2 = parseInt(dmyMatch[1], 10);
+        var mIdx2 = months.indexOf(dmyMatch[2].toLowerCase().slice(0, 3));
+        var year2 = parseInt(dmyMatch[3], 10);
+        if (!isNaN(day2) && mIdx2 !== -1 && day2 >= 1 && day2 <= 31) {
+          return new Date(year2, mIdx2, day2, 12, 0, 0);
         }
       }
 
-      /* 2. Day Month: "20 Jul" or "24 Aug" */
-      var dmRegex = /\\b(\\d{1,2})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\b/i;
-      var dmMatch = cardText.match(dmRegex);
+      /* 3. Numeric DD/MM/YYYY or DD-MM-YYYY */
+      var numDmyRegex = /\\b(\\d{1,2})[-/](\\d{1,2})[-/](\\d{2,4})\\b/;
+      var numDmyMatch = combined.match(numDmyRegex);
+      if (numDmyMatch) {
+        var dNum = parseInt(numDmyMatch[1], 10);
+        var mNum = parseInt(numDmyMatch[2], 10) - 1;
+        var yNum = parseInt(numDmyMatch[3], 10);
+        if (yNum < 100) yNum += 2000;
+        if (dNum >= 1 && dNum <= 31 && mNum >= 0 && mNum <= 11) {
+          return new Date(yNum, mNum, dNum, 12, 0, 0);
+        }
+      }
+
+      /* 4. Month Day: "Jul 31" or "July 31" */
+      var mdRegex = new RegExp('\\\\b(' + monthNamesPattern + ')[a-z]*\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?\\\\b', 'i');
+      var mdMatch = combined.match(mdRegex);
+      if (mdMatch) {
+        var mIdx3 = months.indexOf(mdMatch[1].toLowerCase().slice(0, 3));
+        var day3 = parseInt(mdMatch[2], 10);
+        var year3 = n.getFullYear();
+        if (mIdx3 > n.getMonth()) year3 -= 1;
+        if (!isNaN(day3) && mIdx3 !== -1 && day3 >= 1 && day3 <= 31) {
+          return new Date(year3, mIdx3, day3, 12, 0, 0);
+        }
+      }
+
+      /* 5. Day Month: "31 Jul" or "31 July" */
+      var dmRegex = new RegExp('\\\\b(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(' + monthNamesPattern + ')[a-z]*\\\\b', 'i');
+      var dmMatch = combined.match(dmRegex);
       if (dmMatch) {
-        var day2 = parseInt(dmMatch[1], 10);
-        var mIndex2 = months.indexOf(dmMatch[2].toLowerCase().slice(0, 3));
-        var year2 = n.getFullYear();
-        if (mIndex2 > n.getMonth()) {
-          year2 -= 1;
-        }
-        if (!isNaN(day2) && mIndex2 !== -1) {
-          return new Date(year2, mIndex2, day2, 12, 0, 0);
+        var day4 = parseInt(dmMatch[1], 10);
+        var mIdx4 = months.indexOf(dmMatch[2].toLowerCase().slice(0, 3));
+        var year4 = n.getFullYear();
+        if (mIdx4 > n.getMonth()) year4 -= 1;
+        if (!isNaN(day4) && mIdx4 !== -1 && day4 >= 1 && day4 <= 31) {
+          return new Date(year4, mIdx4, day4, 12, 0, 0);
         }
       }
 
-      /* 3. Yesterday */
-      if (/\\byesterday\\b/i.test(cardText)) {
+      /* 6. Numeric DD/MM or DD-MM */
+      var numDmRegex = /\\b(\\d{1,2})[-/](\\d{1,2})\\b/;
+      var numDmMatch = combined.match(numDmRegex);
+      if (numDmMatch) {
+        var dNum2 = parseInt(numDmMatch[1], 10);
+        var mNum2 = parseInt(numDmMatch[2], 10) - 1;
+        var yNum2 = n.getFullYear();
+        if (mNum2 > n.getMonth()) yNum2 -= 1;
+        if (dNum2 >= 1 && dNum2 <= 31 && mNum2 >= 0 && mNum2 <= 11) {
+          return new Date(yNum2, mNum2, dNum2, 12, 0, 0);
+        }
+      }
+
+      /* 7. Yesterday */
+      if (/\\byesterday\\b/i.test(combined)) {
         return new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1, 12, 0, 0);
       }
 
-      /* 4. Today / Time: "6:05 PM" or "11:08 AM" or "today" */
-      if (/\\b(?:today|\\d{1,2}:\\d{2}\\s*(?:am|pm)?)\\b/i.test(cardText)) {
+      /* 8. Today / Time */
+      if (/\\b(?:today|\\d{1,2}:\\d{2}\\s*(?:am|pm)?)\\b/i.test(combined)) {
         return n;
       }
 
@@ -498,7 +549,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             customerName = buyerEl.innerText.trim();
           } else if (lines.length > 0) {
             var firstLine = lines[0];
-            customerName = firstLine.replace(/\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+[a-z]{3})\\b/i, '').trim();
+            customerName = firstLine.replace(/\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+[a-z]{3}|[a-z]{3}\\s+\\d{1,2})\\b/i, '').trim();
             if (!customerName && lines.length > 1) {
               customerName = lines[1];
             }
@@ -518,8 +569,21 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             continue;
           }
 
-          /* 2. Accurate Card Date Extraction */
-          var leadDate = extractCardDate(cardText);
+          /* Click card to open conversation details */
+          card.click();
+          card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          var innerEl = card.querySelector('div, p, span, h4, h5');
+          if (innerEl) {
+            innerEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          }
+          await new Promise(function(r) { setTimeout(r, 600); });
+
+          /* Extract right chat pane text to detect header dates (e.g. July 31, 2026) */
+          var rightPaneEl = document.querySelector('.cntRight, .chatBox, [class*="rightPane"], [class*="chat_box"]') || document.body;
+          var rightPaneText = rightPaneEl ? (rightPaneEl.innerText || '') : '';
+
+          /* 2. Accurate Card + Chat Date Extraction */
+          var leadDate = extractCardDate(cardText, rightPaneText);
           var formattedDate = formatLocalDate(leadDate);
 
           var uniqueKey = customerName.toLowerCase() + '_' + formattedDate;
@@ -550,15 +614,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             setStat('stat-skipped', skippedCount);
             continue;
           }
-
-          /* Click card to open conversation details */
-          card.click();
-          card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-          var innerEl = card.querySelector('div, p, span, h4, h5');
-          if (innerEl) {
-            innerEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-          }
-          await new Promise(function(r) { setTimeout(r, 650); });
 
           /* 3. Phone Number Extraction */
           var contact = extractPhoneNumber(card, lines);

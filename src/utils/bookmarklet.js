@@ -1,9 +1,9 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - Precise card date extractor (accurately parses "20 Jul", "24 Aug", "6:05 PM", "Yesterday", etc.)
- * - Strict sidebar boundary (rect.left < 80px, rect.right <= 400px) preventing chat date headers from being treated as cards
- * - Proper date-range stopping (stops when encountering leads older than Start Date)
+ * - Robust contact card detection (rect.left < 300, rect.width 160-450, left-side list)
+ * - Safe UI element updater helper (never throws Cannot set properties of null)
+ * - Precise card date extractor (20 Jul -> 2026-07-20)
  * - Guaranteed scroll-to-top on scan start
  * - Multi-stage phone extraction (conversation header badge, tel: links, call logs, chat body)
  */
@@ -126,6 +126,11 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       };
     };
 
+    function setStat(id, text) {
+      var el = document.getElementById(id);
+      if (el) { el.innerText = String(text); }
+    }
+
     function formatLocalDate(d) {
       var yr = d.getFullYear();
       var mo = String(d.getMonth() + 1).padStart(2, '0');
@@ -172,7 +177,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         if (els.length > 0) { return els; }
       }
 
-      /* Strict left sidebar search (rect.left < 80px, rect.right <= 380px) */
+      /* Adaptive left sidebar detector (rect.left < 250px, rect.width 160-460px) */
       var allDivsAndLis = Array.from(document.querySelectorAll('div, li'));
       var timeRegex = /\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))\\b/i;
       
@@ -180,8 +185,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       for (var i = 0; i < allDivsAndLis.length; i++) {
         var el = allDivsAndLis[i];
         if (el.id && el.id.includes('indimart-sync')) continue;
+        if (el.closest && el.closest('#indimart-sync-panel')) continue;
         var rect = el.getBoundingClientRect();
-        if (rect.left <= 80 && rect.right <= 400 && rect.width >= 160 && rect.height >= 45 && rect.height <= 260 && rect.top >= 60) {
+        if (rect.left < 250 && rect.width >= 160 && rect.width <= 460 && rect.height >= 40 && rect.height <= 260 && rect.top >= 60) {
           var txt = el.innerText || '';
           if (timeRegex.test(txt) && txt.length >= 10 && txt.length <= 600 && !txt.startsWith('July ') && !txt.startsWith('August ')) {
             matchedCards.push(el);
@@ -210,8 +216,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
       var leftElements = Array.from(document.querySelectorAll('*')).filter(function(node) {
         if (node.id && node.id.includes('indimart-sync')) return false;
+        if (node.closest && node.closest('#indimart-sync-panel')) return false;
         var r = node.getBoundingClientRect();
-        return r.left < 50 && r.width >= 200 && r.width <= 380 && r.height > 200;
+        return r.left < 200 && r.width >= 200 && r.width <= 460 && r.height > 200;
       });
       for (var le = 0; le < leftElements.length; le++) {
         var container = leftElements[le];
@@ -230,8 +237,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     function scrollAllLeftToTop() {
       var allLeft = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
+        if (el.closest && el.closest('#indimart-sync-panel')) return false;
         var r = el.getBoundingClientRect();
-        return r.left < 380 && r.scrollHeight > r.clientHeight && r.clientHeight > 100;
+        return r.left < 450 && r.scrollHeight > r.clientHeight && r.clientHeight > 100;
       });
       for (var i = 0; i < allLeft.length; i++) {
         allLeft[i].scrollTop = 0;
@@ -253,8 +261,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       }
       var allLeft = Array.from(document.querySelectorAll('div, section, aside, nav, ul')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
+        if (el.closest && el.closest('#indimart-sync-panel')) return false;
         var r = el.getBoundingClientRect();
-        return r.left < 380 && r.width > 150;
+        return r.left < 450 && r.width > 150;
       });
       for (var c = 0; c < allLeft.length; c++) {
         var el = allLeft[c];
@@ -372,6 +381,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     function extractPhoneNumber(card, lines) {
       var headerElements = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
+        if (el.closest && el.closest('#indimart-sync-panel')) return false;
         var r = el.getBoundingClientRect();
         return r.left >= 280 && r.top >= 40 && r.top <= 240 && r.width < 700;
       });
@@ -405,6 +415,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
       var rightPane = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
+        if (el.closest && el.closest('#indimart-sync-panel')) return false;
         var r = el.getBoundingClientRect();
         return r.left >= 320 && r.width >= 300 && r.height > 100;
       });
@@ -435,33 +446,31 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       var progBarContainer = document.getElementById('sync-progress-bar-container');
       var progBar = document.getElementById('sync-progress-bar');
       
-      statusDiv.style.display = 'block';
-      statsGrid.style.display = 'grid';
-      progBarContainer.style.display = 'block';
-      
-      statusDiv.innerHTML = '<span style="color:#38bdf8;">[INIT] Starting IndiaMART Sync Engine...</span><br>';
+      if (statusDiv) { statusDiv.style.display = 'block'; statusDiv.innerHTML = '<span style="color:#38bdf8;">[INIT] Starting IndiaMART Sync Engine...</span><br>'; }
+      if (statsGrid) { statsGrid.style.display = 'grid'; }
+      if (progBarContainer) { progBarContainer.style.display = 'block'; }
 
-      var startDateVal = document.getElementById('sync-start-date').value;
-      var endDateVal = document.getElementById('sync-end-date').value;
+      var startDateVal = document.getElementById('sync-start-date') ? document.getElementById('sync-start-date').value : '';
+      var endDateVal = document.getElementById('sync-end-date') ? document.getElementById('sync-end-date').value : '';
       var startLimit = startDateVal ? parseInputDate(startDateVal) : null;
       if (startLimit) { startLimit.setHours(0, 0, 0, 0); }
       var endLimit = endDateVal ? parseInputDate(endDateVal) : null;
       if (endLimit) { endLimit.setHours(23, 59, 59, 999); }
 
-      statusDiv.innerHTML += '<span style="color:#94a3b8;">[SCROLL] Resetting to top of message list...</span><br>';
+      if (statusDiv) { statusDiv.innerHTML += '<span style="color:#94a3b8;">[SCROLL] Resetting to top of message list...</span><br>'; }
       scrollAllLeftToTop();
       await new Promise(function(r) { setTimeout(r, 800); });
 
       var foundCards = findContactCards();
       
       if (foundCards.length === 0) {
-        statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ No contact cards detected yet. Waiting 2s for page elements to load...</span><br>';
+        if (statusDiv) { statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ No contact cards detected yet. Waiting 2s for page elements to load...</span><br>'; }
         await new Promise(function(r) { setTimeout(r, 2000); });
         foundCards = findContactCards();
       }
 
       if (foundCards.length === 0) {
-        statusDiv.innerHTML += '<span style="color:#ef4444; font-weight:700;">❌ No contact cards found. Please ensure you are on IndiaMART Message Centre (seller.indiamart.com/messagecentre).</span><br>';
+        if (statusDiv) { statusDiv.innerHTML += '<span style="color:#ef4444; font-weight:700;">❌ No contact cards found. Please ensure you are on IndiaMART Message Centre (seller.indiamart.com/messagecentre).</span><br>'; }
         btn.disabled = false;
         btn.style.opacity = '1';
         btn.innerHTML = '<span>⚡</span> Retry Scan';
@@ -518,16 +527,16 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           processedUniqueKeys.add(uniqueKey);
           newProcessedInRound++;
 
-          document.getElementById('stat-found').innerText = String(processedUniqueKeys.size);
+          setStat('stat-found', processedUniqueKeys.size);
 
           /* Check date bounds */
           if (startLimit && leadDate < startLimit) {
             consecutiveOlderCount++;
             skippedCount++;
-            document.getElementById('stat-skipped').innerText = String(skippedCount);
+            setStat('stat-skipped', skippedCount);
             if (consecutiveOlderCount >= 8) {
               reachedDateLimit = true;
-              statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached Start Date limit (' + formattedDate + ' is older than ' + startDateVal + '). Completed.</span><br>';
+              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached Start Date limit (' + formattedDate + ' is older than ' + startDateVal + '). Completed.</span><br>'; }
               break;
             }
             continue;
@@ -537,7 +546,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
           if (endLimit && leadDate > endLimit) {
             skippedCount++;
-            document.getElementById('stat-skipped').innerText = String(skippedCount);
+            setStat('stat-skipped', skippedCount);
             continue;
           }
 
@@ -678,21 +687,21 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
             if (response.ok) {
               syncedCount++;
-              document.getElementById('stat-synced').innerText = String(syncedCount);
-              statusDiv.innerHTML += '<span style="color:#10b981;">[SYNCED] ' + customerName + ' (' + contact + ') — ' + displayProduct + ' (' + formattedDate + ')</span><br>';
+              setStat('stat-synced', syncedCount);
+              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#10b981;">[SYNCED] ' + customerName + ' (' + contact + ') — ' + displayProduct + ' (' + formattedDate + ')</span><br>'; }
             } else {
               errorCount++;
-              document.getElementById('stat-failed').innerText = String(errorCount);
-              statusDiv.innerHTML += '<span style="color:#f43f5e;">[FAIL] Upload rejected for ' + customerName + '</span><br>';
+              setStat('stat-failed', errorCount);
+              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#f43f5e;">[FAIL] Upload rejected for ' + customerName + '</span><br>'; }
             }
           } catch (err) {
             errorCount++;
-            document.getElementById('stat-failed').innerText = String(errorCount);
-            statusDiv.innerHTML += '<span style="color:#f43f5e;">[ERR] Network error: ' + (err.message || 'Unknown') + '</span><br>';
+            setStat('stat-failed', errorCount);
+            if (statusDiv) { statusDiv.innerHTML += '<span style="color:#f43f5e;">[ERR] Network error: ' + (err.message || 'Unknown') + '</span><br>'; }
           }
 
-          statusDiv.scrollTop = statusDiv.scrollHeight;
-          progBar.style.width = Math.min(100, Math.round((processedUniqueKeys.size / Math.max(1, visibleCards.length)) * 100)) + '%';
+          if (statusDiv) { statusDiv.scrollTop = statusDiv.scrollHeight; }
+          if (progBar) { progBar.style.width = Math.min(100, Math.round((processedUniqueKeys.size / Math.max(1, visibleCards.length)) * 100)) + '%'; }
         }
 
         if (reachedDateLimit) { break; }
@@ -700,7 +709,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         if (newProcessedInRound === 0) {
           noNewCardsRounds++;
           if (noNewCardsRounds >= 5) {
-            statusDiv.innerHTML += '<span style="color:#94a3b8;">[DONE] End of list reached.</span><br>';
+            if (statusDiv) { statusDiv.innerHTML += '<span style="color:#94a3b8;">[DONE] End of list reached.</span><br>'; }
             break;
           }
         } else {
@@ -720,9 +729,11 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         scrollAttempts++;
       }
 
-      progBar.style.width = '100%';
-      statusDiv.innerHTML += '<br><strong style="color:#10b981; font-size:12px;">🎉 Sync Completed!</strong><br><span style="color:#cbd5e1;">Total Discovered: ' + processedUniqueKeys.size + ' | Synced: ' + syncedCount + ' | Skipped: ' + skippedCount + ' | Failed: ' + errorCount + '</span>';
-      statusDiv.scrollTop = statusDiv.scrollHeight;
+      if (progBar) { progBar.style.width = '100%'; }
+      if (statusDiv) {
+        statusDiv.innerHTML += '<br><strong style="color:#10b981; font-size:12px;">🎉 Sync Completed!</strong><br><span style="color:#cbd5e1;">Total Discovered: ' + processedUniqueKeys.size + ' | Synced: ' + syncedCount + ' | Skipped: ' + skippedCount + ' | Failed: ' + errorCount + '</span>';
+        statusDiv.scrollTop = statusDiv.scrollHeight;
+      }
 
       btn.disabled = false;
       btn.style.opacity = '1';

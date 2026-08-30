@@ -17,6 +17,16 @@ export default function BulkTools() {
   const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
   const [bulkMessage, setBulkMessage] = useState('');
 
+  // Invalid / Wrongly synced leads detection (e.g. 0000000000)
+  const invalidLeads = leads.filter(l => l.contact === '0000000000' || !l.contact || l.contact === '0');
+
+  const handleCleanInvalidLeads = () => {
+    if (!invalidLeads.length) return;
+    if (!window.confirm(`Are you sure you want to delete all ${invalidLeads.length} test/wrongly synced leads with invalid phone numbers (0000000000)?`)) return;
+    invalidLeads.forEach(l => deleteLead(l.id));
+    showBanner(`🧹 Successfully cleaned up ${invalidLeads.length} invalid leads!`, 'success');
+  };
+
   // Excel Recovery States
   const [fileLeads, setFileLeads] = useState([]);
   const [restoreStatus, setRestoreStatus] = useState('');
@@ -35,7 +45,7 @@ export default function BulkTools() {
   const groupedContacts = {};
   leads.forEach(l => {
     const norm = normalizeContact(l.contact);
-    if (!norm || norm.length < 10) return;
+    if (!norm || norm.length < 10 || norm === '0000000000') return;
     if (!groupedContacts[norm]) groupedContacts[norm] = [];
     groupedContacts[norm].push(l);
   });
@@ -268,7 +278,6 @@ export default function BulkTools() {
     }
   };
 
-
   const filtered = leads.filter(l => {
     const s = search.toLowerCase();
     const matchS = !search || l.customerName?.toLowerCase().includes(s) || (l.contact || '').includes(s);
@@ -336,6 +345,27 @@ export default function BulkTools() {
         <h2 className="section-title">⚡ Bulk Tools</h2>
         <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>{selected.size} selected</span>
       </div>
+
+      {/* ⚠️ Invalid / Wrongly Synced Leads Quick Cleaner */}
+      {invalidLeads.length > 0 && (
+        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.6rem', padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <div style={{ fontWeight: 700, color: '#f87171', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              ⚠️ {invalidLeads.length} Wrongly Synced / Dummy Leads Detected
+            </div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+              Detected {invalidLeads.length} leads with dummy contact numbers (<code>0000000000</code>). You can remove them in 1 click.
+            </div>
+          </div>
+          <button 
+            className="btn btn-danger" 
+            onClick={handleCleanInvalidLeads}
+            style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', border: 'none', padding: '0.5rem 1.2rem', fontSize: '0.82rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 700, boxShadow: '0 4px 12px rgba(239,68,68,0.3)' }}
+          >
+            🧹 Clean Up {invalidLeads.length} Invalid Leads
+          </button>
+        </div>
+      )}
 
       {/* Quick action buttons */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>

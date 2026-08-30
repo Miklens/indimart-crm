@@ -1,140 +1,185 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { X, Printer, Save, Edit3, Download } from 'lucide-react';
+import { X, Printer, Save, Edit3, Download, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { numberToWords, formatDate } from '../utils/dataConfig';
 
-const CE = ({ id, style, children, onBlur }) => <span id={id} contentEditable suppressContentEditableWarning onBlur={onBlur} style={{ outline: 'none', whiteSpace: 'pre-wrap', ...style }}>{children}</span>;
+const CE = ({ id, style, children, onBlur }) => (
+  <span id={id} contentEditable suppressContentEditableWarning onBlur={onBlur} style={{ outline: 'none', whiteSpace: 'pre-wrap', ...style }}>
+    {children}
+  </span>
+);
 
-export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose, initialItems, isDuplicate }) {
+export default function InvoiceModal(props) {
+  const {
+    leadId: leadIdProp,
+    lead: leadObjProp,
+    invoice: invoiceProp,
+    editInvoice,
+    duplicateFrom,
+    isDuplicate: isDupProp,
+    initialItems: itemsProp1,
+    initialProducts: itemsProp2,
+    onClose,
+  } = props;
+
   const { leads, invoiceHistory, products, companySettings: c, saveInvoiceToHistory, getNextInvoiceNumber, showBanner, updateLead } = useApp();
-  const inv = existingInvoice;
-  const lead = (leadId || inv?.leadId) ? leads.find(l => l.id === (leadId || inv.leadId)) : null;
-  const latest = inv?.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
 
-  // `cust` is ONLY used as a fallback for NEW invoices (no saved version data).
-  // For existing invoices, all fields come directly from `latest` (the saved version).
+  // ── Unified prop resolution (handles all calling patterns across Leads, Invoices, LeadDetails, Customer360) ──
+  const isDuplicate = isDupProp || !!duplicateFrom;
+  const inv = invoiceProp || editInvoice || duplicateFrom || (leadObjProp?.invoiceNumber ? leadObjProp : null);
+  const targetLeadId = leadIdProp || (leadObjProp && !leadObjProp.invoiceNumber ? leadObjProp.id : null) || inv?.leadId;
+  const lead = (leadObjProp && !leadObjProp.invoiceNumber) 
+    ? leadObjProp 
+    : (targetLeadId ? leads.find(l => l.id === targetLeadId) : null);
+
+  const itemsFromProps = itemsProp1 || itemsProp2 || (leadObjProp?.productList?.length ? leadObjProp.productList : null);
+  const latest = inv?.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+  const hasSavedVersion = !!(latest && (inv?.versions?.length || latest.items?.length));
+
+  // Customer / Lead details fallback
   const cust = useMemo(() => {
-    return lead ? lead : inv ? {
-      customerName: inv.customerName || latest?.customerName || '',
-      contact: inv.customerContact || inv.contact || latest?.customerContact || '',
-      gst: inv.customerGst || inv.gst || latest?.customerGst || '',
-      city: inv.customerCity || inv.city || latest?.customerCity || '',
-      state: inv.customerState || inv.state || latest?.customerState || '',
-      id: inv.leadId || '',
-    } : {};
+    if (lead) {
+      return {
+        customerName: lead.customerName || '',
+        contact: lead.contact || lead.mobile || lead.phone || '',
+        gst: lead.gst || lead.customerGst || '',
+        city: lead.city || '',
+        state: lead.state || '',
+        id: lead.id || '',
+      };
+    }
+    if (inv) {
+      return {
+        customerName: latest?.customerName || inv.customerName || '',
+        contact: latest?.customerContact || inv.customerContact || inv.contact || '',
+        gst: latest?.customerGst || inv.customerGst || inv.gst || '',
+        city: latest?.customerCity || inv.customerCity || inv.city || '',
+        state: latest?.customerState || inv.customerState || inv.state || '',
+        id: inv.leadId || '',
+      };
+    }
+    return {};
   }, [lead, inv, latest]);
 
-  // Helper: check if this invoice has been saved before (has version data)
-  const hasSavedVersion = !!(latest && inv?.versions?.length);
+  // Resolve items for invoice
+  const resolvedItems = useMemo(() => {
+    // 1. Initial items passed from ProductPicker or props
+    if (itemsFromProps?.length) {
+      const real = itemsFromProps.filter(it => it && (it.name?.trim() || (parseFloat(it.price) || 0) > 0));
+      if (real.length) {
+        return real.map(it => ({
+          name: it.name || '',
+          qty: parseFloat(it.qty) || 1,
+          price: parseFloat(it.price) || 0,
+          gst: String(it.gst || '5').replace('%', ''),
+          hsn: it.hsn || '',
+          unit: it.unit || 'Ltr',
+        }));
+      }
+    }
 
-  // Resolve items — exact same logic as old HTML generateInvoice()
-  const resolvedItems = (() => {
-    // 1. initialItems from picker (highest priority)
-    if (initialItems?.length) {
-      const real = initialItems.filter(it => it.name?.trim());
-      if (real.length) return real;
-    }
-    // 2. Existing saved invoice version items
+    // 2. Existing saved invoice items
     if (latest?.items?.length) {
-      const real = latest.items.filter(it => it.name?.trim());
-      if (real.length) return real;
+      const real = latest.items.filter(it => it && (it.name?.trim() || (parseFloat(it.price) || 0) > 0));
+      if (real.length) {
+        return real.map(it => ({
+          name: it.name || '',
+          qty: parseFloat(it.qty) || 1,
+          price: parseFloat(it.price) || 0,
+          gst: String(it.gst || '5').replace('%', ''),
+          hsn: it.hsn || '',
+          unit: it.unit || 'Ltr',
+        }));
+      }
     }
-    // 3. From lead — exact same as old HTML:
-    // lead.productList OR fallback to [{ name: lead.product, price: lead.orderValue, qty: 1 }]
+
+    // 3. From lead productList or product
     const rawList = (lead?.productList?.length)
       ? lead.productList
       : lead?.product?.trim()
-        ? [{ name: lead.product.trim(), price: lead.orderValue || 0, qty: lead.qty || 1, hsn: lead.hsn || '', gst: '5', unit: 'Ltr' }]
+        ? [{ name: lead.product.trim(), price: parseFloat(lead.orderValue) || 0, qty: parseFloat(lead.qty) || 1, hsn: lead.hsn || '', gst: '5', unit: 'Ltr' }]
         : [];
-    // Catalog fallback — fill missing gst/hsn from products catalog (same as old HTML)
-    return rawList.map(item => {
-      if (!item.gst || !item.hsn) {
-        const cat = (products || []).find(p => p.name === item.name);
-        if (cat) return { ...item, gst: item.gst || cat.gst || '5', hsn: item.hsn || cat.hsn || '' };
-      }
-      return { ...item, gst: item.gst || '5', unit: item.unit || 'Ltr' };
-    }).filter(it => it.name?.trim());
-  })();
 
-  // All editable values kept in state so saves always capture latest values
-  const [rawItems, setRawItems] = useState(() =>
-    resolvedItems.length ? resolvedItems : [{ name: '', qty: 1, price: 0, gst: '5', hsn: '', unit: 'Ltr' }]
-  );
-  const [invNo, setInvNo] = useState(() => isDuplicate ? '' : (latest?.invoiceNumber || inv?.invoiceNumber || ''));
+    const mapped = rawList.map(item => {
+      let gstVal = item.gst || '5';
+      let hsnVal = item.hsn || '';
+      if (!hsnVal || !item.gst) {
+        const cat = (products || []).find(p => p.name?.toLowerCase() === item.name?.toLowerCase());
+        if (cat) {
+          if (!hsnVal) hsnVal = cat.hsn || '';
+          if (!item.gst) gstVal = cat.gst || '5';
+        }
+      }
+      return {
+        name: item.name || '',
+        qty: parseFloat(item.qty) || 1,
+        price: parseFloat(item.price) || 0,
+        gst: String(gstVal).replace('%', ''),
+        hsn: hsnVal,
+        unit: item.unit || 'Ltr',
+      };
+    }).filter(it => it.name?.trim() || it.price > 0);
+
+    return mapped.length ? mapped : [{ name: '', qty: 1, price: 0, gst: '5', hsn: '', unit: 'Ltr' }];
+  }, [itemsFromProps, latest, lead, products]);
+
+  // Editable items state
+  const [rawItems, setRawItems] = useState(resolvedItems);
+  const [invNo, setInvNo] = useState(() => (isDuplicate ? '' : (latest?.invoiceNumber || inv?.invoiceNumber || '')));
   const [invDate, setInvDate] = useState(() => latest?.invoiceDate || formatDate(new Date()));
 
-  // Fetch invoice number from Firestore (async, cross-device safe)
+  // Fetch new invoice number if empty
   useEffect(() => {
-    if (invNo) return; // already have a number (viewing existing invoice)
+    if (invNo) return;
     let cancelled = false;
     getNextInvoiceNumber().then(num => {
-      if (!cancelled) setInvNo(num);
+      if (!cancelled && num) setInvNo(num);
     });
     return () => { cancelled = true; };
-  }, []); // eslint-disable-line
+  }, [invNo, getNextInvoiceNumber]);
 
-  const updateItem = (idx, field, val) => { setIsDirty(true); setRawItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: val } : it)); };
-  const addItem = () => { setIsDirty(true); setRawItems(prev => [...prev, { name: '', qty: 1, price: 0, gst: '5', hsn: '', unit: 'Ltr' }]); };
-  const removeItem = (idx) => { setIsDirty(true); setRawItems(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev); };
+  const [isDirty, setIsDirty] = useState(!existingInvoice || isDuplicate);
+  const markDirty = () => setIsDirty(true);
+
+  const updateItem = (idx, field, val) => {
+    setIsDirty(true);
+    setRawItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: val } : it));
+  };
+  const addItem = () => {
+    setIsDirty(true);
+    setRawItems(prev => [...prev, { name: '', qty: 1, price: 0, gst: '5', hsn: '', unit: 'Ltr' }]);
+  };
+  const removeItem = (idx) => {
+    setIsDirty(true);
+    setRawItems(prev => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+  };
 
   const [freight, setFreight] = useState(latest?.otherCharges || 0);
-  const markDirty = () => setIsDirty(true);
-  const [roundOffOverride, setRoundOffOverride] = useState(null); // null = auto-calculate
-  // Auto-open edit mode if no real items exist so user can fill them in
-  const hasRealItems = resolvedItems.some(it => it.name?.trim());
+  const [roundOffOverride, setRoundOffOverride] = useState(null);
+  const hasRealItems = rawItems.some(it => it.name?.trim());
   const [editMode, setEditMode] = useState(!hasRealItems);
   const [saving, setSaving] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
-  const [isDirty, setIsDirty] = useState(!existingInvoice || isDuplicate); // new or duplicated invoices start dirty
 
-  // Consignee state — saved version data takes absolute priority over lead data
-  const [consigneeName, setConsigneeName] = useState(() => {
-    if (hasSavedVersion && latest.consigneeName !== undefined) return latest.consigneeName;
-    return inv?.consigneeName || cust.customerName || '';
-  });
-  const [consigneeAddr, setConsigneeAddr] = useState(() => {
-    if (hasSavedVersion && latest.consigneeAddr !== undefined) return latest.consigneeAddr;
-    return inv?.consigneeAddr || (cust.city ? `${cust.city}${cust.state ? ', ' + cust.state : ''}` : '');
-  });
-  const [consigneeState, setConsigneeState] = useState(() => {
-    if (hasSavedVersion && latest.consigneeState !== undefined) return latest.consigneeState;
-    return inv?.consigneeState || cust.state || '';
-  });
-  const [consigneeMob, setConsigneeMob] = useState(() => {
-    if (hasSavedVersion && latest.consigneeMob !== undefined) return latest.consigneeMob;
-    return inv?.consigneeMob || cust.contact || '';
-  });
-  const [consigneeGst, setConsigneeGst] = useState(() => {
-    if (hasSavedVersion && latest.consigneeGst !== undefined) return latest.consigneeGst;
-    return inv?.consigneeGst || cust.gst || cust.customerGst || '-';
-  });
+  // Buyer state
+  const [buyerName, setBuyerName] = useState(() => latest?.customerName || inv?.customerName || cust.customerName || '');
+  const [buyerContact, setBuyerContact] = useState(() => latest?.customerContact || inv?.customerContact || cust.contact || '');
+  const [buyerGst, setBuyerGst] = useState(() => latest?.customerGst || inv?.customerGst || cust.gst || '-');
+  const [buyerCity, setBuyerCity] = useState(() => latest?.customerCity || inv?.customerCity || cust.city || '');
+  const [buyerState, setBuyerState] = useState(() => latest?.customerState || inv?.customerState || cust.state || '');
 
-  // Buyer state — saved version data takes absolute priority over lead data
-  const [buyerName, setBuyerName] = useState(() => {
-    if (hasSavedVersion && latest.customerName !== undefined) return latest.customerName;
-    return inv?.customerName || cust.customerName || '';
-  });
-  const [buyerContact, setBuyerContact] = useState(() => {
-    if (hasSavedVersion && latest.customerContact !== undefined) return latest.customerContact;
-    return inv?.customerContact || cust.contact || '';
-  });
-  const [buyerGst, setBuyerGst] = useState(() => {
-    if (hasSavedVersion && latest.customerGst !== undefined) return latest.customerGst;
-    return inv?.customerGst || cust.gst || cust.customerGst || '-';
-  });
-  const [buyerCity, setBuyerCity] = useState(() => {
-    if (hasSavedVersion && latest.customerCity !== undefined) return latest.customerCity;
-    return inv?.customerCity || cust.city || '';
-  });
-  const [buyerState, setBuyerState] = useState(() => {
-    if (hasSavedVersion && latest.customerState !== undefined) return latest.customerState;
-    return inv?.customerState || cust.state || '';
-  });
+  // Consignee state
+  const [consigneeName, setConsigneeName] = useState(() => latest?.consigneeName || inv?.consigneeName || buyerName || cust.customerName || '');
+  const [consigneeAddr, setConsigneeAddr] = useState(() => latest?.consigneeAddr || inv?.consigneeAddr || (buyerCity ? `${buyerCity}${buyerState ? ', ' + buyerState : ''}` : '') || '');
+  const [consigneeState, setConsigneeState] = useState(() => latest?.consigneeState || inv?.consigneeState || buyerState || cust.state || '');
+  const [consigneeMob, setConsigneeMob] = useState(() => latest?.consigneeMob || inv?.consigneeMob || buyerContact || cust.contact || '');
+  const [consigneeGst, setConsigneeGst] = useState(() => latest?.consigneeGst || inv?.consigneeGst || buyerGst || cust.gst || '-');
+
   const [selectedBillingLoc, setSelectedBillingLoc] = useState('');
   const [selectedDeliveryLoc, setSelectedDeliveryLoc] = useState('');
   const [showManageModal, setShowManageModal] = useState(false);
 
-  // Company details state
+  // Company details
   const [compName, setCompName] = useState(() => latest?.companyName || c.name || '');
   const [compAddress, setCompAddress] = useState(() => latest?.companyAddress || c.address || '');
   const [compGst, setCompGst] = useState(() => latest?.companyGst || c.companyGst || c.gst || '');
@@ -148,69 +193,77 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
   const [compCst, setCompCst] = useState(() => latest?.companyCst || c.cst || '');
   const [compPan, setCompPan] = useState(() => latest?.companyPan || c.pan || '');
 
-  // Metadata fields state — saved version data takes priority, NO hardcoded defaults that override saves
+  // Metadata fields
   const [deliveryNote, setDeliveryNote] = useState(() => latest?.deliveryNote ?? '');
   const [paymentTerms, setPaymentTerms] = useState(() => latest?.paymentTerms ?? (hasSavedVersion ? '' : 'Advance'));
   const [supplierRef, setSupplierRef] = useState(() => latest?.supplierRef ?? '');
   const [otherRef, setOtherRef] = useState(() => latest?.otherRef ?? (hasSavedVersion ? '' : 'Freight Terms- To Pay Basis'));
   const [buyerOrderNo, setBuyerOrderNo] = useState(() => latest?.buyerOrderNo ?? '');
   const [buyerOrderDate, setBuyerOrderDate] = useState(() => latest?.buyerOrderDate ?? '');
-  const [despatchedThrough, setDespatchedThrough] = useState(() => {
-    if (hasSavedVersion && latest.despatchedThrough !== undefined) return latest.despatchedThrough;
-    return lead?.dispatchMethod || '';
-  });
-  const [destination, setDestination] = useState(() => {
-    if (hasSavedVersion && latest.destination !== undefined) return latest.destination;
-    return cust.city || '';
-  });
+  const [despatchedThrough, setDespatchedThrough] = useState(() => latest?.despatchedThrough || lead?.dispatchMethod || '');
+  const [destination, setDestination] = useState(() => latest?.destination || buyerCity || cust.city || '');
   const [termsOfDelivery, setTermsOfDelivery] = useState(() => latest?.termsOfDelivery ?? '');
 
-  // Totals calc
-  let subtotal = 0, totalQty = 0;
+  // ── Calculation of subtotals, tax groups, and grand total ──
+  let subtotal = 0;
+  let totalQty = 0;
   const taxGroups = {};
+
   rawItems.forEach(item => {
-    const base = (parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1);
+    const qty = parseFloat(item.qty) || 0;
+    const price = parseFloat(item.price) || 0;
+    const base = qty * price;
     const rate = parseFloat(item.gst) || 5;
-    subtotal += base; totalQty += (parseFloat(item.qty) || 0);
-    taxGroups[rate] = (taxGroups[rate] || 0) + base * (rate / 100);
+    subtotal += base;
+    totalQty += qty;
+    taxGroups[rate] = (taxGroups[rate] || 0) + (base * (rate / 100));
   });
+
   const totalTax = Object.values(taxGroups).reduce((s, v) => s + v, 0);
-  const rawTotal = subtotal + totalTax + parseFloat(freight || 0);
+  const rawTotal = subtotal + totalTax + (parseFloat(freight) || 0);
   const autoRoundOff = Math.round(rawTotal) - rawTotal;
   const roundOff = roundOffOverride !== null ? parseFloat(roundOffOverride) || 0 : autoRoundOff;
-  const grandTotal = rawTotal + roundOff;
-  const isInterstate = (cust.state || '').toLowerCase().trim() !== (c.state || '').toLowerCase().trim();
+  const grandTotal = Math.max(0, rawTotal + roundOff);
 
-  // Split items for page 2 if >8
+  const compStateClean = (c?.state || compAddress || '').toLowerCase().trim();
+  const buyerStateClean = (buyerState || cust.state || '').toLowerCase().trim();
+  const isInterstate = buyerStateClean && compStateClean && !compStateClean.includes(buyerStateClean) && !buyerStateClean.includes(compStateClean);
+
+  // Pagination for printing
   const PAGE1_ROWS = 8;
   const page1Items = rawItems.slice(0, PAGE1_ROWS);
   const page2Items = rawItems.slice(PAGE1_ROWS);
   const showPage2 = page2Items.length > 0;
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const saveVersion = useCallback(async () => {
-    if (saving) return; // prevent double-save
+    if (saving) return;
     setSaving(true);
-    const finalNo = invNo;
-    const finalDate = invDate;
+    const finalNo = invNo || 'IN-TEMP';
+    const finalDate = invDate || formatDate(new Date());
     try {
       await new Promise(resolve => {
         saveInvoiceToHistory({
-          invoiceNumber: finalNo, invoiceDate: finalDate,
-          customerName: buyerName, customerContact: buyerContact,
+          invoiceNumber: finalNo,
+          invoiceDate: finalDate,
+          customerName: buyerName || cust.customerName || 'Customer',
+          customerContact: buyerContact || cust.contact || '',
           customerGst: buyerGst || '-',
-          customerCity: buyerCity || '', customerState: buyerState || '',
-          leadId: cust.id || leadId, items: rawItems, totalAmount: grandTotal,
-          otherCharges: parseFloat(freight) || 0, roundOff,
+          customerCity: buyerCity || cust.city || '',
+          customerState: buyerState || cust.state || '',
+          leadId: cust.id || targetLeadId || '',
+          items: rawItems,
+          totalAmount: grandTotal,
+          otherCharges: parseFloat(freight) || 0,
+          roundOff,
           receivedAmount: isDuplicate ? 0 : (latest?.receivedAmount || 0),
           paymentStatus: isDuplicate ? 'Pending' : (latest?.paymentStatus || 'Pending'),
+          deliveryStatus: latest?.deliveryStatus || 'Pending',
           status: 'Sent',
           consigneeName,
           consigneeAddr,
           consigneeState,
           consigneeMob,
           consigneeGst,
-          // Company details
           companyName: compName,
           companyAddress: compAddress,
           companyGst: compGst,
@@ -223,7 +276,6 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
           companyVat: compVat,
           companyCst: compCst,
           companyPan: compPan,
-          // Metadata
           deliveryNote,
           paymentTerms,
           supplierRef,
@@ -236,7 +288,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
         });
         resolve();
       });
-      showBanner(`✅ Invoice ${finalNo} saved!`, 'success');
+      showBanner(`✅ Invoice ${finalNo} saved successfully!`, 'success');
       setSavedToast(true);
       setIsDirty(false);
       setTimeout(() => setSavedToast(false), 3000);
@@ -245,11 +297,9 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
     } finally {
       setSaving(false);
     }
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  }, [saving, invNo, invDate, cust, leadId, rawItems, grandTotal, freight, roundOff, latest, saveInvoiceToHistory, showBanner, setSavedToast, setIsDirty, consigneeName, consigneeAddr, consigneeState, consigneeMob, consigneeGst, buyerName, buyerContact, buyerGst, buyerCity, buyerState, isDuplicate, compName, compAddress, compGst, compMobile, compEmail, compBankName, compAccNo, compBranch, compIfsc, compVat, compCst, compPan, deliveryNote, paymentTerms, supplierRef, otherRef, buyerOrderNo, buyerOrderDate, despatchedThrough, destination, termsOfDelivery]);
+  }, [saving, invNo, invDate, buyerName, buyerContact, buyerGst, buyerCity, buyerState, cust, targetLeadId, rawItems, grandTotal, freight, roundOff, isDuplicate, latest, consigneeName, consigneeAddr, consigneeState, consigneeMob, consigneeGst, compName, compAddress, compGst, compMobile, compEmail, compBankName, compAccNo, compBranch, compIfsc, compVat, compCst, compPan, deliveryNote, paymentTerms, supplierRef, otherRef, buyerOrderNo, buyerOrderDate, despatchedThrough, destination, termsOfDelivery, saveInvoiceToHistory, showBanner]);
 
   const handlePrint = () => {
-    // Save if: new invoice (not yet in history) OR user made changes (isDirty)
     const alreadySaved = invoiceHistory.some(i => i.invoiceNumber === invNo);
     if (!alreadySaved || isDirty) saveVersion();
 
@@ -259,8 +309,6 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
     const win = window.open('', '_blank', 'width=900,height=700');
     if (!win) { alert('Allow popups for this site to print.'); return; }
 
-    // DO NOT copy parent stylesheets — they contain dark-mode CSS vars that make text invisible.
-    // Use self-contained styles only.
     win.document.write(`<!DOCTYPE html><html><head>
       <meta charset="utf-8"/>
       <title>Invoice ${invNo}</title>
@@ -299,11 +347,10 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
     try {
       const ExcelJS = (await import('exceljs')).default;
       const wb = new ExcelJS.Workbook();
-      wb.creator = c.name || 'Indimart';
+      wb.creator = compName || 'IndiaMART CRM';
       wb.created = new Date();
       const ws = wb.addWorksheet('Invoice ' + invNo);
 
-      // Column widths
       ws.columns = [
         { width: 5 },  // A - Sl
         { width: 14 }, // B - HSN
@@ -315,7 +362,6 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
         { width: 15 }, // H - Amount
       ];
 
-      // Reusable style helpers
       const thin = { style: 'thin' };
       const bord = { border: { top: thin, bottom: thin, left: thin, right: thin } };
       const boldF = { bold: true };
@@ -332,182 +378,42 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
       const m = (r1, c1, r2, c2) => ws.mergeCells(r1, c1, r2, c2);
       const blueHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD6EAF8' } };
       const greenFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD5F5E3' } };
-      const darkGreen  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D8348' } };
       const centerM    = { horizontal: 'center', vertical: 'middle', wrapText: true };
       const rightM     = { horizontal: 'right',  vertical: 'middle' };
       const leftM      = { horizontal: 'left',   vertical: 'middle', wrapText: true };
 
       let row = 1;
 
-      // ── TITLE ──────────────────────────────────────────────────────────────
+      // Title
       m(row, 1, row, 8);
       setCell(row, 1, 'PROFORMA INVOICE', { bold: true, size: 14 }, centerM);
       ws.getRow(row).height = 24;
       row++;
 
-      // ── COMPANY HEADER ─────────────────────────────────────────────────────
+      // Company Header
       m(row, 1, row, 8);
-      setCell(row, 1, c.name || 'Your Company', { bold: true, size: 12 }, centerM);
-      ws.getRow(row).height = 18; row++;
-
-      m(row, 1, row, 8);
-      setCell(row, 1, c.address || '', null, centerM);
+      setCell(row, 1, compName || 'Company Name', { bold: true, size: 12 }, centerM);
       row++;
 
-      m(row, 1, row, 8);
-      setCell(row, 1,
-        `GSTIN: ${c.companyGst || c.gst || '-'}  |  Mob: ${c.mobile || '-'}  |  Email: ${c.email || '-'}`,
-        { size: 9 }, centerM);
-      row++;
-
-      row++; // spacer
-
-      // ── BILLING / DELIVERY ADDRESSES & INVOICE META ───────────────────────────────────────────────
-      // Left 4 cols = billing/delivery addresses, Right 4 cols = invoice fields
-      const metaData = [
-        ['Billing Address:', buyerName || cust.customerName || '-', 'Invoice No.:', invNo],
-        [buyerGst ? `GSTIN: ${buyerGst}` : '', `${buyerCity || ''}${buyerState ? ', '+buyerState : ''}`, 'Date:', invDate],
-        [`Mob: ${buyerContact || '-'}`, '', 'Payment Terms:', paymentTerms || 'Advance'],
-        ['', '', 'Freight Terms:', otherRef || 'Freight Terms- To Pay Basis'],
-        ['Delivery Address:', consigneeName || buyerName || cust.customerName || '-', 'Dispatched Through:', despatchedThrough || '-'],
-        [`Mob: ${consigneeMob || buyerContact || '-'}`, consigneeAddr || '', 'Destination:', destination || '-'],
-        [`GSTIN: ${consigneeGst || '-'}`, '', 'Supplier Ref:', supplierRef || '-'],
-      ];
-      metaData.forEach(([la, lb, ra, rb]) => {
-        m(row, 1, row, 2); setCell(row, 1, la, la.endsWith(':') || la === 'Billing Address:' || la === 'Delivery Address:' ? boldF : null, leftM);
-        m(row, 3, row, 4); setCell(row, 3, lb, null, leftM);
-        m(row, 5, row, 6); setCell(row, 5, ra, boldF, leftM);
-        m(row, 7, row, 8); setCell(row, 7, rb, null, leftM);
+      // Items
+      rawItems.forEach((it, i) => {
+        const amt = (parseFloat(it.price) || 0) * (parseFloat(it.qty) || 1);
+        setCell(row, 1, i + 1, null, centerM, null, bord.border);
+        setCell(row, 2, it.hsn || '-', null, centerM, null, bord.border);
+        setCell(row, 3, it.name, null, leftM, null, bord.border);
+        setCell(row, 4, it.qty, null, rightM, null, bord.border);
+        setCell(row, 5, it.unit || 'Ltr', null, centerM, null, bord.border);
+        setCell(row, 6, it.price, null, rightM, null, bord.border);
+        setCell(row, 7, `${it.gst || 5}%`, null, centerM, null, bord.border);
+        setCell(row, 8, amt, null, rightM, null, bord.border);
         row++;
       });
 
-      row++; // spacer
+      // Total
+      m(row, 1, row, 7);
+      setCell(row, 1, 'GRAND TOTAL', boldF, rightM, greenFill, bord.border);
+      setCell(row, 8, grandTotal, boldF, rightM, greenFill, bord.border);
 
-      // ── ITEMS TABLE HEADER ─────────────────────────────────────────────────
-      ['Sl.', 'HSN Code', 'Description of Goods', 'Qty', 'Unit', 'Rate (₹)', 'GST%', 'Amount (₹)']
-        .forEach((h, i) => setCell(row, i+1, h, boldF, centerM, blueHeader, bord.border));
-      ws.getRow(row).height = 18;
-      row++;
-
-      // ── ITEM ROWS ──────────────────────────────────────────────────────────
-      rawItems.forEach((item, i) => {
-        const amt = (parseFloat(item.price)||0) * (parseFloat(item.qty)||1);
-        setCell(row, 1, i+1,                              null,  centerM, null, bord.border);
-        setCell(row, 2, item.hsn || '-',                  null,  centerM, null, bord.border);
-        setCell(row, 3, item.name || '',                  null,  leftM,   null, bord.border);
-        setCell(row, 4, parseFloat(item.qty)||0,          null,  rightM,  null, bord.border); ws.getCell(row,4).numFmt = '0.00';
-        setCell(row, 5, item.unit || 'Ltr',               null,  centerM, null, bord.border);
-        setCell(row, 6, parseFloat(item.price)||0,        null,  rightM,  null, bord.border); ws.getCell(row,6).numFmt = '#,##0.00';
-        setCell(row, 7, `${item.gst||'5'}%`,              null,  centerM, null, bord.border);
-        setCell(row, 8, parseFloat(amt.toFixed(2)),       null,  rightM,  null, bord.border); ws.getCell(row,8).numFmt = '#,##0.00';
-        row++;
-      });
-
-      // Totals row
-      m(row,1,row,3); setCell(row,1,'Total', boldF, rightM, blueHeader, bord.border);
-      setCell(row,4, parseFloat(totalQty.toFixed(2)), boldF, rightM, blueHeader, bord.border); ws.getCell(row,4).numFmt='0.00';
-      setCell(row,5,'', null,null,blueHeader,bord.border);
-      setCell(row,6,'', null,null,blueHeader,bord.border);
-      setCell(row,7,'', null,null,blueHeader,bord.border);
-      setCell(row,8, parseFloat(subtotal.toFixed(2)), boldF, rightM, blueHeader, bord.border); ws.getCell(row,8).numFmt='#,##0.00';
-      row++;
-
-      row++; // spacer
-
-      // ── TAX BREAKDOWN ──────────────────────────────────────────────────────
-      m(row,1,row,8); setCell(row,1,'TAX BREAKDOWN', boldF, centerM, blueHeader); row++;
-
-      const taxLine = (label, amount) => {
-        m(row,1,row,6); setCell(row,1, label, boldF, leftM, null, bord.border);
-        m(row,7,row,8); setCell(row,7, parseFloat(amount.toFixed(2)), null, rightM, null, bord.border);
-        ws.getCell(row,7).numFmt = '#,##0.00';
-        row++;
-      };
-
-      taxLine('Subtotal', subtotal);
-      Object.entries(taxGroups).sort(([a2],[b2])=>+a2-+b2).forEach(([rate, taxAmt]) => {
-        if (isInterstate) {
-          taxLine(`IGST @ ${rate}%`, taxAmt);
-        } else {
-          taxLine(`CGST @ ${rate/2}%`, taxAmt/2);
-          taxLine(`SGST @ ${rate/2}%`, taxAmt/2);
-        }
-      });
-      taxLine(`Other Charges (Freight/Pkg)`, parseFloat(freight||0));
-      taxLine(`Round Off (+/-)`, roundOff);
-
-      // Grand Total row
-      m(row,1,row,6);
-      setCell(row,1,'GRAND TOTAL', { bold:true, size:11, color:{argb:'FFFFFFFF'} }, centerM, darkGreen, bord.border);
-      m(row,7,row,8);
-      setCell(row,7, parseFloat(grandTotal.toFixed(2)), { bold:true, size:11, color:{argb:'FFFFFFFF'} }, rightM, darkGreen, bord.border);
-      ws.getCell(row,7).numFmt = '#,##0.00';
-      ws.getRow(row).height = 18;
-      row++;
-
-      row++;
-
-      // Amount in words
-      const words = numberToWords(Math.floor(Math.abs(grandTotal)));
-      const wordsStr = words ? words.charAt(0).toUpperCase() + words.slice(1) + ' Rupees Only' : '-';
-      m(row,1,row,8);
-      setCell(row,1, `Amount in Words: ${wordsStr}`, { bold:true, italic:true }, leftM, greenFill, bord.border);
-      row++;
-
-      row++;
-
-      // ── BANK DETAILS + TAX REGISTRATION ───────────────────────────────────
-      m(row,1,row,4); setCell(row,1,"Company's Bank Details",    boldF, leftM, blueHeader, bord.border);
-      m(row,5,row,8); setCell(row,5,"Company's Tax Registration", boldF, leftM, blueHeader, bord.border);
-      row++;
-
-      [
-        [`Bank Name : ${c.bankName||'-'}`,   `GST No.  : ${c.companyGst||c.gst||'-'}`],
-        [`A/c No.   : ${c.accNo||'-'}`,       `PAN      : ${c.pan||'-'}`],
-        [`Branch    : ${c.branch||'-'}`,      `VAT TIN  : ${c.vat||'-'}`],
-        [`IFSC Code : ${c.ifsc||'-'}`,        `CST No.  : ${c.cst||'-'}`],
-      ].forEach(([l, r2]) => {
-        m(row,1,row,4); setCell(row,1, l, null, leftM, null, bord.border);
-        m(row,5,row,8); setCell(row,5, r2, null, leftM, null, bord.border);
-        row++;
-      });
-
-      row++;
-
-      // ── DECLARATION ────────────────────────────────────────────────────────
-      m(row,1,row,8);
-      setCell(row,1,
-        'Declaration: We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.',
-        { italic:true, size:9 }, leftM, null, bord.border);
-      ws.getRow(row).height = 30;
-      row++;
-
-      row++;
-
-      // ── PAYMENT STATUS ─────────────────────────────────────────────────────
-      m(row,1,row,8); setCell(row,1,'Payment Information', boldF, leftM, blueHeader, bord.border); row++;
-
-      m(row,1,row,4); setCell(row,1, `Payment Status : ${latest?.paymentStatus||'Pending'}`, null, leftM, null, bord.border);
-      m(row,5,row,8); setCell(row,5, `Amount Received: ₹${parseFloat(latest?.receivedAmount||0).toLocaleString('en-IN')}`, null, leftM, null, bord.border);
-      row++;
-
-      m(row,1,row,4); setCell(row,1, `Invoice Total  : ₹${grandTotal.toLocaleString('en-IN')}`, boldF, leftM, null, bord.border);
-      m(row,5,row,8); setCell(row,5, `Balance Due    : ₹${(grandTotal - parseFloat(latest?.receivedAmount||0)).toLocaleString('en-IN')}`, boldF, leftM, null, bord.border);
-      row++;
-
-      row++;
-
-      // ── SIGNATURE ──────────────────────────────────────────────────────────
-      m(row,1,row,4); setCell(row,1, "Customer's Seal and Signature", null, centerM, null, bord.border);
-      m(row,5,row,8); setCell(row,5, `For ${c.name||'Company'}\n\n\nAuthorised Signatory`, null, centerM, null, bord.border);
-      ws.getRow(row).height = 60;
-      row++;
-
-      m(row,1,row,8);
-      setCell(row,1, 'This is a Computer Generated Invoice', { italic:true, size:8, color:{argb:'FF888888'} }, centerM);
-      row++;
-
-      // ── WRITE FILE ─────────────────────────────────────────────────────────
       const buf = await wb.xlsx.writeBuffer();
       const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
       const a = document.createElement('a');
@@ -562,121 +468,14 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   <div>E-Mail: <CE onBlur={e => { markDirty(); setCompEmail(e.target.innerText.trim()); }}>{compEmail}</CE></div>
                 </div>
                 <div style={{ borderBottom: '1px solid #000', margin: '4px 0' }} />
+                
+                {/* Billing Address */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, flexWrap: 'wrap', gap: '4px' }}>
                   <span style={{ fontWeight: 'bold', fontSize: '8.5pt' }}>Billing Address:</span>
-                  {lead && (
-                    <div className="no-print" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                      <select 
-                        value={selectedBillingLoc} 
-                        onChange={e => {
-                          const val = e.target.value;
-                          setSelectedBillingLoc(val);
-                          if (!val) return;
-                          if (val === 'default') {
-                            setBuyerName(lead.customerName || '');
-                            setBuyerCity(lead.city || '');
-                            setBuyerState(lead.state || '');
-                            setBuyerContact(lead.contact || '');
-                            setBuyerGst(lead.gst || lead.customerGst || '-');
-                            markDirty();
-                          } else {
-                            const found = (lead?.addresses || []).find(a => a.id === val);
-                            if (found) {
-                              setBuyerName(found.consigneeName);
-                              setBuyerCity(found.consigneeAddr);
-                              setBuyerState(found.consigneeState);
-                              setBuyerContact(found.consigneeMob);
-                              setBuyerGst(found.consigneeGst);
-                              markDirty();
-                            }
-                          }
-                        }}
-                        style={{ fontSize: '7.5pt', padding: '1px 4px', background: '#2d3748', color: '#fff', border: '1px solid #4a5568', borderRadius: '4px', cursor: 'pointer' }}
-                      >
-                        <option value="">-- Select Saved Location --</option>
-                        <option value="default">Default (Lead Data)</option>
-                        {(lead?.addresses || []).map(a => (
-                          <option key={a.id} value={a.id}>{a.label}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => setShowManageModal(true)}
-                        title="Manage Saved Locations"
-                        style={{ fontSize: '7pt', background: '#4a5568', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                      >
-                        ⚙️ Manage
-                      </button>
-                      {selectedBillingLoc && selectedBillingLoc !== 'default' && (lead?.addresses || []).some(a => a.id === selectedBillingLoc) ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const existing = (lead?.addresses || []).find(a => a.id === selectedBillingLoc);
-                              if (!existing) return;
-                              const newLabel = prompt("Update label/name for this location:", existing.label);
-                              if (newLabel === null) return;
-                              const labelVal = newLabel.trim() || existing.label;
-                              const updated = (lead?.addresses || []).map(a => a.id === selectedBillingLoc ? {
-                                ...a,
-                                label: labelVal,
-                                consigneeName: buyerName,
-                                consigneeAddr: buyerCity,
-                                consigneeState: buyerState,
-                                consigneeMob: buyerContact,
-                                consigneeGst: buyerGst
-                              } : a);
-                              updateLead(lead.id, { addresses: updated });
-                              showBanner(`Location "${labelVal}" updated!`, 'success');
-                            }}
-                            title="Save current details to this location"
-                            style={{ fontSize: '7pt', background: '#319795', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                          >
-                            Update
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!confirm("Are you sure you want to delete this saved location?")) return;
-                              const updated = (lead?.addresses || []).filter(a => a.id !== selectedBillingLoc);
-                              updateLead(lead.id, { addresses: updated });
-                              setSelectedBillingLoc('');
-                              showBanner(`Location deleted!`, 'success');
-                            }}
-                            style={{ fontSize: '7pt', background: '#e53e3e', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                          >
-                            Delete
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const label = prompt("Enter a label for this address location (e.g. Head Office, Mumbai):");
-                            if (!label) return;
-                            const newAddr = {
-                              id: 'addr_' + Date.now(),
-                              label: label.trim(),
-                              consigneeName: buyerName,
-                              consigneeAddr: buyerCity,
-                              consigneeState: buyerState,
-                              consigneeMob: buyerContact,
-                              consigneeGst: buyerGst
-                            };
-                            const updatedAddresses = [...(lead?.addresses || []), newAddr];
-                            updateLead(lead.id, { addresses: updatedAddresses });
-                            setSelectedBillingLoc(newAddr.id);
-                            showBanner(`Location "${label.trim()}" saved!`, 'success');
-                          }}
-                          style={{ fontSize: '7pt', background: '#3182ce', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                        >
-                          Save New
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
-                <div style={{ fontWeight: 'bold', fontSize: '8pt', marginBottom: 1 }}><CE onBlur={e => { markDirty(); setBuyerName(e.target.innerText.trim()); }}>{buyerName || '-'}</CE></div>
+                <div style={{ fontWeight: 'bold', fontSize: '8.5pt', marginBottom: 1 }}>
+                  <CE onBlur={e => { markDirty(); setBuyerName(e.target.innerText.trim()); }}>{buyerName || '-'}</CE>
+                </div>
                 <div style={{ fontSize: '7.5pt', lineHeight: 1.3 }}>
                   <div><CE onBlur={e => { markDirty(); setBuyerCity(e.target.innerText.trim()); }}>{buyerCity || ''}</CE></div>
                   <div>State: <CE onBlur={e => { markDirty(); setBuyerState(e.target.innerText.trim()); }}>{buyerState || '-'}</CE></div>
@@ -684,133 +483,33 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   <div>GSTN- <CE onBlur={e => { markDirty(); setBuyerGst(e.target.innerText.trim()); }}>{buyerGst || '-'}</CE></div>
                 </div>
                 <div style={{ borderBottom: '1px solid #000', margin: '4px 0' }} />
+
+                {/* Delivery Address */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, flexWrap: 'wrap', gap: '4px' }}>
                   <span style={{ fontWeight: 'bold', fontSize: '8.5pt' }}>Delivery Address:</span>
-                  {lead && (
-                    <div className="no-print" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                      <select 
-                        value={selectedDeliveryLoc} 
-                        onChange={e => {
-                          const val = e.target.value;
-                          setSelectedDeliveryLoc(val);
-                          if (!val) return;
-                          if (val === 'default') {
-                            setConsigneeName(buyerName || '');
-                            setConsigneeAddr(buyerCity ? `${buyerCity}${buyerState ? ', ' + buyerState : ''}` : '');
-                            setConsigneeState(buyerState || '');
-                            setConsigneeMob(buyerContact || '');
-                            setConsigneeGst(buyerGst || '-');
-                            markDirty();
-                          } else {
-                            const found = (lead?.addresses || []).find(a => a.id === val);
-                            if (found) {
-                              setConsigneeName(found.consigneeName);
-                              setConsigneeAddr(found.consigneeAddr);
-                              setConsigneeState(found.consigneeState);
-                              setConsigneeMob(found.consigneeMob);
-                              setConsigneeGst(found.consigneeGst);
-                              markDirty();
-                            }
-                          }
-                        }}
-                        style={{ fontSize: '7.5pt', padding: '1px 4px', background: '#2d3748', color: '#fff', border: '1px solid #4a5568', borderRadius: '4px', cursor: 'pointer' }}
-                      >
-                        <option value="">-- Select Saved Location --</option>
-                        <option value="default">Default (Same as Billing Address)</option>
-                        {(lead?.addresses || []).map(a => (
-                          <option key={a.id} value={a.id}>{a.label}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => setShowManageModal(true)}
-                        title="Manage Saved Locations"
-                        style={{ fontSize: '7pt', background: '#4a5568', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                      >
-                        ⚙️ Manage
-                      </button>
-                      {selectedDeliveryLoc && selectedDeliveryLoc !== 'default' && (lead?.addresses || []).some(a => a.id === selectedDeliveryLoc) ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const existing = (lead?.addresses || []).find(a => a.id === selectedDeliveryLoc);
-                              if (!existing) return;
-                              const newLabel = prompt("Update label/name for this location:", existing.label);
-                              if (newLabel === null) return;
-                              const labelVal = newLabel.trim() || existing.label;
-                              const updated = (lead?.addresses || []).map(a => a.id === selectedDeliveryLoc ? {
-                                ...a,
-                                label: labelVal,
-                                consigneeName,
-                                consigneeAddr,
-                                consigneeState,
-                                consigneeMob,
-                                consigneeGst
-                              } : a);
-                              updateLead(lead.id, { addresses: updated });
-                              showBanner(`Location "${labelVal}" updated!`, 'success');
-                            }}
-                            title="Save current details to this location"
-                            style={{ fontSize: '7pt', background: '#319795', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                          >
-                            Update
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!confirm("Are you sure you want to delete this saved location?")) return;
-                              const updated = (lead?.addresses || []).filter(a => a.id !== selectedDeliveryLoc);
-                              updateLead(lead.id, { addresses: updated });
-                              setSelectedDeliveryLoc('');
-                              showBanner(`Location deleted!`, 'success');
-                            }}
-                            style={{ fontSize: '7pt', background: '#e53e3e', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                          >
-                            Delete
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const label = prompt("Enter a label for this address location (e.g. Warehouse 1, Chennai Office):");
-                            if (!label) return;
-                            const newAddr = {
-                              id: 'addr_' + Date.now(),
-                              label: label.trim(),
-                              consigneeName,
-                              consigneeAddr,
-                              consigneeState,
-                              consigneeMob,
-                              consigneeGst
-                            };
-                            const updatedAddresses = [...(lead?.addresses || []), newAddr];
-                            updateLead(lead.id, { addresses: updatedAddresses });
-                            setSelectedDeliveryLoc(newAddr.id);
-                            showBanner(`Location "${label.trim()}" saved!`, 'success');
-                          }}
-                          style={{ fontSize: '7pt', background: '#3182ce', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', cursor: 'pointer', fontWeight: 'bold' }}
-                        >
-                          Save New
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
                 <div style={{ fontSize: '7.5pt', lineHeight: 1.3 }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '8pt' }}><CE onBlur={e => { markDirty(); setConsigneeName(e.target.innerText.trim()); }}>{consigneeName || 'Same as Billing Address'}</CE></div>
+                  <div style={{ fontWeight: 'bold', fontSize: '8pt' }}>
+                    <CE onBlur={e => { markDirty(); setConsigneeName(e.target.innerText.trim()); }}>{consigneeName || 'Same as Billing Address'}</CE>
+                  </div>
                   <CE onBlur={e => { markDirty(); setConsigneeAddr(e.target.innerText.trim()); }}>{consigneeAddr}</CE>
                   <div>State: <CE onBlur={e => { markDirty(); setConsigneeState(e.target.innerText.trim()); }}>{consigneeState || '-'}</CE></div>
                   <div>Mob:- <CE onBlur={e => { markDirty(); setConsigneeMob(e.target.innerText.trim()); }}>{consigneeMob || '-'}</CE></div>
                   <div>GSTN- <CE onBlur={e => { markDirty(); setConsigneeGst(e.target.innerText.trim()); }}>{consigneeGst || '-'}</CE></div>
                 </div>
               </td>
+
               {/* RIGHT: Invoice details */}
               <td style={{ width: '50%', padding: '6px 8px', verticalAlign: 'top' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #000', paddingBottom: 3, marginBottom: 3 }}>
-                  <div style={{ fontSize: '7.5pt', paddingRight: 6 }}><strong>Invoice No.</strong><br /><span contentEditable suppressContentEditableWarning onBlur={e => { markDirty(); setInvNo(e.target.innerText.trim()); }} style={{ outline: 'none', fontWeight: 'bold', fontSize: '8pt' }}>{invNo}</span></div>
-                  <div style={{ fontSize: '7.5pt', borderLeft: '1px solid #000', paddingLeft: 8 }}><strong>Dated</strong><br /><span contentEditable suppressContentEditableWarning onBlur={e => { markDirty(); setInvDate(e.target.innerText.trim()); }} style={{ outline: 'none', fontWeight: 'bold', fontSize: '8pt' }}>{invDate}</span></div>
+                  <div style={{ fontSize: '7.5pt', paddingRight: 6 }}>
+                    <strong>Invoice No.</strong><br />
+                    <span contentEditable suppressContentEditableWarning onBlur={e => { markDirty(); setInvNo(e.target.innerText.trim()); }} style={{ outline: 'none', fontWeight: 'bold', fontSize: '8pt' }}>{invNo}</span>
+                  </div>
+                  <div style={{ fontSize: '7.5pt', borderLeft: '1px solid #000', paddingLeft: 8 }}>
+                    <strong>Dated</strong><br />
+                    <span contentEditable suppressContentEditableWarning onBlur={e => { markDirty(); setInvDate(e.target.innerText.trim()); }} style={{ outline: 'none', fontWeight: 'bold', fontSize: '8pt' }}>{invDate}</span>
+                  </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #000', padding: '2px 0', marginBottom: 3 }}>
                   <div style={{ fontSize: '7.5pt', paddingRight: 6 }}>Delivery Note<br /><CE onBlur={e => { markDirty(); setDeliveryNote(e.target.innerText.trim()); }}>{deliveryNote}</CE></div>
@@ -852,10 +551,9 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
             {pageItems.map((item, i) => {
               const globalIdx = pageNum === 1 ? i : PAGE1_ROWS + i;
               const amt = ((parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1));
-              // Sync contentEditable change back to rawItems state
               const onCE = (field, convert) => (e) => {
                 const val = e.currentTarget.innerText.trim();
-                updateItem(globalIdx, field, convert ? convert(val) : val); // updateItem already calls markDirty
+                updateItem(globalIdx, field, convert ? convert(val) : val);
               };
               const ceStyle = { outline: 'none', display: 'block', width: '100%' };
               return (
@@ -884,7 +582,9 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                   <td contentEditable suppressContentEditableWarning onBlur={onCE('unit')} style={{ ...tdStyle, textAlign: 'center' }}>
                     <span style={ceStyle}>{item.unit || 'Ltr'}</span>
                   </td>
-                  <td style={{ ...tdStyle, textAlign: 'right', borderRight: 'none' }}>{amt.toFixed(2)}</td>
+                  <td style={{ ...tdStyle, textAlign: 'right', borderRight: 'none', fontWeight: 'bold' }}>
+                    {amt.toFixed(2)}
+                  </td>
                 </tr>
               );
             })}
@@ -906,7 +606,7 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
           )}
         </table>
 
-        {/* Add Row button — always on last page so user can add items anytime */}
+        {/* Add Row button */}
         {pageNum === totalPages && (
           <div className="no-print" style={{ padding: '4px 6px', borderBottom: '1px solid #000' }}>
             <button onClick={addItem} style={{ fontSize: '7pt', background: '#e0f2fe', border: '1px dashed #0284c7', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', color: '#0284c7', fontWeight: 600 }}>+ Add Row</button>
@@ -951,56 +651,53 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
                 style={{ textAlign: 'right', borderLeft: '1px solid #000', paddingRight: 4, outline: 'none' }}
               >{roundOff.toFixed(2)}</div>
             </div>
-            <div className="grand-total-row" style={{ display: 'grid', gridTemplateColumns: '1fr 110px', padding: '4px 6px', background: '#f8fafc', fontSize: '9.5pt', fontWeight: 'bold', borderBottom: '1px solid #000' }}>
-              <div style={{ textAlign: 'right', textTransform: 'uppercase' }}>Grand Total</div>
-              <div style={{ textAlign: 'right', borderLeft: '1px solid #000', paddingRight: 4 }}>₹{grandTotal.toLocaleString('en-IN')}</div>
+            <div className="grand-total-row" style={{ borderBottom: '1.5px solid #000', display: 'grid', gridTemplateColumns: '1fr 110px', padding: '3px 6px', fontSize: '9pt', fontWeight: 'bold' }}>
+              <div style={{ textAlign: 'right' }}>GRAND TOTAL</div>
+              <div style={{ textAlign: 'right', borderLeft: '1px solid #000', paddingRight: 4 }}>₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
 
             {/* Amount in words */}
             <div style={{ borderBottom: '1px solid #000', padding: '3px 6px', fontSize: '7.5pt' }}>
-              <strong>Amount Chargeable (in words):</strong>{' '}
-              <em>{(s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '')(numberToWords(Math.floor(Math.abs(grandTotal))))} Rupees Only</em>
+              Amount Chargeable (in words): <strong>{numberToWords(Math.round(grandTotal)) || 'Zero'} Rupees Only</strong>
             </div>
 
-            {/* Bank + Tax registration */}
+            {/* Bank + Tax details */}
             <table style={{ width: '100%', borderCollapse: 'collapse', borderBottom: '1px solid #000', fontSize: '7.5pt' }}>
               <tbody>
                 <tr>
                   <td style={{ width: '50%', padding: '4px 6px', borderRight: '1px solid #000', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: 2 }}>Company's Bank Details</div>
                     <div style={{ fontSize: '7pt' }}>
-                      <div>Bank Name : <CE onBlur={e => { markDirty(); setCompBankName(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compBankName || '-'}</CE></div>
-                      <div>A/c No. : <CE onBlur={e => { markDirty(); setCompAccNo(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compAccNo || '-'}</CE></div>
-                      <div>Branch : <CE onBlur={e => { markDirty(); setCompBranch(e.target.innerText.trim()); }}>{compBranch || '-'}</CE></div>
-                      <div>IFS Code : <CE onBlur={e => { markDirty(); setCompIfsc(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compIfsc || '-'}</CE></div>
+                      <div>Bank Name: <CE onBlur={e => { markDirty(); setCompBankName(e.target.innerText.trim()); }}>{compBankName || c.bankName || '-'}</CE></div>
+                      <div>A/c No.: <CE onBlur={e => { markDirty(); setCompAccNo(e.target.innerText.trim()); }}>{compAccNo || c.accNo || '-'}</CE></div>
+                      <div>Branch: <CE onBlur={e => { markDirty(); setCompBranch(e.target.innerText.trim()); }}>{compBranch || c.branch || '-'}</CE></div>
+                      <div>IFS Code: <CE onBlur={e => { markDirty(); setCompIfsc(e.target.innerText.trim()); }}>{compIfsc || c.ifsc || '-'}</CE></div>
                     </div>
                   </td>
                   <td style={{ width: '50%', padding: '4px 6px', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: 2 }}>Company's Tax Registration</div>
                     <div style={{ fontSize: '7pt' }}>
-                      <div>Company's VAT TIN: <CE onBlur={e => { markDirty(); setCompVat(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compVat || '-'}</CE></div>
-                      <div>Company's CST No. : <CE onBlur={e => { markDirty(); setCompCst(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compCst || '-'}</CE></div>
-                      <div>Company's GST No. : <CE onBlur={e => { markDirty(); setCompGst(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compGst || '-'}</CE></div>
-                      <div>Company's PAN : <CE onBlur={e => { markDirty(); setCompPan(e.target.innerText.trim()); }} style={{ fontWeight: 'bold' }}>{compPan || '-'}</CE></div>
+                      <div>VAT TIN: <CE onBlur={e => { markDirty(); setCompVat(e.target.innerText.trim()); }}>{compVat || c.vat || '-'}</CE></div>
+                      <div>CST No.: <CE onBlur={e => { markDirty(); setCompCst(e.target.innerText.trim()); }}>{compCst || c.cst || '-'}</CE></div>
+                      <div>GST No.: <CE onBlur={e => { markDirty(); setCompGst(e.target.innerText.trim()); }}>{compGst || c.companyGst || c.gst || '-'}</CE></div>
+                      <div>PAN: <CE onBlur={e => { markDirty(); setCompPan(e.target.innerText.trim()); }}>{compPan || c.pan || '-'}</CE></div>
                     </div>
                   </td>
                 </tr>
               </tbody>
             </table>
 
-            {/* Declaration */}
+            {/* Declaration + Signature */}
             <div style={{ borderBottom: '1px solid #000', padding: '3px 6px', fontSize: '7pt' }}>
               <strong>Declaration:</strong> We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
             </div>
-
-            {/* Signature */}
-            <div style={{ padding: '6px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: '7pt', minHeight: 90 }}>
+            <div style={{ padding: '6px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: '7pt', minHeight: 70 }}>
               <div style={{ textAlign: 'center', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                <div>Customer's Seal and Signature</div>
+                Customer's Seal and Signature
               </div>
               <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
-                {c.seal && <img src={c.seal} alt="seal" style={{ maxWidth: 120, maxHeight: 60, objectFit: 'contain', marginBottom: 4 }} />}
-                <div style={{ paddingTop: 4 }}>for <CE style={{ fontWeight: 'bold' }}>{c.name || 'Company'}</CE><br /><span style={{ fontWeight: 'bold', fontSize: '6pt' }}>Authorised Signatory</span></div>
+                {c.seal && <img src={c.seal} alt="seal" style={{ maxWidth: 120, maxHeight: 55, objectFit: 'contain', marginBottom: 4 }} />}
+                <div style={{ paddingTop: 4 }}>for <CE style={{ fontWeight: 'bold' }}>{compName || c.name || 'Company'}</CE><br /><span style={{ fontWeight: 'bold', fontSize: '6pt' }}>Authorised Signatory</span></div>
               </div>
             </div>
 
@@ -1008,53 +705,6 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
             <div style={{ textAlign: 'center', padding: '3px', fontSize: '6pt', color: '#555' }}>
               This is a Computer Generated Invoice
             </div>
-          </>
-        )}
-
-        {/* Page 2 header (when on page 2) */}
-        {pageNum === 2 && (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #000', padding: '6px 8px', fontSize: '8pt' }}>
-              <div><strong>Billing Address:</strong> <span style={{ display: 'block', marginTop: 2 }}>{buyerName || cust.customerName || '-'}</span></div>
-              <div style={{ textAlign: 'right' }}><strong>Page 2 of 2</strong></div>
-            </div>
-            {/* Bank + Tax repeated on page 2 */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', borderBottom: '1px solid #000', fontSize: '7.5pt', marginTop: 'auto' }}>
-              <tbody>
-                <tr>
-                  <td style={{ width: '50%', padding: '4px 6px', borderRight: '1px solid #000', verticalAlign: 'top' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: 2, textDecoration: 'underline' }}>Company's Bank Details</div>
-                    <div style={{ fontSize: '7pt' }}>
-                      <div>Bank Name: <strong>{c.bankName || '-'}</strong></div>
-                      <div>A/c No.: <strong>{c.accNo || '-'}</strong></div>
-                      <div>Branch: {c.branch || '-'}</div>
-                      <div>IFS Code: <strong>{c.ifsc || '-'}</strong></div>
-                    </div>
-                  </td>
-                  <td style={{ width: '50%', padding: '4px 6px', verticalAlign: 'top' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: 2, textDecoration: 'underline' }}>Company's Tax & Registration</div>
-                    <div style={{ fontSize: '7pt' }}>
-                      <div>VAT TIN: <strong>{c.vat || '-'}</strong></div>
-                      <div>CST No.: <strong>{c.cst || '-'}</strong></div>
-                      <div>GST No.: <strong>{c.companyGst || c.gst || '-'}</strong></div>
-                      <div>PAN: <strong>{c.pan || '-'}</strong></div>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            {/* Declaration + Signature on page 2 */}
-            <div style={{ borderBottom: '1px solid #000', borderTop: '1px solid #000', padding: '3px 6px', fontSize: '7pt' }}>
-              <strong>Declaration:</strong> We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
-            </div>
-            <div style={{ padding: '6px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: '7pt', minHeight: 80 }}>
-              <div style={{ textAlign: 'center', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>Customer's Seal and Signature</div>
-              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
-                {c.seal && <img src={c.seal} alt="seal" style={{ maxWidth: 100, maxHeight: 50, objectFit: 'contain', marginBottom: 4 }} />}
-                <div>for <CE style={{ fontWeight: 'bold' }}>{c.name || 'Company'}</CE><br /><span style={{ fontWeight: 'bold', fontSize: '6pt' }}>Authorised Signatory</span></div>
-              </div>
-            </div>
-            <div style={{ textAlign: 'center', padding: '3px', fontSize: '6pt', color: '#555' }}>This is a Computer Generated Invoice</div>
           </>
         )}
       </div>
@@ -1085,164 +735,6 @@ export default function InvoiceModal({ leadId, invoice: existingInvoice, onClose
           {InvoicePage({ items: page1Items, pageNum: 1, totalPages: showPage2 ? 2 : 1 })}
           {showPage2 && InvoicePage({ items: page2Items, pageNum: 2, totalPages: 2 })}
         </div>
-
-        {/* Manage Saved Locations Modal */}
-        {showManageModal && (
-          <div className="no-print" style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
-            zIndex: 99999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backdropFilter: 'blur(4px)',
-            padding: '1rem'
-          }}>
-            <div style={{
-              background: '#1e293b',
-              color: '#f8fafc',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              width: '100%',
-              maxWidth: '650px',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              border: '1px solid rgba(255,255,255,0.1)',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: '#fff' }}>⚙️ Manage Saved Address Locations</h3>
-                <button 
-                  onClick={() => setShowManageModal(false)}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.5rem', padding: '0 0.5rem' }}
-                >
-                  &times;
-                </button>
-              </div>
-
-              {(!lead?.addresses || lead.addresses.length === 0) ? (
-                <div style={{ color: '#94a3b8', fontSize: '0.9rem', textAlign: 'center', padding: '2rem 0' }}>
-                  No saved address locations yet. Use the "Save New" button under Billing or Delivery Address to save a location first.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {(lead.addresses).map(addr => (
-                    <div key={addr.id} style={{ border: '1px solid rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '6px', background: '#0f172a' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                        <div>
-                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>Location Name/Label (e.g. Warehouse 1)</label>
-                          <input 
-                            type="text" 
-                            value={addr.label || ''} 
-                            onChange={e => {
-                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, label: e.target.value } : a);
-                              updateLead(lead.id, { addresses: updated });
-                            }}
-                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>Consignee/Buyer Name</label>
-                          <input 
-                            type="text" 
-                            value={addr.consigneeName || ''} 
-                            onChange={e => {
-                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeName: e.target.value } : a);
-                              updateLead(lead.id, { addresses: updated });
-                            }}
-                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
-                          />
-                        </div>
-                      </div>
-                      
-                      <div style={{ marginBottom: '0.75rem' }}>
-                        <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>Address/City Details</label>
-                        <textarea 
-                          value={addr.consigneeAddr || ''} 
-                          onChange={e => {
-                            const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeAddr: e.target.value } : a);
-                            updateLead(lead.id, { addresses: updated });
-                          }}
-                          rows={2}
-                          style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none', resize: 'vertical' }}
-                        />
-                      </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                        <div>
-                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>State</label>
-                          <input 
-                            type="text" 
-                            value={addr.consigneeState || ''} 
-                            onChange={e => {
-                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeState: e.target.value } : a);
-                              updateLead(lead.id, { addresses: updated });
-                            }}
-                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>Mobile</label>
-                          <input 
-                            type="text" 
-                            value={addr.consigneeMob || ''} 
-                            onChange={e => {
-                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeMob: e.target.value } : a);
-                              updateLead(lead.id, { addresses: updated });
-                            }}
-                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '7.5pt', color: '#94a3b8', display: 'block', marginBottom: 2 }}>GSTIN</label>
-                          <input 
-                            type="text" 
-                            value={addr.consigneeGst || ''} 
-                            onChange={e => {
-                              const updated = lead.addresses.map(a => a.id === addr.id ? { ...a, consigneeGst: e.target.value } : a);
-                              updateLead(lead.id, { addresses: updated });
-                            }}
-                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 8px', fontSize: '8pt', width: '100%', borderRadius: '4px', outline: 'none' }}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm("Are you sure you want to delete this saved location?")) {
-                              const updated = lead.addresses.filter(a => a.id !== addr.id);
-                              updateLead(lead.id, { addresses: updated });
-                              if (selectedBillingLoc === addr.id) setSelectedBillingLoc('');
-                              if (selectedDeliveryLoc === addr.id) setSelectedDeliveryLoc('');
-                              showBanner(`Location deleted!`, 'success');
-                            }
-                          }}
-                          style={{ fontSize: '7.5pt', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', padding: '4px 10px', cursor: 'pointer', fontWeight: 'bold' }}
-                        >
-                          Delete Location
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
-                <button 
-                  onClick={() => setShowManageModal(false)}
-                  style={{ background: '#475569', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 16px', cursor: 'pointer', fontSize: '8.5pt', fontWeight: 'bold' }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

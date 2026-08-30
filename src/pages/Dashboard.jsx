@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Users, TrendingUp, AlertCircle, Truck, DollarSign, Zap, FileDown, Plus, FileText, ListChecks, ArrowUpRight, CheckCircle, Sparkles } from 'lucide-react';
+import { Users, TrendingUp, AlertCircle, Truck, DollarSign, Zap, FileDown, Plus, FileText, ListChecks, ArrowUpRight, CheckCircle, Sparkles, Activity, Clock, ArrowRight } from 'lucide-react';
 import { Chart, registerables } from 'chart.js';
 import { useApp } from '../context/AppContext';
-import { DATA_CONFIG } from '../utils/dataConfig';
+import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
 
 Chart.register(...registerables);
 
@@ -26,7 +26,7 @@ const ChartCard = ({ title, canvasRef, height = 220, hasData = true }) => (
 
 export default function Dashboard() {
   const { leads, invoiceHistory, setCurrentSection, products } = useApp();
-  const [monthlyCost, setMonthlyCost] = useState(() => parseFloat(localStorage.getItem('indimart_monthlyCost') || '0'));
+  const [monthlyCost, setMonthlyCost] = useState(() => parseFloat(localStorage.getItem('indimart_monthlyCost') || '50000'));
   const dashboardRef = useRef(null);
   const [exporting, setExporting] = useState(false);
   const chartsRef = useRef({});
@@ -37,6 +37,10 @@ export default function Dashboard() {
   const refFunnel = useRef(null);
   const refTrend = useRef(null);
   const canvasRefs = { dist: refDist, lost: refLost, product: refProduct, city: refCity, funnel: refFunnel, trend: refTrend };
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayLeadsCount = leads.filter(l => l.date && l.date.startsWith(todayStr)).length;
+  const todayFollowUpsCount = leads.filter(l => l.followUpDate === todayStr && !DATA_CONFIG.getDeadStatusLabels().includes(l.status)).length;
 
   // KPI calculations
   const paidInvoices = invoiceHistory.filter(inv => {
@@ -118,64 +122,93 @@ export default function Dashboard() {
       (l.productList || [{ name: l.product, price: l.orderValue, qty: 1 }]).forEach(item => {
         if (!item.name) return;
         const clean = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const itemClean = clean(item.name.replace('[NEW] ', ''));
-        const catProduct = products.find(p => clean(p.name) === itemClean) || 
-                           products.find(p => itemClean.includes(clean(p.name))) || 
-                           products.find(p => clean(p.name).includes(itemClean));
-        const category = catProduct?.category || 'Uncategorized';
-        categoryRevenue[category] = (categoryRevenue[category] || 0) + ((parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1));
+        const matchedProduct = products.find(p => clean(p.name) === clean(item.name));
+        const category = matchedProduct?.category || 'Other Products';
+        const amount = (parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1);
+        categoryRevenue[category] = (categoryRevenue[category] || 0) + amount;
       });
     });
-    const sortedCats = Object.entries(categoryRevenue).sort((a,b) => b[1]-a[1]).slice(0,5);
-    if (canvasRefs.product.current && sortedCats.length) {
+    if (canvasRefs.product.current && Object.keys(categoryRevenue).length) {
+      const topCats = Object.entries(categoryRevenue).sort((a, b) => b[1] - a[1]).slice(0, 6);
       chartsRef.current.product = new Chart(canvasRefs.product.current, {
         type: 'bar',
-        data: { labels: sortedCats.map(p=>p[0]), datasets: [{ label: 'Revenue (₹)', data: sortedCats.map(p=>p[1]), backgroundColor: '#10b981', borderRadius: 6 }] },
-        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: chartColor.text } }, y: { grid: { display: false }, ticks: { color: chartColor.text } } } },
+        data: { labels: topCats.map(c => c[0]), datasets: [{ label: 'Revenue (₹)', data: topCats.map(c => c[1]), backgroundColor: 'rgba(16,185,129,0.7)', borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: chartColor.grid }, ticks: { color: chartColor.text } }, x: { grid: { display: false }, ticks: { color: chartColor.text } } } },
       });
     }
 
-    // 4. City revenue pie
+    // 4. City-wise revenue
+    const cleanCityName = (rawCity, rawState) => {
+      if (!rawCity) return 'Other';
+      let city = rawCity.trim();
+      if (city.includes(',')) {
+        const parts = city.split(',').map(p => p.trim());
+        const cleanParts = parts.filter(p => {
+          const lower = p.toLowerCase();
+          return lower !== 'india' && !/^\d{6}$/.test(lower) && !lower.startsWith('india -') && !/^\d+$/.test(lower);
+        });
+        if (cleanParts.length > 0) {
+          const stateLower = (rawState || '').toLowerCase();
+          const lastPart = cleanParts[cleanParts.length - 1];
+          const lastPartLower = lastPart.toLowerCase();
+          const indianStates = ['andhra pradesh','arunachal pradesh','assam','bihar','chhattisgarh','goa','gujarat','haryana','himachal pradesh','jharkhand','karnataka','kerala','madhya pradesh','maharashtra','manipur','meghalaya','mizoram','nagaland','odisha','punjab','rajasthan','sikkim','tamil nadu','telangana','tripura','uttar pradesh','uttarakhand','west bengal','delhi'];
+          if (indianStates.includes(lastPartLower) || lastPartLower === stateLower) {
+            city = cleanParts[cleanParts.length - 2] || lastPart;
+          } else {
+            city = lastPart;
+          }
+        }
+      }
+      return city.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    };
+
     const cityRevenue = {};
-    leads.filter(l => wonLabels.includes(l.status)).forEach(l => {
-      const city = l.city || 'Other';
-      cityRevenue[city] = (cityRevenue[city] || 0) + (parseFloat(l.orderValue) || 0);
-    });
-    const sortedCities = Object.entries(cityRevenue).sort((a,b) => b[1]-a[1]).slice(0,5);
-    if (canvasRefs.city.current && sortedCities.length) {
+    if (paidInvoices.length) {
+      paidInvoices.forEach(inv => {
+        const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+        const city = cleanCityName(inv.customerCity || inv.city, inv.customerState || inv.state);
+        cityRevenue[city] = (cityRevenue[city] || 0) + (parseFloat(v.totalAmount) || 0);
+      });
+    }
+    if (canvasRefs.city.current && Object.keys(cityRevenue).length) {
+      const topCities = Object.entries(cityRevenue).sort((a, b) => b[1] - a[1]).slice(0, 6);
       chartsRef.current.city = new Chart(canvasRefs.city.current, {
-        type: 'pie',
-        data: { labels: sortedCities.map(c=>c[0]), datasets: [{ data: sortedCities.map(c=>c[1]), backgroundColor: ['#10b981','#3b82f6','#f59e0b','#8b5cf6','#ec4899'] }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: chartColor.text, boxWidth: 8 } } } },
+        type: 'bar',
+        data: { labels: topCities.map(c => c[0]), datasets: [{ label: 'Revenue (₹)', data: topCities.map(c => c[1]), backgroundColor: 'rgba(56,189,248,0.7)', borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: chartColor.grid }, ticks: { color: chartColor.text } }, x: { grid: { display: false }, ticks: { color: chartColor.text } } } },
       });
     }
 
-    // 5. Sales funnel bar
-    const funnelData = [
-      leads.length,
-      leads.filter(l => DATA_CONFIG.getContactedStatusLabels().includes(l.status)).length,
-      leads.filter(l => [...DATA_CONFIG.getStatusGroupStatuses('quoted'), ...wonLabels].includes(l.status)).length,
-      leads.filter(l => wonLabels.includes(l.status)).length,
-      leads.filter(l => wonLabels.includes(l.status)).length,
+    // 5. Funnel
+    const funnelStages = [
+      { label: 'Total Leads', count: leads.length },
+      { label: 'Contacted', count: contacted.length },
+      { label: 'Quoted', count: leads.filter(l => DATA_CONFIG.getQuotedStatusLabels().includes(l.status)).length },
+      { label: 'Converted', count: billedLeadIds.size },
     ];
     if (canvasRefs.funnel.current && leads.length) {
       chartsRef.current.funnel = new Chart(canvasRefs.funnel.current, {
         type: 'bar',
-        data: { labels: ['Total','Contacted','Quoted','Converted','Purchased'], datasets: [{ data: funnelData, backgroundColor: ['#3b82f6','#06b6d4','#f59e0b','#10b981','#047857'], borderRadius: 8 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: chartColor.grid }, ticks: { color: chartColor.text } }, x: { grid: { display: false }, ticks: { color: chartColor.text } } } },
+        data: { labels: funnelStages.map(s => s.label), datasets: [{ data: funnelStages.map(s => s.count), backgroundColor: ['#38bdf8', '#818cf8', '#fbbf24', '#10b981'], borderRadius: 6 }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: chartColor.grid }, ticks: { color: chartColor.text } }, y: { grid: { display: false }, ticks: { color: chartColor.text } } } },
       });
     }
 
-    // 6. Monthly trend line
+    // 6. Trend
     const monthlyData = {};
     leads.forEach(l => {
       const month = (l.date || '').substring(0, 7);
       if (!month) return;
       if (!monthlyData[month]) monthlyData[month] = { revenue: 0, count: 0 };
-      if (wonLabels.includes(l.status)) monthlyData[month].revenue += l.orderValue;
       monthlyData[month].count++;
     });
-    const months = Object.keys(monthlyData).sort();
+    paidInvoices.forEach(inv => {
+      const v = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+      const dateStr = String(v.invoiceDate || inv.createdAt || '');
+      const m = dateStr.substring(0, 7);
+      if (m && monthlyData[m]) monthlyData[m].revenue += (parseFloat(v.receivedAmount) || 0);
+    });
+    const months = Object.keys(monthlyData).sort().slice(-6);
     if (canvasRefs.trend.current && months.length) {
       chartsRef.current.trend = new Chart(canvasRefs.trend.current, {
         type: 'line',
@@ -215,7 +248,38 @@ export default function Dashboard() {
 
   return (
     <div className="page-section" ref={dashboardRef}>
-      {/* Header with Groww-style date & export action */}
+      {/* Groww / Blinkit Style Live Today Pulse Bar */}
+      <div 
+        className="glass-card" 
+        style={{ 
+          marginBottom: '1.25rem', 
+          padding: '0.85rem 1.1rem', 
+          background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(99,102,241,0.06))',
+          borderColor: 'rgba(16,185,129,0.2)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.65rem'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 10px #10b981', animation: 'pulseGlow 2s infinite' }} />
+          <span style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--text-main)' }}>Today's CRM Pulse:</span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+            <strong style={{ color: '#10b981' }}>{todayLeadsCount}</strong> new leads • <strong style={{ color: '#f59e0b' }}>{todayFollowUpsCount}</strong> tasks due
+          </span>
+        </div>
+        <button 
+          className="btn btn-secondary" 
+          onClick={() => setCurrentSection('followups')}
+          style={{ fontSize: '0.74rem', padding: '0.35rem 0.75rem', minHeight: 30, borderRadius: '999px', gap: 4 }}
+        >
+          <span>View Tasks</span> <ArrowRight size={12} />
+        </button>
+      </div>
+
+      {/* Header */}
       <div className="section-header">
         <div>
           <h2 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -232,44 +296,44 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Quick Action Dock (Zepto/Blinkit speed dock) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+      {/* Zepto/Blinkit Quick Action Dock */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.65rem', marginBottom: '1.25rem' }}>
         <button 
           className="btn btn-primary" 
           onClick={() => setCurrentSection('leads')}
-          style={{ padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          style={{ padding: '0.75rem 0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '0.85rem' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <Users size={16} /> <span>View Leads</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Users size={16} /> <span>Leads</span>
           </div>
-          <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem' }}>{leads.length}</span>
+          <span style={{ background: 'rgba(255,255,255,0.22)', padding: '1px 7px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 800 }}>{leads.length}</span>
         </button>
 
         <button 
           className="btn btn-secondary" 
           onClick={() => setCurrentSection('invoices')}
-          style={{ padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          style={{ padding: '0.75rem 0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '0.85rem' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <FileText size={16} style={{ color: 'var(--primary)' }} /> <span>Invoices & Billing</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FileText size={16} style={{ color: 'var(--primary)' }} /> <span>Billing</span>
           </div>
-          <span style={{ background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem' }}>{invoiceHistory.length}</span>
+          <span style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 7px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 800 }}>{invoiceHistory.length}</span>
         </button>
 
         <button 
           className="btn btn-secondary" 
           onClick={() => setCurrentSection('bulk')}
-          style={{ padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          style={{ padding: '0.75rem 0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '0.85rem' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <ListChecks size={16} style={{ color: '#f59e0b' }} /> <span>Bulk Actions</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <ListChecks size={16} style={{ color: '#f59e0b' }} /> <span>Bulk Sync</span>
           </div>
           <ArrowUpRight size={14} style={{ color: 'var(--text-dim)' }} />
         </button>
       </div>
 
       {/* Groww-style KPI Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.85rem', marginBottom: '1.25rem' }}>
         {kpis.map((kpi, i) => (
           <div 
             key={i} 
@@ -295,37 +359,52 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Modern ROI Calculator */}
-      <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h3 style={{ fontSize: '1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      {/* Modern ROI Calculator with Presets */}
+      <div className="glass-card" style={{ marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '6px' }}>
+          <h3 style={{ fontSize: '0.96rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span>💰 Marketing ROI & Acquisition Economics</span>
           </h3>
-          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Auto-calculated from paid invoices</span>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            {[25000, 50000, 75000, 100000].map(amt => (
+              <button 
+                key={amt}
+                onClick={() => { setMonthlyCost(amt); localStorage.setItem('indimart_monthlyCost', amt); }}
+                style={{
+                  fontSize: '0.68rem', padding: '2px 7px', borderRadius: '4px',
+                  background: monthlyCost === amt ? 'var(--primary)' : 'var(--bg-input)',
+                  color: monthlyCost === amt ? '#fff' : 'var(--text-dim)',
+                  border: '1px solid var(--glass-border)', cursor: 'pointer', fontWeight: 700
+                }}
+              >
+                ₹{amt / 1000}k
+              </button>
+            ))}
+          </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.85rem', alignItems: 'flex-end' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: 6, fontWeight: 700 }}>INDIA MART MONTHLY COST (₹)</label>
+            <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-dim)', marginBottom: 4, fontWeight: 700 }}>INDIA MART MONTHLY COST (₹)</label>
             <input type="number" value={monthlyCost} onChange={e => { const v = parseFloat(e.target.value) || 0; setMonthlyCost(v); localStorage.setItem('indimart_monthlyCost', v); }}
               placeholder="e.g. 50000" />
           </div>
-          <div className="kpi-card" style={{ borderLeft: '4px solid #10b981', margin: 0, padding: '1rem' }}>
+          <div className="kpi-card" style={{ borderLeft: '4px solid #10b981', margin: 0, padding: '0.9rem' }}>
             <span className="kpi-label">Net Return</span>
-            <span className="kpi-value" style={{ color: (confirmedRevenue - monthlyCost) >= 0 ? '#10b981' : '#ef4444', fontSize: '1.45rem' }}>
+            <span className="kpi-value" style={{ color: (confirmedRevenue - monthlyCost) >= 0 ? '#10b981' : '#ef4444', fontSize: '1.4rem' }}>
               ₹{(confirmedRevenue - monthlyCost).toLocaleString()}
             </span>
             <div className="kpi-trend">{monthlyCost > 0 ? `${((confirmedRevenue / monthlyCost) * 100).toFixed(0)}% ROI` : 'Enter subscription cost'}</div>
           </div>
-          <div className="kpi-card" style={{ borderLeft: '4px solid #38bdf8', margin: 0, padding: '1rem' }}>
+          <div className="kpi-card" style={{ borderLeft: '4px solid #38bdf8', margin: 0, padding: '0.9rem' }}>
             <span className="kpi-label">Cost Per Lead</span>
-            <span className="kpi-value" style={{ color: '#38bdf8', fontSize: '1.45rem' }}>
+            <span className="kpi-value" style={{ color: '#38bdf8', fontSize: '1.4rem' }}>
               {leads.length && monthlyCost ? `₹${Math.round(monthlyCost / leads.length).toLocaleString()}` : '—'}
             </span>
             <div className="kpi-trend">{leads.length} total captured</div>
           </div>
-          <div className="kpi-card" style={{ borderLeft: '4px solid #f59e0b', margin: 0, padding: '1rem' }}>
+          <div className="kpi-card" style={{ borderLeft: '4px solid #f59e0b', margin: 0, padding: '0.9rem' }}>
             <span className="kpi-label">Cost Per Paid Order</span>
-            <span className="kpi-value" style={{ color: '#f59e0b', fontSize: '1.45rem' }}>
+            <span className="kpi-value" style={{ color: '#f59e0b', fontSize: '1.4rem' }}>
               {billedLeadIds.size && monthlyCost ? `₹${Math.round(monthlyCost / billedLeadIds.size).toLocaleString()}` : '—'}
             </span>
             <div className="kpi-trend">{billedLeadIds.size} paid conversions</div>
@@ -334,7 +413,7 @@ export default function Dashboard() {
       </div>
 
       {/* Charts Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
         <ChartCard title="Lead Status Distribution" canvasRef={refDist} hasData={leads.length > 0} />
         <ChartCard title="Monthly Revenue & Pipeline Trend" canvasRef={refTrend} hasData={leads.filter(l => l.date).length > 0} />
         <ChartCard title="Sales Funnel Conversion" canvasRef={refFunnel} hasData={leads.length > 0} />

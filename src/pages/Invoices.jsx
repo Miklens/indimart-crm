@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, FileText, Trash2, Download, RefreshCw, Eye, Copy } from 'lucide-react';
+import { Search, FileText, Trash2, Download, RefreshCw, Eye, Copy, Phone, MapPin, Calendar, CheckCircle, AlertCircle, MessageCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../context/AppUIContext';
 import InvoiceModal from '../components/InvoiceModal';
@@ -70,11 +70,15 @@ export default function Invoices() {
     URL.revokeObjectURL(url);
   };
 
+  const payColor = (ps) => ps === 'Paid' ? '#10b981' : ps === 'Partial' ? '#f59e0b' : '#ef4444';
+
+  if (viewLeadId) return <LeadDetails leadId={viewLeadId} onBack={() => setViewLeadId(null)} />;
+
   return (
     <div className="page-section">
       <div className="section-header">
         <div>
-          <h2 className="section-title">Invoice History</h2>
+          <h2 className="section-title">📄 Invoices & Billing</h2>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 2 }}>{invoiceHistory.length} invoice{invoiceHistory.length !== 1 ? 's' : ''} total</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -83,12 +87,169 @@ export default function Invoices() {
         </div>
       </div>
 
-      <div style={{ marginBottom: '1rem', position: 'relative', maxWidth: 320 }}>
-        <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search invoices..." style={{ paddingLeft: '2rem' }} />
+      <div style={{ marginBottom: '1.25rem', position: 'relative', maxWidth: 360 }}>
+        <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search invoice #, customer, phone..." style={{ paddingLeft: '2.25rem' }} />
       </div>
 
-      <div className="table-wrapper">
+      {/* ── MOBILE TOUCH CARDS (Invoices) ── */}
+      <div className="mobile-only">
+        {filtered.length === 0 && (
+          <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-dim)' }}>
+            No invoices found
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          {filtered.slice(0, visibleCount).map(inv => {
+            const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+            const total = parseFloat(latest.totalAmount) || 0;
+            const received = parseFloat(latest.receivedAmount) || 0;
+            const pending = Math.max(0, total - received);
+            const ps = latest.paymentStatus || 'Pending';
+
+            return (
+              <div 
+                key={inv.invoiceNumber}
+                className="glass-card"
+                style={{
+                  padding: '1.1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.65rem',
+                  borderLeft: `4px solid ${payColor(ps)}`,
+                }}
+              >
+                {/* Header: Invoice # + Date + WhatsApp */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontWeight: 800, fontSize: '0.96rem', color: 'var(--primary)' }}>
+                        {inv.invoiceNumber}
+                      </span>
+                      <span style={{ 
+                        fontSize: '0.65rem', 
+                        fontWeight: 800, 
+                        padding: '2px 7px', 
+                        borderRadius: 999,
+                        background: `${payColor(ps)}18`,
+                        color: payColor(ps),
+                        border: `1px solid ${payColor(ps)}33`
+                      }}>
+                        {ps}
+                      </span>
+                    </div>
+                    <div 
+                      style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text-main)', marginTop: 4, cursor: 'pointer' }}
+                      onClick={() => openCustomer360({ name: inv.customerName, contact: inv.customerContact, city: inv.customerCity })}
+                    >
+                      {inv.customerName}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-dim)', marginTop: 2 }}>
+                      {latest.invoiceDate || '—'} {inv.customerCity ? `• ${inv.customerCity}` : ''}
+                    </div>
+                  </div>
+
+                  {inv.customerContact && (
+                    <button 
+                      onClick={() => window.open(`https://wa.me/91${inv.customerContact}?text=Hello%20${encodeURIComponent(inv.customerName)},%20regarding%20Invoice%20${inv.invoiceNumber}%20for%20Rs.${total.toLocaleString()}...`)}
+                      style={{
+                        background: 'rgba(37, 211, 102, 0.15)',
+                        border: '1px solid rgba(37, 211, 102, 0.35)',
+                        color: '#25d366',
+                        padding: '6px 10px',
+                        borderRadius: '999px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      <MessageCircle size={14} /> <span>Share</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Financials Strip */}
+                <div style={{ background: 'var(--bg-input)', padding: '0.65rem 0.85rem', borderRadius: '0.65rem', border: '1px solid var(--glass-border)', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, textAlign: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', fontWeight: 700 }}>BILLED</div>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-main)' }}>₹{total.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', fontWeight: 700 }}>RECEIVED</div>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#10b981' }}>₹{received.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-dim)', fontWeight: 700 }}>BALANCE</div>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: pending > 0 ? '#ef4444' : '#10b981' }}>₹{pending.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                {/* Quick Status Selectors */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.66rem', color: 'var(--text-dim)', marginBottom: 2, fontWeight: 700 }}>PAYMENT</label>
+                    <select 
+                      value={ps} 
+                      onChange={e => handlePaymentStatus(inv.invoiceNumber, e.target.value)}
+                      style={{ fontSize: '0.82rem', padding: '0.45rem 0.6rem', minHeight: 36 }}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Partial">Partial</option>
+                      <option value="Paid">Paid</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.66rem', color: 'var(--text-dim)', marginBottom: 2, fontWeight: 700 }}>DELIVERY</label>
+                    <select 
+                      value={latest.deliveryStatus || 'Pending'}
+                      onChange={e => {
+                        updateInvoiceField(inv.invoiceNumber, 'deliveryStatus', e.target.value);
+                        showBanner(`Delivery status → ${e.target.value}`, 'success');
+                      }}
+                      style={{ fontSize: '0.82rem', padding: '0.45rem 0.6rem', minHeight: 36 }}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Material Dispatched">Dispatched</option>
+                      <option value="Material Reached">Reached</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid var(--glass-border)', paddingTop: '0.65rem' }}>
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => setViewInvoice({ ...inv, _editMode: false, initialVersion: inv.versions?.length - 1 })}
+                    style={{ flex: 1, padding: '0.45rem', fontSize: '0.76rem', minHeight: 34, gap: 4 }}
+                  >
+                    <Eye size={13} /> View / Print
+                  </button>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setDuplicateInvoice(inv)}
+                    style={{ padding: '0.45rem 0.75rem', fontSize: '0.76rem', minHeight: 34, gap: 4 }}
+                  >
+                    <Copy size={13} /> Copy
+                  </button>
+                  <button 
+                    className="btn btn-danger" 
+                    onClick={() => { if (window.confirm(`Delete invoice ${inv.invoiceNumber}?`)) { deleteInvoice(inv.invoiceNumber); showBanner('Invoice deleted', 'info'); } }}
+                    style={{ padding: '0.45rem 0.65rem', fontSize: '0.76rem', minHeight: 34 }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── DESKTOP TABLE VIEW ── */}
+      <div className="desktop-only table-wrapper">
         <table>
           <thead>
             <tr>
@@ -98,140 +259,76 @@ export default function Invoices() {
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dim)' }}>No invoices yet. Generate one from the Leads page.</td></tr>
+              <tr><td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-dim)' }}>No invoices found</td></tr>
             )}
             {filtered.slice(0, visibleCount).map(inv => {
               const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
-              const customerName = inv.customerName || '';
-              const customerContact = inv.customerContact || inv.contact || '';
-              const customerCity = inv.customerCity || inv.city || '';
-              const shippingStatus = latest.deliveryStatus || 'Converted';
-              const shipColor = shippingStatus === 'Material Reached' ? '#10b981' : shippingStatus === 'Material Dispatched' ? '#3b82f6' : '#94a3b8';
-              const payColor = latest.paymentStatus === 'Paid' ? '#10b981' : latest.paymentStatus === 'Partial' ? '#f59e0b' : '#ef4444';
-              const expanded = expandedVersions.has(inv.invoiceNumber);
-              const versionCount = inv.versions?.length || 0;
+              const hasVersions = (inv.versions?.length || 0) > 1;
+              const isExpanded = expandedVersions.has(inv.invoiceNumber);
+
               return (
                 <React.Fragment key={inv.invoiceNumber}>
-                <tr>
-                  <td style={{ fontWeight: 700, color: 'var(--primary)', whiteSpace: 'nowrap' }}>
-                    {inv.invoiceNumber}
-                    {versionCount > 1 && (
-                      <span onClick={() => toggleVersions(inv.invoiceNumber)}
-                        style={{ fontSize: '0.65rem', background: 'var(--primary)', color: '#fff', padding: '1px 6px', borderRadius: 10, marginLeft: 6, cursor: 'pointer' }}>
-                        v{versionCount} {expanded ? '▴' : '▾'}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ fontSize: '0.78rem' }}>{latest.invoiceDate || '-'}</td>
-                  <td>
-                    <span style={{ fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}
-                      onClick={() => openCustomer360({ name: customerName, contact: customerContact, city: customerCity })}
-                      title="View Customer 360">
-                      {customerName || '-'}
-                    </span>
-                  </td>
-                  <td>{customerContact || '-'}</td>
-                  <td>{customerCity || '-'}</td>
-                  <td style={{ fontWeight: 600 }}>₹{(latest.totalAmount || 0).toLocaleString()}</td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.4rem', padding: '0 0.35rem', width: 110 }}>
-                      <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>₹</span>
-                      <input type="number" className="table-inline-input"
-                        key={inv.invoiceNumber + '-' + (latest.receivedAmount || 0)}
-                        defaultValue={latest.receivedAmount || 0}
-                        onBlur={e => {
-                          const amt = parseFloat(e.target.value) || 0;
-                          updateInvoicePayment(inv.invoiceNumber, amt, latest.totalAmount || 0);
-                          showBanner(`Payment updated for ${inv.invoiceNumber}`, 'success');
-                        }}
-                        style={{ border: 'none', padding: '0.3rem 0', background: 'transparent', fontWeight: 600, textAlign: 'right', color: (latest.receivedAmount || 0) > 0 ? '#10b981' : undefined }}
-                      />
-                    </div>
-                  </td>
-                  <td>
-                    <select className="table-inline-select" value={latest.paymentStatus || 'Pending'}
-                      onChange={e => handlePaymentStatus(inv.invoiceNumber, e.target.value)}
-                      style={{ fontWeight: 600, color: payColor, background: `${payColor}22`, borderColor: `${payColor}44`, width: 110 }}>
-                      <option value="Pending">Pending</option>
-                      <option value="Partial">Partial</option>
-                      <option value="Paid">Paid</option>
-                    </select>
-                  </td>
-                  <td>
-                    <select className="table-inline-select" value={shippingStatus}
-                      onChange={e => { updateInvoiceField(inv.invoiceNumber, 'deliveryStatus', e.target.value); }}
-                      style={{ fontWeight: 600, color: shipColor, width: 130 }}>
-                      <option value="Converted">Order Placed</option>
-                      <option value="Material Dispatched">In Transit</option>
-                      <option value="Material Reached">Delivered</option>
-                    </select>
-                  </td>
-                  <td>
-                    <select className="table-inline-select" value={latest.status || 'Pending'}
-                      onChange={e => updateInvoiceField(inv.invoiceNumber, 'status', e.target.value)}
-                      style={{ width: 100, color: latest.status === 'Sent' ? '#10b981' : '#94a3b8' }}>
-                      <option value="Pending">Pending</option>
-                      <option value="Sent">Sent</option>
-                    </select>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn-icon" style={{ color: '#f59e0b' }} title="View Invoice" onClick={() => setViewInvoice(inv)}>
-                        <FileText size={15} />
-                      </button>
-                      <button className="btn-icon" style={{ color: '#10b981' }} title="Duplicate Invoice" onClick={() => setDuplicateInvoice(inv)}>
-                        <Copy size={15} />
-                      </button>
-                      {inv.leadId && (
-                        <button className="btn-icon" style={{ color: '#3b82f6' }} title="Customer Profile" onClick={() => setViewLeadId(inv.leadId)}>
+                  <tr>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <span style={{ fontWeight: 800, color: 'var(--primary)', cursor: 'pointer' }}
+                          onClick={() => setViewInvoice({ ...inv, _editMode: false, initialVersion: inv.versions?.length - 1 })}>
+                          {inv.invoiceNumber}
+                        </span>
+                        {hasVersions && (
+                          <button className="btn-icon" style={{ padding: 1, minWidth: 20, minHeight: 20, fontSize: '0.65rem' }}
+                            onClick={() => toggleVersions(inv.invoiceNumber)}>
+                            v{inv.versions.length}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{latest.invoiceDate || '—'}</td>
+                    <td>
+                      <div style={{ fontWeight: 700, color: 'var(--text-main)', cursor: 'pointer' }}
+                        onClick={() => openCustomer360({ name: inv.customerName, contact: inv.customerContact, city: inv.customerCity })}>
+                        {inv.customerName}
+                      </div>
+                    </td>
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>{inv.customerContact || '—'}</td>
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>{inv.customerCity || '—'}</td>
+                    <td style={{ fontWeight: 700 }}>₹{(latest.totalAmount || 0).toLocaleString()}</td>
+                    <td style={{ fontWeight: 700, color: '#10b981' }}>₹{(latest.receivedAmount || 0).toLocaleString()}</td>
+                    <td>
+                      <select className="table-inline-select" value={latest.paymentStatus || 'Pending'}
+                        onChange={e => handlePaymentStatus(inv.invoiceNumber, e.target.value)}
+                        style={{ color: payColor(latest.paymentStatus), fontWeight: 700 }}>
+                        <option value="Pending">Pending</option>
+                        <option value="Partial">Partial</option>
+                        <option value="Paid">Paid</option>
+                      </select>
+                    </td>
+                    <td>
+                      <select className="table-inline-select" value={latest.deliveryStatus || 'Pending'}
+                        onChange={e => { updateInvoiceField(inv.invoiceNumber, 'deliveryStatus', e.target.value); showBanner('Delivery status updated', 'success'); }}>
+                        <option value="Pending">Pending</option>
+                        <option value="Material Dispatched">Dispatched</option>
+                        <option value="Material Reached">Reached</option>
+                      </select>
+                    </td>
+                    <td><span className="badge" style={{ background: 'var(--bg-input)', color: 'var(--text-dim)' }}>{latest.status || 'Active'}</span></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 3 }}>
+                        <button className="btn-icon" style={{ color: 'var(--primary)' }} title="View"
+                          onClick={() => setViewInvoice({ ...inv, _editMode: false, initialVersion: inv.versions?.length - 1 })}>
                           <Eye size={15} />
                         </button>
-                      )}
-                      <button className="btn-icon" style={{ color: '#ef4444' }} title="Delete" onClick={() => { if (window.confirm('Delete this invoice?')) { deleteInvoice(inv.invoiceNumber); showBanner('Invoice deleted.', 'info'); } }}>
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                {expanded && versionCount > 0 && [...inv.versions].reverse().map((ver, vi) => {
-                  const isLatest = vi === 0;
-                  const vNum = ver.version || (versionCount - vi);
-                  // Real index in original (non-reversed) versions array
-                  const realIdx = versionCount - 1 - vi;
-                  return (
-                    <tr key={`${inv.invoiceNumber}-v${vi}`} style={{ background: isLatest ? 'rgba(16,185,129,0.04)' : 'rgba(255,255,255,0.02)', fontSize: '0.75rem' }}>
-                      <td style={{ paddingLeft: '1.5rem', fontWeight: isLatest ? 700 : 400, color: isLatest ? '#10b981' : 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                        &#x2514; v{vNum} {isLatest && <span style={{ fontSize: '0.6rem', background: '#10b98133', color: '#10b981', borderRadius: 4, padding: '1px 4px', marginLeft: 3 }}>latest</span>}
-                      </td>
-                      <td style={{ color: 'var(--text-dim)' }}>{ver.invoiceDate || '-'}</td>
-                      <td colSpan={2} style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>{ver.createdAt ? new Date(ver.createdAt).toLocaleString() : '-'}</td>
-                      <td style={{ color: 'var(--text-dim)' }}>{ver.items?.length || 0} items</td>
-                      <td style={{ fontWeight: 600, color: isLatest ? '#10b981' : 'var(--text-dim)' }}>₹{(ver.totalAmount || 0).toLocaleString()}</td>
-                      <td style={{ color: 'var(--text-dim)' }}>₹{(ver.receivedAmount || 0).toLocaleString()}</td>
-                      <td colSpan={4}>
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <button className="btn btn-secondary" style={{ fontSize: '0.65rem', padding: '2px 6px' }}
-                            onClick={() => setViewInvoice({ ...inv, versions: [ver] })}>
-                            View v{vNum}
-                          </button>
-                          <button className="btn-icon" style={{ color: '#ef4444', padding: '2px 4px' }}
-                            title={`Delete v${vNum}`}
-                            onClick={() => {
-                              const msg = versionCount === 1
-                                ? `Delete the only version of ${inv.invoiceNumber}? This will remove the entire invoice.`
-                                : `Delete v${vNum} of ${inv.invoiceNumber}?`;
-                              if (window.confirm(msg)) {
-                                deleteInvoiceVersion(inv.invoiceNumber, realIdx);
-                                showBanner(`Version v${vNum} deleted.`, 'info');
-                              }
-                            }}>
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        <button className="btn-icon" style={{ color: '#38bdf8' }} title="Duplicate"
+                          onClick={() => setDuplicateInvoice(inv)}>
+                          <Copy size={15} />
+                        </button>
+                        <button className="btn-icon" style={{ color: '#ef4444' }} title="Delete"
+                          onClick={() => { if (window.confirm(`Delete invoice ${inv.invoiceNumber}?`)) { deleteInvoice(inv.invoiceNumber); showBanner('Invoice deleted', 'info'); } }}>
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 </React.Fragment>
               );
             })}
@@ -241,20 +338,17 @@ export default function Invoices() {
 
       {filtered.length > visibleCount && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem' }}>
-          <button className="btn btn-secondary" onClick={() => setVisibleCount(prev => prev + 50)}>
-            Load More Invoices ({filtered.length - visibleCount} remaining)
+          <button className="btn btn-secondary" onClick={() => setVisibleCount(p => p + 50)}>
+            Load More ({filtered.length - visibleCount} remaining)
           </button>
         </div>
       )}
 
-      {viewInvoice && <InvoiceModal invoice={invoiceHistory.find(i => i.invoiceNumber === viewInvoice.invoiceNumber) || viewInvoice} onClose={() => setViewInvoice(null)} />}
-      {duplicateInvoice && <InvoiceModal invoice={duplicateInvoice} isDuplicate={true} onClose={() => setDuplicateInvoice(null)} />}
-      {viewLeadId && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setViewLeadId(null)} style={{ overflowY: 'auto', padding: '1rem' }}>
-          <div style={{ background: 'var(--bg-card)', borderRadius: '1rem', padding: '1.5rem', maxWidth: 900, width: '100%', margin: 'auto', border: '1px solid var(--glass-border)' }}>
-            <LeadDetails leadId={viewLeadId} onBack={() => setViewLeadId(null)} onEdit={() => setViewLeadId(null)} />
-          </div>
-        </div>
+      {viewInvoice && (
+        <InvoiceModal lead={viewInvoice} editInvoice={viewInvoice} onClose={() => setViewInvoice(null)} />
+      )}
+      {duplicateInvoice && (
+        <InvoiceModal duplicateFrom={duplicateInvoice} onClose={() => setDuplicateInvoice(null)} />
       )}
     </div>
   );

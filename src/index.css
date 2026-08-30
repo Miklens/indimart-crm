@@ -133,6 +133,7 @@ main {
   min-height: 0;
   width: 100%;
   position: relative;
+  overflow: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -144,6 +145,53 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 p { margin: 0; }
+
+/* ═══════════════════════════════════════════════════════
+   SIDEBAR & LAYOUT (Desktop Normal Flex + Mobile Drawer)
+═══════════════════════════════════════════════════════ */
+.app-sidebar {
+  position: relative !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  flex-shrink: 0;
+  z-index: 50;
+  transition: width 0.25s var(--ease-spring);
+}
+
+@media (max-width: 639px) {
+  .app-sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100dvh !important;
+    z-index: 1000 !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), width 0.25s ease !important;
+    box-shadow: 0 0 50px rgba(0,0,0,0.85);
+  }
+  .app-sidebar.mobile-open {
+    transform: translateX(0) !important;
+  }
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  z-index: 999;
+}
+
+/* Mobile FAB buttons — strictly hidden on desktop */
+.mobile-theme-fab {
+  display: none !important;
+}
+@media (max-width: 639px) {
+  .mobile-theme-fab {
+    display: flex !important;
+  }
+}
 
 /* ═══════════════════════════════════════════════════════
    INPUTS & CONTROLS
@@ -450,15 +498,19 @@ tr:hover td { background: var(--row-hover); }
    PAGE LAYOUT
 ═══════════════════════════════════════════════════════ */
 .page-section {
-  padding: 1.25rem; flex: 1; overflow-y: auto;
-  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  padding: 1.5rem 2rem;
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
 }
 @media (max-width: 639px) {
   .page-section {
-    padding-bottom: calc(var(--mobile-nav-h) + 1rem + env(safe-area-inset-bottom));
+    padding: 1rem 0.75rem;
+    padding-bottom: calc(var(--mobile-nav-h) + 1.25rem + env(safe-area-inset-bottom));
   }
 }
-@media (min-width: 640px) { .page-section { padding: 1.75rem; } }
 
 .section-header {
   display: flex; align-items: center; justify-content: space-between;

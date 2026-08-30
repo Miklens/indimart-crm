@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut, X, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { signOutUser, isFirebaseConfigured, getCurrentUser } from '../firebase';
 import { DATA_CONFIG } from '../utils/dataConfig';
@@ -19,7 +19,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onThemeToggle }) {
-  const { currentSection, setCurrentSection, leads, syncStatus, isSyncing, autoSyncEnabled, toggleAutoSync, gsUrl, addLead, showBanner } = useApp();
+  const { currentSection, setCurrentSection, leads, syncStatus, isSyncing, addLead, showBanner } = useApp();
   const [collapsed, setCollapsed] = useState(false);
   const csvRef = useRef(null);
 
@@ -93,27 +93,18 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
   const today = new Date().toISOString().split('T')[0];
   const overdueFollowups = leads.filter(l => l.followUpDate && l.followUpDate <= today && !DATA_CONFIG.getDeadStatusLabels().includes(l.status)).length;
 
-  const SyncIcon = isSyncing ? Loader : syncStatus.status === 'connected' ? Wifi : syncStatus.status === 'error' ? WifiOff : Wifi;
-  const syncColor = syncStatus.status === 'connected' ? '#10b981' : syncStatus.status === 'error' ? '#ef4444' : syncStatus.status === 'syncing' ? '#f59e0b' : '#94a3b8';
-
   return (
-    <aside style={{
-      width: collapsed ? 64 : 240,
-      minWidth: collapsed ? 64 : 240,
-      background: 'var(--bg-sidebar)',
-      borderRight: '1px solid var(--glass-border)',
-      display: 'flex',
-      flexDirection: 'column',
-      transition: 'transform 0.3s var(--ease-spring), width 0.25s var(--ease-spring)',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      height: '100%',
-      overflow: 'hidden',
-      zIndex: 160,
-      ...(mobileOpen ? { transform: 'translateX(0)' } : {}),
-    }}
-    className="app-sidebar"
+    <aside 
+      className={`app-sidebar${mobileOpen ? ' mobile-open' : ''}`}
+      style={{
+        width: collapsed ? 64 : 240,
+        minWidth: collapsed ? 64 : 240,
+        background: 'var(--bg-sidebar)',
+        borderRight: '1px solid var(--glass-border)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
     >
       {/* Brand Header */}
       <div style={{ padding: collapsed ? '1.2rem 0.6rem' : '1.2rem 1.1rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 68 }}>
@@ -146,7 +137,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
         </button>
       </div>
 
-      {/* Global Search Bar (Zepto/Instagram styled) */}
+      {/* Global Search Bar */}
       {!collapsed && (
         <div style={{ padding: '0.75rem 0.85rem 0.25rem' }}>
           <button
@@ -172,7 +163,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
         </div>
       )}
 
-      {/* Navigation Items (Instagram/Groww styled) */}
+      {/* Navigation Items */}
       <nav style={{ flex: 1, padding: '0.5rem 0.65rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
         {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
           const active = currentSection === id;

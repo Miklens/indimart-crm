@@ -5,7 +5,6 @@ import Sidebar from './components/Sidebar';
 import SyncBanner from './components/SyncBanner';
 import GlobalSearch from './components/GlobalSearch';
 import Customer360 from './components/Customer360';
-// FirebaseSetup is kept for manual settings only; the app no longer forces first-run setup.
 import LoginPage from './pages/LoginPage';
 import { getLocalSession } from './utils/localAuth';
 import { isFirebaseConfigured, onAuthStateChanged, initFirebaseIfConfigured } from './firebase';
@@ -53,21 +52,18 @@ function AppInner() {
   const [theme, setTheme] = useState(() => localStorage.getItem('indimart_theme') || 'dark');
   const [searchOpen, setSearchOpen] = useState(false);
   const [customer360, setCustomer360] = useState(null);
-  // Auth state — null=loading, false=not logged in, object=logged in user
+
   const [authUser, setAuthUser] = useState(() => {
-    // Check local session first (works without Firebase)
     const localSession = getLocalSession();
     if (localSession) return localSession;
-    // If Firebase not configured and no local session, show login
     if (!isFirebaseConfigured()) return false;
-    return null; // loading — wait for Firebase auth state
+    return null;
   });
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
     initFirebaseIfConfigured();
     const unsub = onAuthStateChanged((user) => {
-      // Don't override a valid local session with Firebase null
       if (!user && getLocalSession()) return;
       setAuthUser(user || false);
     });
@@ -83,7 +79,6 @@ function AppInner() {
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
-  // Global Cmd/Ctrl+K listener
   useEffect(() => {
     const handler = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -95,7 +90,6 @@ function AppInner() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
-  // Auth loading spinner
   if (authUser === null) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-main)' }}>
@@ -107,11 +101,9 @@ function AppInner() {
     );
   }
 
-  // Not logged in — show login page
   if (authUser === false) {
     return <LoginPage onLogin={(user) => setAuthUser(user || 'skip')} />;
   }
-
 
   const today = new Date().toISOString().split('T')[0];
   const overdueCount = leads.filter(l =>
@@ -142,7 +134,7 @@ function AppInner() {
         <div className="sidebar-overlay" onClick={() => setDrawerOpen(false)} />
       )}
 
-      <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', minWidth: 0, height: '100dvh' }}>
         <SyncBanner />
         <Page />
       </main>
@@ -165,18 +157,15 @@ function AppInner() {
         })}
       </nav>
 
-      {/* Floating theme toggle — mobile only, top-right */}
+      {/* Floating theme toggle — mobile only */}
       <button
         onClick={toggleTheme}
         className="mobile-theme-fab"
         title={theme === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
         style={{
-          position: 'fixed', top: 12, right: 58, zIndex: 190,
-          width: 38, height: 38, borderRadius: '50%', border: 'none',
+          right: 58,
           background: theme === 'dark' ? '#1e3a5f' : '#fff',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', color: theme === 'dark' ? '#f59e0b' : '#1e293b',
+          color: theme === 'dark' ? '#f59e0b' : '#1e293b',
         }}
       >
         {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
@@ -188,12 +177,9 @@ function AppInner() {
         className="mobile-theme-fab"
         title="Search (Ctrl+K)"
         style={{
-          position: 'fixed', top: 12, right: 14, zIndex: 190,
-          width: 38, height: 38, borderRadius: '50%', border: 'none',
+          right: 14,
           background: theme === 'dark' ? '#1e3a5f' : '#fff',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', color: 'var(--primary)',
+          color: 'var(--primary)',
         }}
       >
         <Search size={17} />

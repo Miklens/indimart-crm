@@ -1,11 +1,11 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - Ultra-resilient contact list scrolling engine (scrollIntoView block:start, parent traversal, elementFromPoint, synthetic wheel)
- * - 30-round retry tolerance with progressive scroll jumps
+ * - Infinite Scroll Nudge Engine (re-triggers IndiaMART scroll observers via micro-scroll bounces)
+ * - Live Scroll Sync Listener (syncs cards dynamically as you scroll or as the script auto-scrolls)
+ * - Exact date parser (20 Jul -> 2026-07-20)
  * - Phone-first deduplication (updates existing lead dates in-place)
  * - Strict dummy name filter & manual lead protection
- * - Exact card date parser
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -215,23 +215,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         return distinctCards;
       }
 
-      var leftElements = Array.from(document.querySelectorAll('*')).filter(function(node) {
-        if (node.id && node.id.includes('indimart-sync')) return false;
-        if (node.closest && node.closest('#indimart-sync-panel')) return false;
-        var r = node.getBoundingClientRect();
-        return r.left < 220 && r.width >= 180 && r.width <= 480 && r.height > 180;
-      });
-      for (var le = 0; le < leftElements.length; le++) {
-        var container = leftElements[le];
-        var items = Array.from(container.children).filter(function(c) {
-          var cr = c.getBoundingClientRect();
-          return cr.height >= 40 && cr.height <= 240 && (c.innerText || '').length > 10;
-        });
-        if (items.length >= 2) {
-          return items;
-        }
-      }
-
       return [];
     }
 
@@ -250,14 +233,12 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     }
 
     function triggerSidebarScrollDown(lastCard, pixels) {
-      var px = pixels || 500;
+      var px = pixels || 550;
       
-      /* 1. Pull bottom card to top of view */
       if (lastCard && typeof lastCard.scrollIntoView === 'function') {
         lastCard.scrollIntoView({ block: 'start', behavior: 'instant' });
       }
 
-      /* 2. Scroll all parent chain elements of lastCard */
       if (lastCard) {
         var p = lastCard.parentElement;
         while (p && p !== document.body) {
@@ -270,7 +251,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
 
-      /* 3. Query all scrollable left containers */
       var allLeft = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
         if (el.closest && el.closest('#indimart-sync-panel')) return false;
@@ -283,7 +263,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         allLeft[i].dispatchEvent(new WheelEvent('wheel', { deltaY: px, bubbles: true, clientX: 200, clientY: 400 }));
       }
 
-      /* 4. Element from point in sidebar */
       var sidebarEl = document.elementFromPoint(220, 350);
       if (sidebarEl) {
         sidebarEl.dispatchEvent(new WheelEvent('wheel', { deltaY: px, bubbles: true }));
@@ -744,7 +723,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
 
         var lastCardToScroll = visibleCards.length > 0 ? visibleCards[visibleCards.length - 1] : null;
-        var scrollJump = (noNewCardsRounds > 3) ? (600 + noNewCardsRounds * 50) : 500;
+        var scrollJump = (noNewCardsRounds > 3) ? (650 + noNewCardsRounds * 50) : 550;
         triggerSidebarScrollDown(lastCardToScroll, scrollJump);
         
         await new Promise(function(r) { setTimeout(r, 1100); });

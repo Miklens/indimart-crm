@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageCircle, X, Upload, CheckCircle, Trash2, AlertTriangle, ShieldCheck, Layers } from 'lucide-react';
+import { MessageCircle, X, Upload, CheckCircle, Trash2, AlertTriangle, ShieldCheck, Layers, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 import { fsSetLead } from '../services/firestoreService';
@@ -17,10 +17,14 @@ export default function BulkTools() {
   const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
   const [bulkMessage, setBulkMessage] = useState('');
   const [showInvalidPreview, setShowInvalidPreview] = useState(false);
+  const [showStalePreview, setShowStalePreview] = useState(false);
 
   // 1-Click Merge All States
   const [isMergingAll, setIsMergingAll] = useState(false);
   const [mergeProgress, setMergeProgress] = useState('');
+
+  // Real 4 leads from Today (Aug 30)
+  const TODAY_REAL_NAMES = ['ganesh', 'lingala vasudeva reddy', 'uttangi kariyappa', 'nrprajwal devru', 'prajwal devru'];
 
   // Helper to detect date banners or system text captured as buyer names
   const isDummyName = (name) => {
@@ -37,16 +41,34 @@ export default function BulkTools() {
     return digits === '0000000000' || digits === '0' || digits.length < 5;
   };
 
-  // Only flags dummy sync leads (never touches manual leads with non-IndiaMART source or valid names/phones)
+  // 1. Dummy/Invalid Leads (date headers & dummy phones)
   const invalidLeads = leads.filter(l => 
     l.source === 'IndiaMART Direct' && (isDummyContact(l.contact) || isDummyName(l.customerName))
   );
+
+  // 2. Stale test leads from early buggy runs that were incorrectly stamped with 30-08-2026 (except today's 4 genuine leads)
+  const staleAug30Leads = leads.filter(l => {
+    if (l.source !== 'IndiaMART Direct') return false;
+    const d = String(l.date || '').trim();
+    const isAug30 = d === '30-08-2026' || d === '2026-08-30';
+    if (!isAug30) return false;
+    const nameLower = (l.customerName || '').toLowerCase().trim();
+    const isGenuineToday = TODAY_REAL_NAMES.some(rn => nameLower.includes(rn));
+    return !isGenuineToday;
+  });
 
   const handleCleanInvalidLeads = () => {
     if (!invalidLeads.length) return;
     if (!window.confirm(`Delete ${invalidLeads.length} dummy/invalid sync leads (e.g. date header banners and 0000000000)? Your manual leads and valid customer leads will NOT be touched.`)) return;
     invalidLeads.forEach(l => deleteLead(l.id));
     showBanner(`🧹 Cleaned up ${invalidLeads.length} dummy leads!`, 'success');
+  };
+
+  const handleCleanStaleAug30Leads = () => {
+    if (!staleAug30Leads.length) return;
+    if (!window.confirm(`Delete ${staleAug30Leads.length} stale leads stamped with 30-08-2026 from earlier test runs?\n\nToday's 4 genuine leads (Ganesh, Lingala Vasudeva Reddy, Uttangi Kariyappa, NRPrajwal Devru) and your manual leads will be PRESERVED safely.`)) return;
+    staleAug30Leads.forEach(l => deleteLead(l.id));
+    showBanner(`🧹 Cleaned up ${staleAug30Leads.length} stale Aug 30 test leads! Now resync from IndiaMART to pull their real dates.`, 'success');
   };
 
   // Excel Recovery States
@@ -79,7 +101,6 @@ export default function BulkTools() {
   const mergeSingleGroup = async (contact, group, prompt = false) => {
     let masterLead = group.find(l => l.id === masterSelections[contact]);
     if (!masterLead) {
-      // Pick lead with genuine date (not 30-08-2026 placeholder if another has a real date like 2026-07-26)
       const realDateLead = group.find(l => l.date && !l.date.startsWith('2026-08-30') && l.date !== '30-08-2026');
       masterLead = realDateLead || group[0];
     }
@@ -93,7 +114,6 @@ export default function BulkTools() {
     }
 
     try {
-      // 1. Combine product rows
       const masterProds = masterLead.productList?.length 
         ? masterLead.productList 
         : [{ name: masterLead.product || 'IndiaMART Enquiry', qty: 1, price: masterLead.orderValue || 0, gst: '5', hsn: '' }];
@@ -106,7 +126,6 @@ export default function BulkTools() {
         mergedProducts = [...mergedProducts, ...dProds];
       });
 
-      // Deduplicate identical product names
       const uniqueProducts = [];
       const seenNames = new Set();
       mergedProducts.forEach(p => {
@@ -126,20 +145,17 @@ export default function BulkTools() {
 
       const finalProducts = uniqueProducts.length ? uniqueProducts : masterProds;
 
-      // 2. Recalculate combined order value
       const newOrderValue = finalProducts.reduce((sum, p) => {
         const base = (parseFloat(p.price) || 0) * (parseFloat(p.qty) || 0);
         const tax = base * ((parseFloat(p.gst) || 0) / 100);
         return sum + base + tax;
       }, 0);
 
-      // 3. Combine remarks
       const combinedRemarks = [
         masterLead.remarks,
         ...duplicates.map(d => d.remarks)
       ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join('\n---\n');
 
-      // 4. Combine history logs chronologically
       let combinedHistory = [...(masterLead.history || [])];
       duplicates.forEach(d => {
         combinedHistory = [...combinedHistory, ...(d.history || [])];
@@ -151,7 +167,6 @@ export default function BulkTools() {
         note: `Merged duplicate leads: ${duplicates.map(d => d.id).join(', ')}`
       });
 
-      // 5. Choose genuine date
       const bestDate = (masterLead.date && !masterLead.date.startsWith('2026-08-30') && masterLead.date !== '30-08-2026')
         ? masterLead.date
         : (duplicates.find(d => d.date && !d.date.startsWith('2026-08-30') && d.date !== '30-08-2026')?.date || masterLead.date);
@@ -169,17 +184,14 @@ export default function BulkTools() {
         source: masterLead.source || duplicates.find(d => d.source)?.source || 'IndiaMART Direct',
       };
 
-      // 6. Update master lead
       await updateLead(masterLead.id, updates);
 
-      // 7. Update any invoices pointing to deleted duplicates
       const deletedIds = new Set(duplicates.map(d => d.id));
       const linkedInvoices = invoiceHistory.filter(inv => deletedIds.has(inv.leadId));
       for (const inv of linkedInvoices) {
         await updateInvoiceField(inv.invoiceNumber, 'leadId', masterLead.id);
       }
 
-      // 8. Delete duplicate leads
       for (const d of duplicates) {
         await deleteLead(d.id);
       }
@@ -425,6 +437,67 @@ export default function BulkTools() {
         <h2 className="section-title">⚡ Bulk Tools</h2>
         <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>{selected.size} selected</span>
       </div>
+
+      {/* ⚠️ Stale Aug 30 Test Leads Quick Cleaner */}
+      {staleAug30Leads.length > 0 && (
+        <div style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '0.6rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <div style={{ fontWeight: 700, color: '#facc15', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <RefreshCw size={18} /> {staleAug30Leads.length} Stale "30-08-2026" Test Leads Detected
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+                These {staleAug30Leads.length} leads were saved with today's date during early test runs.
+                <span style={{ color: '#10b981', marginLeft: '6px', fontWeight: 600 }}>
+                  <ShieldCheck size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />
+                  Today's 4 genuine leads (Ganesh, Lingala, Uttangi, Prajwal) and your manual leads are SAFE.
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setShowStalePreview(!showStalePreview)}
+                style={{ fontSize: '0.8rem', padding: '0.5rem 0.9rem' }}
+              >
+                {showStalePreview ? 'Hide List' : 'Preview List'}
+              </button>
+              <button 
+                className="btn btn-warning" 
+                onClick={handleCleanStaleAug30Leads}
+                style={{ background: 'linear-gradient(135deg,#eab308,#ca8a04)', color: '#000', border: 'none', padding: '0.5rem 1.2rem', fontSize: '0.82rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 700, boxShadow: '0 4px 12px rgba(234,179,8,0.25)' }}
+              >
+                🧹 Clean {staleAug30Leads.length} Stale Leads
+              </button>
+            </div>
+          </div>
+
+          {showStalePreview && (
+            <div style={{ marginTop: '1rem', maxHeight: '180px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ color: 'var(--text-dim)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <th style={{ textAlign: 'left', padding: '4px 8px' }}>ID</th>
+                    <th style={{ textAlign: 'left', padding: '4px 8px' }}>Customer</th>
+                    <th style={{ textAlign: 'left', padding: '4px 8px' }}>Contact</th>
+                    <th style={{ textAlign: 'left', padding: '4px 8px' }}>Product</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {staleAug30Leads.map(l => (
+                    <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '4px 8px', color: 'var(--primary)' }}>{l.id}</td>
+                      <td style={{ padding: '4px 8px', color: '#facc15' }}>{l.customerName}</td>
+                      <td style={{ padding: '4px 8px' }}>{l.contact || 'None'}</td>
+                      <td style={{ padding: '4px 8px', color: 'var(--text-dim)' }}>{l.product}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ⚠️ Invalid / Wrongly Synced Leads Quick Cleaner */}
       {invalidLeads.length > 0 && (

@@ -23,7 +23,7 @@
 
   /* Layout */
   --sidebar-w: 240px;
-  --mobile-nav-h: 64px;
+  --mobile-nav-h: 60px;
 
   /* Typography */
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
@@ -147,6 +147,45 @@ h1, h2, h3, h4, h5, h6 {
 p { margin: 0; }
 
 /* ═══════════════════════════════════════════════════════
+   RESPONSIVE DISPLAY UTILITIES
+═══════════════════════════════════════════════════════ */
+.mobile-only {
+  display: none !important;
+}
+.desktop-only {
+  display: block;
+}
+@media (max-width: 639px) {
+  .mobile-only {
+    display: block !important;
+  }
+  .desktop-only {
+    display: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   MOBILE TOP APP BAR
+═══════════════════════════════════════════════════════ */
+.mobile-top-bar {
+  display: none !important;
+}
+@media (max-width: 639px) {
+  .mobile-top-bar {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 0.9rem;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--glass-border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
    SIDEBAR & LAYOUT (Desktop Normal Flex + Mobile Drawer)
 ═══════════════════════════════════════════════════════ */
 .app-sidebar {
@@ -183,25 +222,9 @@ p { margin: 0; }
   z-index: 999;
 }
 
-/* Mobile FAB buttons — strictly hidden on desktop */
+/* Mobile FAB buttons — strictly hidden */
 .mobile-theme-fab {
   display: none !important;
-}
-@media (max-width: 639px) {
-  .mobile-theme-fab {
-    display: flex !important;
-    position: fixed !important;
-    top: 12px;
-    z-index: 190;
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    border: none;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.25);
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -657,7 +680,7 @@ tr:hover td { background: var(--row-hover); }
 .modal-header h2 { font-size: 1.2rem; font-weight: 800; }
 
 /* ═══════════════════════════════════════════════════════
-   PAGE LAYOUT
+   PAGE LAYOUT & MOBILE OPTIMIZATIONS
 ═══════════════════════════════════════════════════════ */
 .page-section {
   padding: 1.5rem 2rem;
@@ -667,10 +690,29 @@ tr:hover td { background: var(--row-hover); }
   box-sizing: border-box;
   padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
 }
+
 @media (max-width: 639px) {
   .page-section {
-    padding: 1rem 0.75rem;
+    padding: 0.85rem 0.75rem;
     padding-bottom: calc(var(--mobile-nav-h) + 1.25rem + env(safe-area-inset-bottom));
+  }
+  .section-title {
+    font-size: 1.15rem !important;
+  }
+  .kpi-card {
+    padding: 0.9rem !important;
+    border-radius: 0.85rem !important;
+  }
+  .kpi-value {
+    font-size: 1.45rem !important;
+  }
+  .glass-card {
+    padding: 1rem !important;
+    border-radius: 0.85rem !important;
+  }
+  input, select, textarea {
+    font-size: 16px !important; /* iOS zoom prevention */
+    padding: 0.65rem 0.85rem !important;
   }
 }
 
@@ -681,7 +723,7 @@ tr:hover td { background: var(--row-hover); }
 .section-title { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; }
 
 /* ═══════════════════════════════════════════════════════
-   MOBILE BOTTOM NAV (Instagram / Zepto Dock)
+   MOBILE BOTTOM NAV DOCK (Instagram / Zepto Dock)
 ═══════════════════════════════════════════════════════ */
 .mobile-nav { display: none; }
 @media (max-width: 639px) {
@@ -693,7 +735,7 @@ tr:hover td { background: var(--row-hover); }
     background: var(--mobile-nav-bg);
     border-top: 1px solid var(--mobile-nav-border);
     z-index: 200; align-items: center; justify-content: space-around;
-    box-shadow: 0 -10px 30px rgba(0,0,0,0.3);
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.4);
     backdrop-filter: blur(20px);
   }
   .mobile-nav-item {
@@ -701,7 +743,7 @@ tr:hover td { background: var(--row-hover); }
     align-items: center; justify-content: center;
     gap: 3px; cursor: pointer; border: none;
     background: transparent; color: var(--text-muted);
-    font-size: 0.65rem; font-weight: 700; padding: 0.4rem;
+    font-size: 0.68rem; font-weight: 700; padding: 0.35rem;
     transition: all 0.2s var(--ease-spring); position: relative;
     border-radius: 0.75rem;
   }
@@ -710,7 +752,7 @@ tr:hover td { background: var(--row-hover); }
     color: var(--primary);
   }
   .mobile-nav-item.active svg {
-    filter: drop-shadow(0 0 10px rgba(16,185,129,0.6));
+    filter: drop-shadow(0 0 10px rgba(16,185,129,0.7));
     transform: translateY(-2px);
   }
   .mobile-nav-item .nav-dot {

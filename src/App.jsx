@@ -135,11 +135,36 @@ function AppInner() {
       )}
 
       <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', minWidth: 0, height: '100dvh' }}>
+        {/* Mobile Top App Bar (Header on Mobile) */}
+        <header className="mobile-top-bar">
+          <button className="btn-icon" onClick={() => setDrawerOpen(true)} title="Open Navigation Menu">
+            <Menu size={22} />
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: '7px',
+              background: 'linear-gradient(135deg, #00d09c, #059669)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.75rem', fontWeight: 800, color: '#fff',
+              boxShadow: '0 2px 8px rgba(16,185,129,0.4)'
+            }}>IM</div>
+            <span style={{ fontWeight: 800, fontSize: '0.96rem', letterSpacing: '-0.02em', color: 'var(--text-main)' }}>IndiaMART CRM</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button className="btn-icon" onClick={() => setSearchOpen(true)} title="Search (⌘K)">
+              <Search size={19} />
+            </button>
+            <button className="btn-icon" onClick={toggleTheme} title="Toggle Dark/Light Mode">
+              {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
+            </button>
+          </div>
+        </header>
+
         <SyncBanner />
         <Page />
       </main>
 
-      {/* Mobile bottom navigation */}
+      {/* Mobile bottom navigation dock */}
       <nav className="mobile-nav">
         {MOBILE_NAV.map(({ id, label, icon: Icon }) => {
           const isActive = id === 'settings' ? drawerOpen : currentSection === id;
@@ -156,34 +181,6 @@ function AppInner() {
           );
         })}
       </nav>
-
-      {/* Floating theme toggle — mobile only */}
-      <button
-        onClick={toggleTheme}
-        className="mobile-theme-fab"
-        title={theme === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
-        style={{
-          right: 58,
-          background: theme === 'dark' ? '#1e3a5f' : '#fff',
-          color: theme === 'dark' ? '#f59e0b' : '#1e293b',
-        }}
-      >
-        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-      </button>
-
-      {/* Mobile search FAB */}
-      <button
-        onClick={() => setSearchOpen(true)}
-        className="mobile-theme-fab"
-        title="Search (Ctrl+K)"
-        style={{
-          right: 14,
-          background: theme === 'dark' ? '#1e3a5f' : '#fff',
-          color: 'var(--primary)',
-        }}
-      >
-        <Search size={17} />
-      </button>
 
       {/* Global search overlay */}
       {searchOpen && (

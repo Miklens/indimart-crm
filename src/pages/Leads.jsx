@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, Link, X, LayoutGrid, List } from 'lucide-react';
+import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, Link, X, LayoutGrid, List, Phone, MapPin, Calendar, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../context/AppUIContext';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
@@ -230,8 +230,8 @@ export default function Leads() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* View switcher (Groww style) */}
-          <div style={{ display: 'flex', background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.6rem', padding: 3, marginRight: '0.5rem' }}>
+          {/* View switcher on desktop */}
+          <div className="desktop-only" style={{ display: 'flex', background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.6rem', padding: 3, marginRight: '0.5rem' }}>
             <button 
               className={`btn ${viewMode === 'list' ? 'btn-primary' : 'btn-secondary'}`} 
               onClick={() => setViewMode('list')} 
@@ -248,7 +248,7 @@ export default function Leads() {
             </button>
           </div>
           <input ref={csvRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImportCSV} />
-          <button className="btn btn-secondary" onClick={() => csvRef.current?.click()} style={{ fontSize: '0.82rem' }}>
+          <button className="btn btn-secondary desktop-only" onClick={() => csvRef.current?.click()} style={{ fontSize: '0.82rem' }}>
             <Upload size={14} /> Import CSV
           </button>
           <button className="btn btn-primary" onClick={openAdd} style={{ fontSize: '0.82rem' }}>
@@ -257,7 +257,7 @@ export default function Leads() {
         </div>
       </div>
 
-      {/* Tabs with pill counts (Blinkit/Zepto style) */}
+      {/* Tabs with pill counts */}
       <div className="tabs">
         {[
           { id: 'all', label: 'All Leads', count: leads.length },
@@ -285,12 +285,12 @@ export default function Leads() {
       </div>
 
       {/* Search & Filter bar */}
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 160 }}>
           <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by customer, product, phone or ID..." style={{ paddingLeft: '2.25rem' }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customer, product, phone or ID..." style={{ paddingLeft: '2.25rem' }} />
         </div>
-        <div style={{ position: 'relative', minWidth: 170 }}>
+        <div style={{ position: 'relative', minWidth: 140 }}>
           <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)', zIndex: 1 }} />
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ paddingLeft: '2.25rem' }}>
             {STATUS_FILTERS.map(opt => (
@@ -298,15 +298,160 @@ export default function Leads() {
             ))}
           </select>
         </div>
-        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ minWidth: 150 }}>
+        <select className="desktop-only" value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ minWidth: 130 }}>
           <option value="all">All Sources</option>
           {DATA_CONFIG.sources.map(s => <option key={s}>{s}</option>)}
         </select>
       </div>
 
-      {viewMode === 'list' ? (
-        <>
-          {/* Table */}
+      {/* ── MOBILE TOUCH CARDS (Shown on mobile screens) ── */}
+      <div className="mobile-only">
+        {filtered.length === 0 && (
+          <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-dim)' }}>
+            No leads matching your filters
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          {filtered.slice(0, visibleCount).map(lead => (
+            <div 
+              key={lead.id} 
+              className="glass-card"
+              style={{
+                padding: '1.1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.65rem',
+                borderLeft: `4px solid ${DATA_CONFIG.getStatusColor(lead.status)}`,
+              }}
+            >
+              {/* Card Header: Avatar + Customer Name + Date + WhatsApp quick button */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: '50%',
+                    background: getAvatarColor(lead.customerName),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontWeight: 800, fontSize: '0.85rem', flexShrink: 0,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                  }}>
+                    {(lead.customerName || 'U')[0].toUpperCase()}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div 
+                      style={{ fontWeight: 800, fontSize: '0.96rem', color: 'var(--text-main)', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      onClick={() => openCustomer360({ name: lead.customerName, contact: lead.contact, city: lead.city })}
+                    >
+                      {lead.customerName}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: 2 }}>
+                      <span>{normalizeDisplayDate(lead.date)}</span>
+                      {lead.city && <span>• {lead.city}</span>}
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => window.open(`https://wa.me/91${lead.contact}`)}
+                  style={{
+                    background: 'rgba(37, 211, 102, 0.15)',
+                    border: '1px solid rgba(37, 211, 102, 0.35)',
+                    color: '#25d366',
+                    padding: '6px 10px',
+                    borderRadius: '999px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    flexShrink: 0
+                  }}
+                >
+                  <MessageCircle size={14} /> <span>Chat</span>
+                </button>
+              </div>
+
+              {/* Product enquiry & value */}
+              <div style={{ background: 'var(--bg-input)', padding: '0.65rem 0.75rem', borderRadius: '0.65rem', border: '1px solid var(--glass-border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)' }}>{lead.product || 'No product specified'}</span>
+                  <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--primary)' }}>₹{(lead.orderValue || 0).toLocaleString()}</span>
+                </div>
+                {lead.contact && (
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-dim)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Phone size={11} /> <span>+91 {lead.contact}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Status Picker & Follow-up Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--text-dim)', marginBottom: 3, fontWeight: 700 }}>STATUS</label>
+                  <select 
+                    value={DATA_CONFIG.getSimpleStatusLabel(lead.status)}
+                    onChange={e => {
+                      const resolved = DATA_CONFIG.resolveStatusFromSimple(e.target.value);
+                      updateLeadStatus(lead.id, resolved);
+                      showBanner(`✅ Updated status to ${e.target.value}`, 'success');
+                    }}
+                    style={{ fontSize: '0.82rem', padding: '0.5rem 0.6rem', minHeight: 38 }}
+                  >
+                    {STATUS_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.68rem', color: 'var(--text-dim)', marginBottom: 3, fontWeight: 700 }}>FOLLOW-UP</label>
+                  <input 
+                    type="date"
+                    value={lead.followUpDate || ''}
+                    onChange={e => updateLead(lead.id, { followUpDate: e.target.value })}
+                    style={{ fontSize: '0.82rem', padding: '0.5rem 0.6rem', minHeight: 38 }}
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons Toolbar */}
+              <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid var(--glass-border)', paddingTop: '0.65rem', marginTop: 2 }}>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => setDetailsLeadId(lead.id)}
+                  style={{ flex: 1, padding: '0.45rem', fontSize: '0.75rem', minHeight: 34, gap: 4 }}
+                >
+                  <Eye size={13} /> View
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => openEdit(lead.id)}
+                  style={{ flex: 1, padding: '0.45rem', fontSize: '0.75rem', minHeight: 34, gap: 4 }}
+                >
+                  <Edit3 size={13} /> Edit
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => handleInvoiceClick(lead)}
+                  style={{ flex: 1, padding: '0.45rem', fontSize: '0.75rem', minHeight: 34, gap: 4, color: '#f59e0b' }}
+                >
+                  <FileText size={13} /> Invoice
+                </button>
+                <button 
+                  className="btn btn-danger" 
+                  onClick={() => handleDelete(lead.id)}
+                  style={{ padding: '0.45rem 0.65rem', fontSize: '0.75rem', minHeight: 34 }}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── DESKTOP VIEW (Shown on wide screens) ── */}
+      <div className="desktop-only">
+        {viewMode === 'list' ? (
           <div className="table-wrapper">
             <table>
               <thead>
@@ -508,51 +653,51 @@ export default function Leads() {
               </tbody>
             </table>
           </div>
+        ) : (
+          /* Kanban View */
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem', marginTop: '1rem', alignItems: 'flex-start' }}>
+            {STATUS_OPTIONS.map(col => {
+              const colLeads = filtered.filter(l => DATA_CONFIG.getSimpleStatusLabel(l.status) === col.value);
+              return (
+                <div key={col.value} style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--glass-border)', padding: '1rem', minHeight: '60vh', boxShadow: 'var(--shadow-card)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.6rem', borderBottom: '2px solid ' + DATA_CONFIG.getStatusColor(col.value) }}>
+                    <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>{col.label}</span>
+                    <span style={{ fontSize: '0.72rem', background: 'var(--bg-input)', padding: '2px 8px', borderRadius: 999, fontWeight: 800, color: 'var(--text-dim)' }}>{colLeads.length}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {colLeads.length === 0 && <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', textAlign: 'center', padding: '1.5rem 0' }}>No leads here</div>}
+                    {colLeads.map(lead => (
+                      <div 
+                        key={lead.id} 
+                        className="glass-card" 
+                        style={{ padding: '0.9rem', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: '3px solid ' + DATA_CONFIG.getStatusColor(lead.status), cursor: 'pointer' }}
+                        onClick={() => setDetailsLeadId(lead.id)}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
+                          <span style={{ color: 'var(--primary)' }}>{lead.id}</span>
+                          <span>₹{(lead.orderValue || 0).toLocaleString()}</span>
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{lead.customerName}</div>
+                        <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{lead.product}</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--glass-border)', fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                          <span>{normalizeDisplayDate(lead.date)}</span>
+                          <span>{lead.city || 'Direct'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
-          {filtered.length > visibleCount && (
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.75rem' }}>
-              <button className="btn btn-secondary" onClick={() => setVisibleCount(prev => prev + 50)} style={{ padding: '0.65rem 1.5rem', fontSize: '0.85rem' }}>
-                Load More Leads ({filtered.length - visibleCount} remaining)
-              </button>
-            </div>
-          )}
-        </>
-      ) : (
-        /* Kanban View (Groww / Zepto boards) */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem', marginTop: '1rem', alignItems: 'flex-start' }}>
-          {STATUS_OPTIONS.map(col => {
-            const colLeads = filtered.filter(l => DATA_CONFIG.getSimpleStatusLabel(l.status) === col.value);
-            return (
-              <div key={col.value} style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--glass-border)', padding: '1rem', minHeight: '60vh', boxShadow: 'var(--shadow-card)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.6rem', borderBottom: '2px solid ' + DATA_CONFIG.getStatusColor(col.value) }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>{col.label}</span>
-                  <span style={{ fontSize: '0.72rem', background: 'var(--bg-input)', padding: '2px 8px', borderRadius: 999, fontWeight: 800, color: 'var(--text-dim)' }}>{colLeads.length}</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {colLeads.length === 0 && <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', textAlign: 'center', padding: '1.5rem 0' }}>No leads here</div>}
-                  {colLeads.map(lead => (
-                    <div 
-                      key={lead.id} 
-                      className="glass-card" 
-                      style={{ padding: '0.9rem', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: '3px solid ' + DATA_CONFIG.getStatusColor(lead.status), cursor: 'pointer' }}
-                      onClick={() => setDetailsLeadId(lead.id)}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
-                        <span style={{ color: 'var(--primary)' }}>{lead.id}</span>
-                        <span>₹{(lead.orderValue || 0).toLocaleString()}</span>
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{lead.customerName}</div>
-                      <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{lead.product}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--glass-border)', fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                        <span>{normalizeDisplayDate(lead.date)}</span>
-                        <span>{lead.city || 'Direct'}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+      {filtered.length > visibleCount && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.75rem' }}>
+          <button className="btn btn-secondary" onClick={() => setVisibleCount(prev => prev + 50)} style={{ padding: '0.65rem 1.5rem', fontSize: '0.85rem' }}>
+            Load More Leads ({filtered.length - visibleCount} remaining)
+          </button>
         </div>
       )}
 

@@ -1,9 +1,9 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - COMPREHENSIVE MULTI-FORMAT DATE ENGINE: Parses Month-First (Jul 31, July 31 2026), Day-First (31 Jul 2026), Numeric (27/07/2026, 27-07), and Chat Pane date pills!
+ * - STRICT DATE RANGE ENFORCEMENT: Immediately stops scrolling when cards reach before the chosen Start Date.
+ * - CARD-FIRST DATE PARSING: 100% authoritative sidebar card date extraction (e.g. 18 Jul -> 2026-07-18).
  * - IN-PLACE DATE REWRITE ENGINE: Matches existing CRM leads by phone or buyer name and updates their date/timestamp directly in Firestore without deleting any records or breaking invoices.
- * - Multi-stage scroll & bounce triggers for complete 30-day scans.
  * - Safe protection for manual leads and invoice-linked leads.
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
@@ -270,41 +270,66 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       }
     }
 
-    function extractCardDate(cardText, rightPaneText) {
+    function extractCardDate(cardText) {
       var n = new Date();
-      var combined = (cardText || '') + ' ' + (rightPaneText || '');
-      if (!combined.trim()) return n;
+      if (!cardText) return n;
 
       var months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
       var monthNamesPattern = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
 
-      /* 1. Month Day, Year: "Jul 31, 2026" or "July 31 2026" */
-      var mdyRegex = new RegExp('\\\\b(' + monthNamesPattern + ')[a-z]*\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?,?\\\\s+(\\\\d{4})\\\\b', 'i');
-      var mdyMatch = combined.match(mdyRegex);
-      if (mdyMatch) {
-        var mIdx = months.indexOf(mdyMatch[1].toLowerCase().slice(0, 3));
-        var day = parseInt(mdyMatch[2], 10);
-        var year = parseInt(mdyMatch[3], 10);
+      /* 1. Day Month Year: "18 Jul 2026" */
+      var dmyRegex = new RegExp('\\\\b(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(' + monthNamesPattern + ')[a-z]*,?\\\\s+(\\\\d{4})\\\\b', 'i');
+      var dmyMatch = cardText.match(dmyRegex);
+      if (dmyMatch) {
+        var day = parseInt(dmyMatch[1], 10);
+        var mIdx = months.indexOf(dmyMatch[2].toLowerCase().slice(0, 3));
+        var year = parseInt(dmyMatch[3], 10);
         if (!isNaN(day) && mIdx !== -1 && day >= 1 && day <= 31) {
           return new Date(year, mIdx, day, 12, 0, 0);
         }
       }
 
-      /* 2. Day Month Year: "31 Jul 2026" or "31 July 2026" */
-      var dmyRegex = new RegExp('\\\\b(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(' + monthNamesPattern + ')[a-z]*,?\\\\s+(\\\\d{4})\\\\b', 'i');
-      var dmyMatch = combined.match(dmyRegex);
-      if (dmyMatch) {
-        var day2 = parseInt(dmyMatch[1], 10);
-        var mIdx2 = months.indexOf(dmyMatch[2].toLowerCase().slice(0, 3));
-        var year2 = parseInt(dmyMatch[3], 10);
+      /* 2. Month Day Year: "Jul 18, 2026" */
+      var mdyRegex = new RegExp('\\\\b(' + monthNamesPattern + ')[a-z]*\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?,?\\\\s+(\\\\d{4})\\\\b', 'i');
+      var mdyMatch = cardText.match(mdyRegex);
+      if (mdyMatch) {
+        var mIdx2 = months.indexOf(mdyMatch[1].toLowerCase().slice(0, 3));
+        var day2 = parseInt(mdyMatch[2], 10);
+        var year2 = parseInt(mdyMatch[3], 10);
         if (!isNaN(day2) && mIdx2 !== -1 && day2 >= 1 && day2 <= 31) {
           return new Date(year2, mIdx2, day2, 12, 0, 0);
         }
       }
 
-      /* 3. Numeric DD/MM/YYYY or DD-MM-YYYY */
+      /* 3. Day Month: "18 Jul", "17 Jul", "06 Jul", "26 Aug" */
+      var dmRegex = new RegExp('\\\\b(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(' + monthNamesPattern + ')[a-z]*\\\\b', 'i');
+      var dmMatch = cardText.match(dmRegex);
+      if (dmMatch) {
+        var day3 = parseInt(dmMatch[1], 10);
+        var mIdx3 = months.indexOf(dmMatch[2].toLowerCase().slice(0, 3));
+        var year3 = n.getFullYear();
+        if (mIdx3 > n.getMonth()) year3 -= 1;
+        if (!isNaN(day3) && mIdx3 !== -1 && day3 >= 1 && day3 <= 31) {
+          return new Date(year3, mIdx3, day3, 12, 0, 0);
+        }
+      }
+
+      /* 4. Month Day: "Jul 18", "Aug 26" */
+      var mdRegex = new RegExp('\\\\b(' + monthNamesPattern + ')[a-z]*\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?\\\\b', 'i');
+      var mdMatch = cardText.match(mdRegex);
+      if (mdMatch) {
+        var mIdx4 = months.indexOf(mdMatch[1].toLowerCase().slice(0, 3));
+        var day4 = parseInt(mdMatch[2], 10);
+        var year4 = n.getFullYear();
+        if (mIdx4 > n.getMonth()) year4 -= 1;
+        if (!isNaN(day4) && mIdx4 !== -1 && day4 >= 1 && day4 <= 31) {
+          return new Date(year4, mIdx4, day4, 12, 0, 0);
+        }
+      }
+
+      /* 5. Numeric DD/MM/YYYY */
       var numDmyRegex = /\\b(\\d{1,2})[-/](\\d{1,2})[-/](\\d{2,4})\\b/;
-      var numDmyMatch = combined.match(numDmyRegex);
+      var numDmyMatch = cardText.match(numDmyRegex);
       if (numDmyMatch) {
         var dNum = parseInt(numDmyMatch[1], 10);
         var mNum = parseInt(numDmyMatch[2], 10) - 1;
@@ -315,52 +340,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
 
-      /* 4. Month Day: "Jul 31" or "July 31" */
-      var mdRegex = new RegExp('\\\\b(' + monthNamesPattern + ')[a-z]*\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?\\\\b', 'i');
-      var mdMatch = combined.match(mdRegex);
-      if (mdMatch) {
-        var mIdx3 = months.indexOf(mdMatch[1].toLowerCase().slice(0, 3));
-        var day3 = parseInt(mdMatch[2], 10);
-        var year3 = n.getFullYear();
-        if (mIdx3 > n.getMonth()) year3 -= 1;
-        if (!isNaN(day3) && mIdx3 !== -1 && day3 >= 1 && day3 <= 31) {
-          return new Date(year3, mIdx3, day3, 12, 0, 0);
-        }
-      }
-
-      /* 5. Day Month: "31 Jul" or "31 July" */
-      var dmRegex = new RegExp('\\\\b(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(' + monthNamesPattern + ')[a-z]*\\\\b', 'i');
-      var dmMatch = combined.match(dmRegex);
-      if (dmMatch) {
-        var day4 = parseInt(dmMatch[1], 10);
-        var mIdx4 = months.indexOf(dmMatch[2].toLowerCase().slice(0, 3));
-        var year4 = n.getFullYear();
-        if (mIdx4 > n.getMonth()) year4 -= 1;
-        if (!isNaN(day4) && mIdx4 !== -1 && day4 >= 1 && day4 <= 31) {
-          return new Date(year4, mIdx4, day4, 12, 0, 0);
-        }
-      }
-
-      /* 6. Numeric DD/MM or DD-MM */
-      var numDmRegex = /\\b(\\d{1,2})[-/](\\d{1,2})\\b/;
-      var numDmMatch = combined.match(numDmRegex);
-      if (numDmMatch) {
-        var dNum2 = parseInt(numDmMatch[1], 10);
-        var mNum2 = parseInt(numDmMatch[2], 10) - 1;
-        var yNum2 = n.getFullYear();
-        if (mNum2 > n.getMonth()) yNum2 -= 1;
-        if (dNum2 >= 1 && dNum2 <= 31 && mNum2 >= 0 && mNum2 <= 11) {
-          return new Date(yNum2, mNum2, dNum2, 12, 0, 0);
-        }
-      }
-
-      /* 7. Yesterday */
-      if (/\\byesterday\\b/i.test(combined)) {
+      /* 6. Yesterday */
+      if (/\\byesterday\\b/i.test(cardText)) {
         return new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1, 12, 0, 0);
       }
 
-      /* 8. Today / Time */
-      if (/\\b(?:today|\\d{1,2}:\\d{2}\\s*(?:am|pm)?)\\b/i.test(combined)) {
+      /* 7. Today / Time: "6:05 PM", "10:13 AM" */
+      if (/\\b(?:today|\\d{1,2}:\\d{2}\\s*(?:am|pm)?)\\b/i.test(cardText)) {
         return n;
       }
 
@@ -485,14 +471,14 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       var btn = document.getElementById('start-sync-btn');
       btn.disabled = true;
       btn.style.opacity = '0.7';
-      btn.innerHTML = '<span>⏳</span> Rewriting Dates & Syncing...';
+      btn.innerHTML = '<span>⏳</span> Scanning Leads...';
 
       var statusDiv = document.getElementById('sync-status');
       var statsGrid = document.getElementById('sync-stats-grid');
       var progBarContainer = document.getElementById('sync-progress-bar-container');
       var progBar = document.getElementById('sync-progress-bar');
       
-      if (statusDiv) { statusDiv.style.display = 'block'; statusDiv.innerHTML = '<span style="color:#38bdf8;">[INIT] Starting In-Place Date Correction Engine...</span><br>'; }
+      if (statusDiv) { statusDiv.style.display = 'block'; statusDiv.innerHTML = '<span style="color:#38bdf8;">[INIT] Starting Strict Date Range Scan...</span><br>'; }
       if (statsGrid) { statsGrid.style.display = 'grid'; }
       if (progBarContainer) { progBarContainer.style.display = 'block'; }
 
@@ -569,39 +555,18 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             continue;
           }
 
-          /* Click card to open conversation details */
-          card.click();
-          card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-          var innerEl = card.querySelector('div, p, span, h4, h5');
-          if (innerEl) {
-            innerEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-          }
-          await new Promise(function(r) { setTimeout(r, 600); });
-
-          /* Extract right chat pane text to detect header dates (e.g. July 31, 2026) */
-          var rightPaneEl = document.querySelector('.cntRight, .chatBox, [class*="rightPane"], [class*="chat_box"]') || document.body;
-          var rightPaneText = rightPaneEl ? (rightPaneEl.innerText || '') : '';
-
-          /* 2. Accurate Card + Chat Date Extraction */
-          var leadDate = extractCardDate(cardText, rightPaneText);
+          /* 2. CARD-FIRST AUTHORITATIVE DATE PARSER */
+          var leadDate = extractCardDate(cardText);
           var formattedDate = formatLocalDate(leadDate);
 
-          var uniqueKey = customerName.toLowerCase() + '_' + formattedDate;
-          if (processedUniqueKeys.has(uniqueKey)) {
-            continue;
-          }
-          processedUniqueKeys.add(uniqueKey);
-          newProcessedInRound++;
-
-          setStat('stat-found', processedUniqueKeys.size);
-
+          /* STRICT DATE LIMIT CHECK: If lead is before chosen Start Date, increment count */
           if (startLimit && leadDate < startLimit) {
             consecutiveOlderCount++;
             skippedCount++;
             setStat('stat-skipped', skippedCount);
-            if (consecutiveOlderCount >= 20) {
+            if (consecutiveOlderCount >= 3) {
               reachedDateLimit = true;
-              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached 30-Day limit (' + formattedDate + ' is older than ' + startDateVal + ').</span><br>'; }
+              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#eab308; font-weight:700;">[STOP] Reached Start Date cutoff (' + formattedDate + ' is before ' + startDateVal + '). Stopping scan automatically.</span><br>'; }
               break;
             }
             continue;
@@ -614,6 +579,24 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             setStat('stat-skipped', skippedCount);
             continue;
           }
+
+          var uniqueKey = customerName.toLowerCase() + '_' + formattedDate;
+          if (processedUniqueKeys.has(uniqueKey)) {
+            continue;
+          }
+          processedUniqueKeys.add(uniqueKey);
+          newProcessedInRound++;
+
+          setStat('stat-found', processedUniqueKeys.size);
+
+          /* Click card to open conversation details */
+          card.click();
+          card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          var innerEl = card.querySelector('div, p, span, h4, h5');
+          if (innerEl) {
+            innerEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          }
+          await new Promise(function(r) { setTimeout(r, 600); });
 
           /* 3. Phone Number Extraction */
           var contact = extractPhoneNumber(card, lines);
@@ -771,7 +754,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
         if (newProcessedInRound === 0) {
           noNewCardsRounds++;
-          if (noNewCardsRounds >= 25) {
+          if (noNewCardsRounds >= 20) {
             if (statusDiv) { statusDiv.innerHTML += '<span style="color:#94a3b8;">[DONE] End of list reached.</span><br>'; }
             break;
           }
@@ -789,7 +772,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
       if (progBar) { progBar.style.width = '100%'; }
       if (statusDiv) {
-        statusDiv.innerHTML += '<br><strong style="color:#10b981; font-size:12px;">🎉 Dates Rewritten & Sync Completed!</strong><br><span style="color:#cbd5e1;">Total Scanned: ' + processedUniqueKeys.size + ' | Updated/Synced: ' + syncedCount + ' | Skipped: ' + skippedCount + ' | Failed: ' + errorCount + '</span>';
+        statusDiv.innerHTML += '<br><strong style="color:#10b981; font-size:12px;">🎉 Scan Completed within Selected Date Range!</strong><br><span style="color:#cbd5e1;">Total Scanned: ' + processedUniqueKeys.size + ' | Updated/Synced: ' + syncedCount + ' | Skipped: ' + skippedCount + ' | Failed: ' + errorCount + '</span>';
         statusDiv.scrollTop = statusDiv.scrollHeight;
       }
 

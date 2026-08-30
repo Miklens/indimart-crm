@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react';
-import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut, X } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingBag, Package, FileText, Repeat, ListChecks, MessageSquare, BarChart2, Settings, ChevronLeft, ChevronRight, Bell, Wifi, WifiOff, Loader, Upload, Download, Sun, Moon, Search, LogOut, X, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { signOutUser, isFirebaseConfigured, getCurrentUser } from '../firebase';
-import { DATA_CONFIG } from '../utils/dataConfig';
+import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,7 +19,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onThemeToggle }) {
-  const { currentSection, setCurrentSection, leads, syncStatus, isSyncing, addLead, showBanner } = useApp();
+  const { currentSection, setCurrentSection, leads, syncStatus, isSyncing, addLead, showBanner, invoiceHistory } = useApp();
   const [collapsed, setCollapsed] = useState(false);
   const csvRef = useRef(null);
 
@@ -58,33 +58,327 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
     reader.readAsText(file);
   };
 
+  // ── Complete 5-Sheet Professional Excel Export Engine ──────────────────────
   const handleExportCSV = async () => {
     try {
       const ExcelJS = (await import('exceljs')).default;
       const wb = new ExcelJS.Workbook();
-      const ds = wb.addWorksheet('Leads Data');
-      ds.columns = [
-        { header: 'ID', key: 'id', width: 12 },
-        { header: 'Date', key: 'date', width: 14 },
-        { header: 'Customer Name', key: 'customerName', width: 24 },
-        { header: 'Contact', key: 'contact', width: 16 },
-        { header: 'City', key: 'city', width: 16 },
-        { header: 'State', key: 'state', width: 16 },
-        { header: 'Product', key: 'product', width: 26 },
-        { header: 'Status', key: 'status', width: 16 },
-        { header: 'Order Value', key: 'orderValue', width: 14 },
-        { header: 'Remarks', key: 'remarks', width: 30 },
+
+      const cleanCityName = (rawCity, rawState) => {
+        if (!rawCity) return 'Other';
+        let city = rawCity.trim();
+        if (city.includes(',')) {
+          const parts = city.split(',').map(p => p.trim());
+          const cleanParts = parts.filter(p => {
+            const lower = p.toLowerCase();
+            return lower !== 'india' && !/^\d{6}$/.test(lower) && !lower.startsWith('india -') && !/^\d+$/.test(lower);
+          });
+          if (cleanParts.length > 0) {
+            const stateLower = (rawState || '').toLowerCase();
+            const lastPart = cleanParts[cleanParts.length - 1];
+            const lastPartLower = lastPart.toLowerCase();
+            const indianStates = [
+              'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat',
+              'haryana', 'himachal pradesh', 'jharkhand', 'karnataka', 'kerala', 'madhya pradesh',
+              'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'odisha', 'punjab',
+              'rajasthan', 'sikkim', 'tamil nadu', 'telangana', 'tripura', 'uttar pradesh',
+              'uttarakhand', 'west bengal', 'delhi'
+            ];
+            if (indianStates.includes(lastPartLower) || lastPartLower === stateLower) {
+              city = cleanParts[cleanParts.length - 2] || lastPart;
+            } else {
+              city = lastPart;
+            }
+          }
+        }
+        return city.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      };
+
+      // ── 1. Dashboard Sheet ────────────────────────────────────────────────
+      const ds = wb.addWorksheet('Dashboard');
+      ds.getColumn(1).width = 32;
+      ds.getColumn(2).width = 22;
+      ds.getColumn(3).width = 22;
+      ds.getColumn(4).width = 11;
+      ds.getColumn(5).width = 11;
+
+      const dsCenter = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      const dsLeft   = { horizontal: 'left',   vertical: 'middle', wrapText: true };
+      const dsThin   = { style: 'thin' };
+      const dsBord   = { top: dsThin, left: dsThin, bottom: dsThin, right: dsThin };
+      const greenFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+      const blueFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+      const purpleFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } };
+      const amberFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } };
+      const redFill    = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF4444' } };
+      const darkFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+      const whiteBold  = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
+
+      const dsSection = (label, fill) => {
+        const r = ds.addRow([label, '', '', '', '']);
+        ds.mergeCells(r.number, 1, r.number, 5);
+        r.getCell(1).fill = fill; r.getCell(1).font = whiteBold;
+        r.getCell(1).alignment = dsCenter; r.getCell(1).border = dsBord;
+        r.height = 22;
+      };
+      const dsColHead = (c1, c2, c3) => {
+        const r = ds.addRow([c1, c2, c3, '', '']);
+        ds.mergeCells(r.number, 4, r.number, 5);
+        [1,2,3].forEach(col => {
+          r.getCell(col).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+          r.getCell(col).fill = darkFill; r.getCell(col).alignment = dsCenter; r.getCell(col).border = dsBord;
+        });
+      };
+      const dsDataRow = (c1, c2, c3, extraFn) => {
+        const r = ds.addRow([c1, c2, c3, '', '']);
+        ds.mergeCells(r.number, 4, r.number, 5);
+        r.getCell(1).alignment = dsLeft; r.getCell(2).alignment = dsCenter; r.getCell(3).alignment = dsCenter;
+        r.eachCell(c => { c.border = dsBord; });
+        if (extraFn) extraFn(r);
+        return r;
+      };
+
+      // Title
+      const titleR = ds.addRow([`IndiaMART CRM — Executive Report  |  ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`, '', '', '', '']);
+      ds.mergeCells(titleR.number, 1, titleR.number, 5);
+      titleR.getCell(1).font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+      titleR.getCell(1).fill = darkFill; titleR.getCell(1).alignment = dsCenter; titleR.height = 28;
+
+      const dsPaidInv = (invoiceHistory || []).filter(inv => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return (parseFloat(v.receivedAmount)||0) > 0; });
+      const dsConfirmedRev = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.totalAmount)||0); }, 0);
+      const dsTotalReceived = dsPaidInv.reduce((s, inv) => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return s + (parseFloat(v.receivedAmount)||0); }, 0);
+      const dsBilledIds = new Set(dsPaidInv.map(inv => inv.leadId).filter(Boolean));
+      const dsValidLeads = leads.filter(l => !DATA_CONFIG.getLostStatusLabels().includes(l.status)).length;
+      const dsConvRate = dsValidLeads ? ((dsBilledIds.size / dsValidLeads) * 100).toFixed(1) : '0';
+      const dsContactedCount = leads.filter(l => ['Contacted', 'Quoted', 'Won'].includes(DATA_CONFIG.getSimpleStatusLabel(l.status))).length;
+      const dsContactRate = leads.length ? ((dsContactedCount / leads.length) * 100).toFixed(1) : '0';
+      const dsPending = Math.max(0, dsConfirmedRev - dsTotalReceived);
+      const dsInTransit = (invoiceHistory || []).filter(inv => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return v.deliveryStatus === 'Material Dispatched'; }).length;
+      const dsWonAll = DATA_CONFIG.getWonStatusLabels();
+      const dsProjectedRev = leads.filter(l => !dsBilledIds.has(l.id) && !['Lost', 'Not Responding', 'Not Interested', 'Won'].includes(DATA_CONFIG.getSimpleStatusLabel(l.status))).reduce((s,l) => s+(l.orderValue||0), 0);
+
+      dsSection('📊  KEY PERFORMANCE INDICATORS', greenFill);
+      dsColHead('KPI Metric', 'Value', 'Notes / Context');
+      [
+        ['Pipeline Enquiries',    leads.length,      `${dsContactRate}% Contacted`,                    false],
+        ['Actual Sales (Billed)', dsConfirmedRev,    `From ${dsPaidInv.length} paid orders`,           true],
+        ['Outstanding Payments',  dsPending,         `Collected: ₹${dsTotalReceived.toLocaleString('en-IN')}`, true],
+        ['In-Transit Orders',     dsInTransit,       'Active Material Dispatches',                     false],
+        ['Projected Revenue',     dsProjectedRev,    'Unbilled Enquiries',                             true],
+        ['Conversion Rate',       `${dsConvRate}%`,  `${dsBilledIds.size} Billed / ${dsValidLeads} Valid`, false],
+      ].forEach(([kpi, val, note, isCurrency]) => {
+        dsDataRow(kpi, val, note, r => {
+          r.getCell(1).font = { bold: true };
+          r.getCell(2).font = { bold: true, size: 12, color: { argb: 'FF10B981' } };
+          r.getCell(3).font = { size: 10, color: { argb: 'FF64748B' } };
+          if (isCurrency) r.getCell(2).numFmt = '"₹"#,##0';
+        });
+      });
+      ds.addRow([]);
+
+      // Status Distribution
+      dsSection('🎯  LEAD STATUS DISTRIBUTION', blueFill);
+      dsColHead('Status', 'Count', '% of Total');
+      const dsStatusCounts = {};
+      leads.forEach(l => {
+        const simple = DATA_CONFIG.getSimpleStatusLabel(l.status);
+        dsStatusCounts[simple] = (dsStatusCounts[simple]||0) + 1;
+      });
+      const orderedStatuses = ['New Enquiry', 'Contacted', 'Quoted', 'Not Responding', 'Won', 'Lost', 'Not Interested'];
+      orderedStatuses.forEach(status => {
+        const count = dsStatusCounts[status] || 0;
+        dsDataRow(status, count, leads.length ? `${((count/leads.length)*100).toFixed(1)}%` : '0%', r => {
+          if (status === 'Won') { r.getCell(1).fill = { type:'pattern',pattern:'solid',fgColor:{argb:'FFD1FAE5'} }; r.getCell(1).font = { bold:true, color:{argb:'FF065F46'} }; }
+          else if (['Lost', 'Not Responding', 'Not Interested'].includes(status)) { r.getCell(1).fill = { type:'pattern',pattern:'solid',fgColor:{argb:'FFFEE2E2'} }; r.getCell(1).font = { color:{argb:'FF991B1B'} }; }
+        });
+      });
+      ds.addRow([]);
+
+      // Top Products
+      dsSection('🏆  TOP PRODUCTS BY REVENUE', purpleFill);
+      dsColHead('Product', 'Revenue (₹)', 'Share %');
+      const dsProdRev = {};
+      if (dsPaidInv.length) {
+        dsPaidInv.forEach(inv => {
+          const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv;
+          (v.items||[]).forEach(p => { if (!p.name) return; dsProdRev[p.name] = (dsProdRev[p.name]||0)+((parseFloat(p.price)||0)*(parseFloat(p.qty)||1)); });
+        });
+      } else {
+        leads.filter(l => dsWonAll.includes(l.status)).forEach(l => {
+          (l.productList||[{name:l.product,price:l.orderValue,qty:1}]).forEach(p => { if (!p.name) return; dsProdRev[p.name] = (dsProdRev[p.name]||0)+((parseFloat(p.price)||0)*(parseFloat(p.qty)||1)); });
+        });
+      }
+      const dsTopProds = Object.entries(dsProdRev).sort((a,b)=>b[1]-a[1]).slice(0,10);
+      const dsTotalProdRev = dsTopProds.reduce((s,[,v])=>s+v, 0);
+      dsTopProds.forEach(([name,rev],i) => {
+        dsDataRow(`${i+1}. ${name}`, rev, dsTotalProdRev ? `${((rev/dsTotalProdRev)*100).toFixed(1)}%` : '0%', r => {
+          r.getCell(2).numFmt = '"₹"#,##0';
+          if (i===0) r.eachCell(c => { c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFEF3C7'}}; c.font={bold:true,color:{argb:'FF92400E'}}; });
+        });
+      });
+      ds.addRow([]);
+
+      // City Revenue
+      dsSection('🗺️  CITY-WISE REVENUE', amberFill);
+      dsColHead('City', 'Revenue (₹)', 'Share %');
+      const dsCityRev = {};
+      if (dsPaidInv.length) {
+        dsPaidInv.forEach(inv => {
+          const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv;
+          const city = cleanCityName(inv.customerCity || inv.city, inv.customerState || inv.state);
+          dsCityRev[city] = (dsCityRev[city]||0) + (parseFloat(v.totalAmount)||0);
+        });
+      } else {
+        leads.filter(l => dsWonAll.includes(l.status)).forEach(l => {
+          const city = cleanCityName(l.city, l.state);
+          dsCityRev[city] = (dsCityRev[city]||0) + (parseFloat(l.orderValue)||0);
+        });
+      }
+      const dsTopCities = Object.entries(dsCityRev).sort((a,b)=>b[1]-a[1]).slice(0,10);
+      const dsTotalCityRev = dsTopCities.reduce((s,[,v])=>s+v, 0);
+      dsTopCities.forEach(([city,rev]) => {
+        dsDataRow(city, rev, dsTotalCityRev ? `${((rev/dsTotalCityRev)*100).toFixed(1)}%` : '0%', r => { r.getCell(2).numFmt = '"₹"#,##0'; });
+      });
+
+      // ── 2. Leads Sheet ────────────────────────────────────────────────────
+      const ws = wb.addWorksheet('Leads');
+      ws.columns = [
+        { header: 'Date', width: 15 },
+        { header: 'Lead ID', width: 12 },
+        { header: 'Customer Name', width: 25 },
+        { header: 'Mobile Number', width: 18 },
+        { header: 'City', width: 15 },
+        { header: 'State', width: 15 },
+        { header: 'Source', width: 18 },
+        { header: 'GST No.', width: 18 },
+        { header: 'Product Name', width: 30 },
+        { header: 'Qty', width: 8 },
+        { header: 'Unit Price', width: 12 },
+        { header: 'Subtotal', width: 12 },
+        { header: 'Total Value', width: 15 },
+        { header: 'Current Status', width: 20 },
+        { header: 'Follow-up', width: 15 },
+        { header: 'Lost Reason', width: 20 },
+        { header: 'Remarks', width: 35 },
       ];
-      leads.forEach(l => ds.addRow(l));
+      const headerRow = ws.getRow(1);
+      headerRow.height = 30;
+      headerRow.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 12 };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      let currentRow = 2;
+      leads.forEach(l => {
+        const productList = l.productList && l.productList.length
+          ? l.productList
+          : [{ name: l.product, qty: 1, price: l.orderValue }];
+        const rowCount = productList.length;
+
+        productList.forEach((p, idx) => {
+          const rowData = [
+            idx === 0 ? normalizeDisplayDate(l.date) : '',
+            idx === 0 ? l.id : '',
+            idx === 0 ? l.customerName : '',
+            idx === 0 ? l.contact : '',
+            idx === 0 ? cleanCityName(l.city, l.state) : '',
+            idx === 0 ? l.state : '',
+            idx === 0 ? (l.source || '') : '',
+            idx === 0 ? (l.gst || '') : '',
+            p.name || '',
+            p.qty || 0,
+            p.price || 0,
+            (p.price || 0) * (p.qty || 0),
+            idx === 0 ? (l.orderValue || 0) : '',
+            idx === 0 ? DATA_CONFIG.getSimpleStatusLabel(l.status) : '',
+            idx === 0 ? normalizeDisplayDate(l.followUpDate) : '',
+            idx === 0 ? (l.lostReason || '') : '',
+            idx === 0 ? (l.remarks || '') : '',
+          ];
+
+          const row = ws.addRow(rowData);
+          row.getCell(11).numFmt = '"₹"#,##0';
+          row.getCell(12).numFmt = '"₹"#,##0';
+          row.getCell(13).numFmt = '"₹"#,##0';
+        });
+
+        if (rowCount > 1) {
+          const mergeCols = [1, 2, 3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 17];
+          mergeCols.forEach(col => {
+            ws.mergeCells(currentRow, col, currentRow + rowCount - 1, col);
+          });
+        }
+        currentRow += rowCount;
+      });
+
+      // ── 3. Summary Sheet ──────────────────────────────────────────────────
+      const ss = wb.addWorksheet('Summary');
+      ss.addRow(['Metric', 'Value', 'Percentage']);
+      ss.getRow(1).eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 12 };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+      ss.addRow(['Total Leads', leads.length, '100%']);
+      ss.addRow(['Total Value', leads.reduce((s, l) => s + (l.orderValue || 0), 0), '-']);
+      ss.getRow(3).getCell(2).numFmt = '"₹"#,##0';
+      ss.addRow(['Converted / Billed', dsBilledIds.size, `${dsConvRate}% of Valid`]);
+      ss.getColumn(1).width = 25;
+      ss.getColumn(2).width = 18;
+      ss.getColumn(3).width = 18;
+
+      // ── 4. Invoices Sheet ─────────────────────────────────────────────────
+      if (invoiceHistory?.length) {
+        const is = wb.addWorksheet('Invoices');
+        is.columns = [
+          { header: 'Invoice No.', width: 20 },
+          { header: 'Date', width: 15 },
+          { header: 'Customer', width: 25 },
+          { header: 'Contact', width: 18 },
+          { header: 'City', width: 15 },
+          { header: 'State', width: 15 },
+          { header: 'Amount (₹)', width: 15 },
+          { header: 'Received (₹)', width: 15 },
+          { header: 'Payment Status', width: 15 },
+          { header: 'Delivery Status', width: 18 },
+        ];
+        const invHeader = is.getRow(1);
+        invHeader.height = 30;
+        invHeader.eachCell(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } };
+          cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 12 };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+        invoiceHistory.forEach(inv => {
+          const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+          const row = is.addRow([
+            inv.invoiceNumber,
+            latest.invoiceDate,
+            inv.customerName,
+            inv.customerContact,
+            cleanCityName(inv.customerCity || inv.city, inv.customerState || inv.state),
+            inv.customerState,
+            latest.totalAmount || 0,
+            latest.receivedAmount || 0,
+            latest.paymentStatus || 'Pending',
+            latest.deliveryStatus || '-',
+          ]);
+          row.getCell(7).numFmt = '"₹"#,##0';
+          row.getCell(8).numFmt = '"₹"#,##0';
+        });
+      }
+
+      // ── 5. Download ───────────────────────────────────────────────────────
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `IndiaMART_CRM_Backup_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `IndiaMART_Executive_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      showBanner('✅ Data exported to Excel!', 'success');
+      showBanner('📊 Professional Excel Report exported successfully!', 'success');
     } catch (err) {
       showBanner('❌ Export failed: ' + err.message, 'error');
     }
@@ -213,22 +507,36 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
         })}
       </nav>
 
-      {/* Quick actions & Profile Footer */}
+      {/* Quick actions & Professional Export */}
       {!collapsed && (
-        <div style={{ padding: '0.75rem 0.85rem', borderTop: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+        <div style={{ padding: '0.75rem 0.85rem', borderTop: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <input ref={csvRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImportCSV} />
           
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button onClick={() => csvRef.current?.click()} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.45rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', cursor: 'pointer', background: 'var(--bg-input)', color: 'var(--text-dim)', fontSize: '0.75rem', fontWeight: 600 }}>
-              <Upload size={12} /> Import
-            </button>
-            <button onClick={handleExportCSV} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.45rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', cursor: 'pointer', background: 'var(--bg-input)', color: 'var(--text-dim)', fontSize: '0.75rem', fontWeight: 600 }}>
-              <Download size={12} /> Backup
-            </button>
-          </div>
+          {/* Professional 5-Sheet Excel Export Button */}
+          <button 
+            className="btn btn-primary"
+            onClick={handleExportCSV}
+            title="Export full 5-sheet formatted Excel report (Dashboard, Leads, Summary, Invoices)"
+            style={{
+              width: '100%',
+              padding: '0.65rem 0.85rem',
+              fontSize: '0.82rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              boxShadow: '0 4px 14px rgba(16,185,129,0.35)',
+            }}
+          >
+            <FileSpreadsheet size={15} /> <span>Export Excel Report</span>
+          </button>
+
+          <button onClick={() => csvRef.current?.click()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.45rem', borderRadius: '0.5rem', border: '1px solid var(--glass-border)', cursor: 'pointer', background: 'var(--bg-input)', color: 'var(--text-dim)', fontSize: '0.75rem', fontWeight: 600 }}>
+            <Upload size={12} /> Import Leads CSV
+          </button>
 
           {/* Theme Switcher Pill */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.35rem 0.2rem', marginTop: '2px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.2rem 0.1rem', marginTop: '2px' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600 }}>Theme Mode</span>
             <div className="theme-toggle" onClick={onThemeToggle} title={theme === 'dark' ? 'Switch to Light' : 'Switch to Dark'}>
               <button className={`theme-toggle-btn${theme === 'light' ? ' active' : ''}`}><Sun size={13} /></button>

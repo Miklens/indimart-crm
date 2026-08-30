@@ -1,3 +1,7 @@
+import { COUNTRIES, COUNTRY_MAP, detectCountry, getWhatsAppLink, parseLocation } from './countries';
+
+export { COUNTRIES, COUNTRY_MAP, detectCountry, getWhatsAppLink, parseLocation };
+
 export const DATA_CONFIG = {
   statuses: {
     NEW_ENQUIRY: { label: 'New Enquiry', color: '#3b82f6', category: 'pipeline', stage: 1, isActive: true },
@@ -238,3 +242,8 @@ export function getLeadForInvoice(inv, leadsList) {
 
 DATA_CONFIG.normalizeContact = normalizeContact;
 DATA_CONFIG.getLeadForInvoice = getLeadForInvoice;
+DATA_CONFIG.detectCountry = detectCountry;
+DATA_CONFIG.getWhatsAppLink = getWhatsAppLink;
+DATA_CONFIG.parseLocation = parseLocation;
+DATA_CONFIG.COUNTRIES = COUNTRIES;
+DATA_CONFIG.COUNTRY_MAP = COUNTRY_MAP;

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ArrowLeft, Edit, RefreshCw, Truck, PackageCheck, FileText, MessageCircle, Eye } from 'lucide-react';
+import { ArrowLeft, Edit, RefreshCw, Truck, PackageCheck, FileText, MessageCircle, Eye, Globe } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { DATA_CONFIG } from '../utils/dataConfig';
+import { DATA_CONFIG, detectCountry, getWhatsAppLink } from '../utils/dataConfig';
 import InvoiceModal from './InvoiceModal';
 import ProductPicker from './ProductPicker';
 
@@ -24,6 +24,8 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
 
   if (!lead) return null;
 
+  const countryInfo = detectCountry(`${lead.city || ''} ${lead.state || ''} ${lead.country || ''}`, lead.contact);
+
   const relatedInvoices = invoiceHistory.filter(inv => inv.leadId === leadId);
   const totalInvoiceValue = relatedInvoices.reduce((sum, inv) => {
     const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
@@ -41,8 +43,20 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
     const rest = { ...lead };
     delete rest.id;
     delete rest.history;
-    // eslint-disable-next-line react-hooks/purity
-    addLead({ ...rest, date: new Date().toISOString().split('T')[0], status: 'New Enquiry', paymentStatus: 'Pending', paymentReceivedAmount: 0, transactionId: '', dispatchDate: '', dispatchMethod: '', trackingId: '', materialReachedDate: '', remarks: `Reorder from ${lead.id}`, history: [{ status: 'New Enquiry', timestamp: Date.now() }] });
+    addLead({
+      ...rest,
+      date: new Date().toISOString().split('T')[0],
+      status: 'New Enquiry',
+      paymentStatus: 'Pending',
+      paymentReceivedAmount: 0,
+      transactionId: '',
+      dispatchDate: '',
+      dispatchMethod: '',
+      trackingId: '',
+      materialReachedDate: '',
+      remarks: `Reorder from ${lead.id}`,
+      history: [{ status: 'New Enquiry', timestamp: Date.now() }]
+    });
     showBanner(`✅ Reorder enquiry created for ${lead.customerName}`, 'success');
     onBack();
   };
@@ -54,7 +68,12 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         <button className="btn btn-secondary" onClick={onBack}><ArrowLeft size={14} /> Back to Leads</button>
         <h2 style={{ fontSize: '1.3rem' }}>{lead.customerName}</h2>
-        <span style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>{lead.contact}{lead.city ? ` · ${lead.city}, ${lead.state}` : ''}</span>
+        {countryInfo && (
+          <span style={{ fontSize: '0.75rem', background: 'var(--bg-card2)', border: '1px solid var(--glass-border)', padding: '2px 8px', borderRadius: 999, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>{countryInfo.flag}</span> <span>{countryInfo.name}</span>
+          </span>
+        )}
+        <span style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>{lead.contact}{lead.city ? ` · ${lead.city}${lead.state ? ', ' + lead.state : ''}` : ''}</span>
         <span style={{ marginLeft: 'auto', background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44`, borderRadius: 999, padding: '3px 12px', fontSize: '0.75rem', fontWeight: 700 }}>{DATA_CONFIG.getSimpleStatusLabel(lead.status)}</span>
       </div>
 
@@ -63,7 +82,7 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
           <button className="btn btn-secondary" onClick={() => { updateLeadStatus(leadId, 'Material Dispatched'); showBanner('✅ Marked In Transit', 'success'); }}><Truck size={14} /> Mark In Transit</button>
           <button className="btn btn-secondary" onClick={() => { updateLeadStatus(leadId, 'Material Reached'); showBanner('✅ Marked Delivered', 'success'); }}><PackageCheck size={14} /> Mark Delivered</button>
-          <button className="btn btn-secondary" onClick={() => window.open(`https://wa.me/91${lead.contact}`)}><MessageCircle size={14} /> WhatsApp</button>
+          <button className="btn btn-secondary" onClick={() => window.open(getWhatsAppLink(lead.contact))}><MessageCircle size={14} style={{ color: '#25d366' }} /> WhatsApp</button>
           <button className="btn btn-secondary" onClick={handleGenerateInvoice}><FileText size={14} /> Generate Invoice</button>
           <button className="btn btn-secondary" onClick={reorder}><RefreshCw size={14} /> Reorder</button>
           <button className="btn btn-primary" onClick={() => onEdit(leadId)}><Edit size={14} /> Edit Lead</button>
@@ -73,10 +92,10 @@ export default function LeadDetails({ leadId, onBack, onEdit }) {
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.75rem' }}>
           <label style={{ fontSize: '0.72rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>Update Status:</label>
           <select value={currentSimpleStatus} onChange={e => {
-            const nextStatus = DATA_CONFIG.resolveStatusFromSimple(e.target.value);
-            updateLeadStatus(leadId, nextStatus);
-            showBanner(`✅ Status → ${e.target.value}`, 'success');
-          }} style={{ minWidth: 200 }}>
+            const resolved = DATA_CONFIG.resolveStatusFromSimple(e.target.value);
+            updateLeadStatus(leadId, resolved);
+            showBanner(`✅ Updated status to ${e.target.value}`, 'success');
+          }}>
             {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
           {DATA_CONFIG.getLostStatusLabels().includes(lead.status) && (

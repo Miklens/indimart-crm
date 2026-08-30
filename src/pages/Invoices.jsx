@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, FileText, Trash2, Download, RefreshCw, Eye, Copy, Phone, MapPin, Calendar, CheckCircle, AlertCircle, MessageCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../context/AppUIContext';
+import { getWhatsAppLink } from '../utils/dataConfig';
 import InvoiceModal from '../components/InvoiceModal';
 import LeadDetails from '../components/LeadDetails';
 
@@ -169,7 +170,7 @@ export default function Invoices() {
 
                   {inv.customerContact && (
                     <button 
-                      onClick={() => window.open(`https://wa.me/91${inv.customerContact}?text=Hello%20${encodeURIComponent(inv.customerName)},%20regarding%20Invoice%20${inv.invoiceNumber}%20for%20Rs.${total.toLocaleString()}...`)}
+                      onClick={() => window.open(getWhatsAppLink(inv.customerContact, `Hello ${inv.customerName}, regarding Invoice ${inv.invoiceNumber} for Rs.${total.toLocaleString()}...`))}
                       style={{
                         background: 'rgba(37, 211, 102, 0.15)',
                         border: '1px solid rgba(37, 211, 102, 0.35)',

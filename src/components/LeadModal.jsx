@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Plus, Trash2, Globe } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { DATA_CONFIG } from '../utils/dataConfig';
+import { DATA_CONFIG, COUNTRIES, detectCountry } from '../utils/dataConfig';
 
 const EMPTY_ROW = { name: '', qty: 1, price: 0, gst: '5', hsn: '', _lastHint: null };
 
@@ -12,12 +12,14 @@ export default function LeadModal({ leadId, onClose }) {
 
   const [form, setForm] = useState(() => {
     if (existing) {
+      const detected = detectCountry(`${existing.city || ''} ${existing.state || ''}`, existing.contact);
       return {
         date: existing.date?.includes('T') ? existing.date.split('T')[0] : (existing.date || ''),
         customerName: existing.customerName || '',
         contact: existing.contact || '',
         city: existing.city || '',
         state: existing.state || '',
+        country: existing.country || detected.name,
         gst: existing.gst || '',
         source: existing.source || 'IndiaMART Direct',
         status: existing.status || 'New Enquiry',
@@ -28,7 +30,7 @@ export default function LeadModal({ leadId, onClose }) {
     }
     return {
       date: new Date().toISOString().split('T')[0],
-      customerName: '', contact: '', city: '', state: '', gst: '',
+      customerName: '', contact: '', city: '', state: '', country: 'India', gst: '',
       source: 'IndiaMART Direct', status: 'New Enquiry',
       followUpDate: '', remarks: '', lostReason: '',
     };
@@ -53,7 +55,6 @@ export default function LeadModal({ leadId, onClose }) {
     setProductRows(prev => {
       const updated = [...prev];
       updated[idx] = { ...updated[idx], [field]: value };
-      // Auto-fill price from catalog
       if (field === 'name') {
         const catProd = products.find(p => p.name === value);
         if (catProd) {
@@ -61,7 +62,6 @@ export default function LeadModal({ leadId, onClose }) {
           updated[idx].gst = catProd.gst || '5';
           updated[idx].hsn = catProd.hsn || '';
         }
-        // Check customer history for last price
         let lastPrice = null;
         const normFn = r => { const d = String(r||'').replace(/\D/g,''); return d.length===12&&d.startsWith('91')?d.slice(2):d.slice(-10)||r.trim(); };
         if (form.contact) {
@@ -87,6 +87,10 @@ export default function LeadModal({ leadId, onClose }) {
   const normFn = r => { const d = String(r||'').replace(/\D/g,''); return d.length===12&&d.startsWith('91')?d.slice(2):d.slice(-10)||r.trim(); };
   const autoFill = (phone) => {
     if (!phone || phone.length < 5) return;
+    const detected = detectCountry('', phone);
+    if (detected.name !== 'India') {
+      setForm(f => ({ ...f, country: detected.name }));
+    }
     const pastLead = leads.slice().reverse().find(l => normFn(l.contact) === normFn(phone));
     if (pastLead) {
       setForm(f => ({
@@ -94,9 +98,9 @@ export default function LeadModal({ leadId, onClose }) {
         customerName: f.customerName || pastLead.customerName,
         city: f.city || pastLead.city || '',
         state: f.state || pastLead.state || '',
+        country: f.country || pastLead.country || detected.name,
         gst: f.gst || pastLead.gst || '',
       }));
-      // Pre-fill products from last order if rows are empty
       const firstRowEmpty = productRows.length === 1 && !productRows[0].name;
       if (firstRowEmpty) {
         const lastOrder = leads.slice().reverse().find(l => normFn(l.contact) === normFn(phone) && (l.productList?.length || l.product));
@@ -110,12 +114,21 @@ export default function LeadModal({ leadId, onClose }) {
     }
   };
 
+  const handleCityChange = (cityVal) => {
+    const detected = detectCountry(cityVal);
+    setForm(f => ({
+      ...f,
+      city: cityVal,
+      country: detected.name !== 'India' ? detected.name : f.country,
+    }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const productList = productRows.filter(r => r.name?.trim());
     const baseData = {
       ...form,
-      contact: form.contact.trim().replace(/\s+/g, ''), // strip whitespace before save
+      contact: form.contact.trim(),
       productList,
       product: productList.map(p => p.name).join(', '),
       orderValue,
@@ -137,15 +150,13 @@ export default function LeadModal({ leadId, onClose }) {
   };
 
   const isLost = DATA_CONFIG.getLostStatusLabels().includes(form.status);
-
-  // Build unique customer suggestions from existing leads
   const customerSuggestions = [...new Map(leads.map(l => [l.contact, l])).values()];
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-content wide">
         <div className="modal-header">
-          <h2>{existing ? 'Edit Lead' : 'New IndiaMART Enquiry'}</h2>
+          <h2>{existing ? 'Edit Lead' : 'New Enquiry'}</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             {autofillToast && (
               <span style={{ background: 'var(--primary)', color: '#fff', fontSize: '0.7rem', fontWeight: 600, padding: '3px 12px', borderRadius: 20, animation: 'fadeIn 0.2s' }}>
@@ -174,40 +185,60 @@ export default function LeadModal({ leadId, onClose }) {
               <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} required />
             </div>
             <div className="form-group">
-              <label>Contact (Phone)</label>
-              <input type="text" list="contact-suggestions" value={form.contact} onChange={e => { setForm(f => ({ ...f, contact: e.target.value })); autoFill(e.target.value); }} placeholder="10-digit mobile" required />
+              <label>Contact (Mobile / International Phone)</label>
+              <input 
+                type="text" 
+                list="contact-suggestions" 
+                value={form.contact} 
+                onChange={e => { setForm(f => ({ ...f, contact: e.target.value })); autoFill(e.target.value); }} 
+                placeholder="e.g. 9876543210 or +1..., +971..." 
+                required 
+              />
             </div>
             <div className="form-group">
-              <label>Customer Name</label>
+              <label>Customer / Business Name</label>
               <input type="text" list="name-suggestions" value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} required />
             </div>
           </div>
 
-          <div className="form-row" style={{ marginBottom: '0.75rem' }}>
+          <div className="form-row" style={{ marginBottom: '0.75rem', gridTemplateColumns: '1.2fr 1fr 1fr 1fr' }}>
             <div className="form-group">
-              <label>City</label>
-              <input type="text" list="city-suggestions" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label>State</label>
-              <input type="text" value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label>Customer GST</label>
-              <input type="text" value={form.gst} onChange={e => setForm(f => ({ ...f, gst: e.target.value }))} placeholder="e.g. 29AAKCM6046P1ZN" />
-            </div>
-            <div className="form-group">
-              <label>Source</label>
-              <select value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))}>
-                {DATA_CONFIG.sources.map(s => <option key={s}>{s}</option>)}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Globe size={13} style={{ color: 'var(--primary)' }} /> Country
+              </label>
+              <select value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))}>
+                {COUNTRIES.map(c => (
+                  <option key={c.code} value={c.name}>
+                    {c.flag} {c.name} ({c.dial})
+                  </option>
+                ))}
               </select>
             </div>
+            <div className="form-group">
+              <label>City / Location</label>
+              <input type="text" list="city-suggestions" value={form.city} onChange={e => handleCityChange(e.target.value)} placeholder="City / Province" />
+            </div>
+            <div className="form-group">
+              <label>State / Region</label>
+              <input type="text" value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} placeholder="State / Emirate" />
+            </div>
+            <div className="form-group">
+              <label>GST / Tax ID</label>
+              <input type="text" value={form.gst} onChange={e => setForm(f => ({ ...f, gst: e.target.value }))} placeholder="GSTIN or Tax Reg #" />
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+            <label>Lead Source</label>
+            <select value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))}>
+              {DATA_CONFIG.sources.map(s => <option key={s}>{s}</option>)}
+            </select>
           </div>
 
           {/* Product Rows */}
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase' }}>Products</label>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase' }}>Products / Items</label>
               <button type="button" className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem' }} onClick={() => setProductRows(r => [...r, { ...EMPTY_ROW }])}>
                 <Plus size={12} /> Add Row
               </button>
@@ -226,7 +257,7 @@ export default function LeadModal({ leadId, onClose }) {
                       )}
                     </div>
                     <input type="number" placeholder="Qty" value={row.qty} onChange={e => updateRow(idx, 'qty', e.target.value)} min="0" step="any" />
-                    <input type="number" placeholder="Price ₹" value={row.price} onChange={e => updateRow(idx, 'price', e.target.value)} min="0" step="any" />
+                    <input type="number" placeholder="Price" value={row.price} onChange={e => updateRow(idx, 'price', e.target.value)} min="0" step="any" />
                     <select value={row.gst} onChange={e => updateRow(idx, 'gst', e.target.value)}>
                       {['0','5','12','18','28'].map(g => <option key={g} value={g}>{g}%</option>)}
                     </select>

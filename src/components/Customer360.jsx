@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
-import { X, Phone, MapPin, TrendingUp, FileText, Clock, MessageCircle, Plus, Trash2, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { X, Phone, MapPin, TrendingUp, FileText, Clock, MessageCircle, Plus, Trash2, ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
+import { DATA_CONFIG, normalizeDisplayDate, detectCountry, getWhatsAppLink } from '../utils/dataConfig';
 
 import InvoiceModal from './InvoiceModal';
 
@@ -31,10 +31,8 @@ export default function Customer360({ customer, onClose }) {
   const [viewInvoice, setViewInvoice] = useState(null);
   const noteInputRef = useRef(null);
 
-  // Normalize customer's contact for robust matching
   const custContact = normC(customer.contact);
 
-  // All leads for this customer — match by normalized contact OR name
   const custLeads = leads.filter(l => {
     if (custContact && normC(l.contact) === custContact) return true;
     if (customer.name && l.customerName === customer.name) return true;
@@ -59,23 +57,21 @@ export default function Customer360({ customer, onClose }) {
   }, 0);
   const totalOutstanding = totalBilled - totalReceived;
 
-  // Last contacted = most recent followUpDate or lead date
   const dates = custLeads.map(l => l.followUpDate || l.date).filter(Boolean).sort().reverse();
   const lastContact = dates[0] ? normalizeDisplayDate(dates[0]) : '—';
 
-  // Best status of all leads
   const isVip = totalBilled >= 100000 || custInvoices.length >= 3;
 
-  // Notes stored per lead — we attach to the first/latest lead for simplicity
   const latestLead = custLeads.sort((a, b) => {
     const timeA = a.date ? new Date(a.date).getTime() : 0;
     const timeB = b.date ? new Date(b.date).getTime() : 0;
     return timeB - timeA;
   })[0];
 
+  const countryInfo = detectCountry(`${customer.city || ''} ${customer.state || ''} ${customer.country || ''}`, customer.contact);
+
   const addNote = () => {
     if (!noteText.trim() || !latestLead) return;
-    // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
     const note = { id: now, text: noteText.trim(), type: noteType, timestamp: now };
     const notes = [...(latestLead.activityNotes || []), note];
@@ -109,11 +105,16 @@ export default function Customer360({ customer, onClose }) {
                   {customer.name?.[0]?.toUpperCase() || '?'}
                 </div>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>{customer.name}</h2>
+                    {countryInfo && (
+                      <span style={{ fontSize: '0.72rem', background: 'var(--bg-input)', border: '1px solid var(--glass-border)', padding: '2px 8px', borderRadius: 999, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span>{countryInfo.flag}</span> <span>{countryInfo.name}</span>
+                      </span>
+                    )}
                     {isVip && <span style={{ fontSize: '0.65rem', background: 'rgba(245,158,11,0.2)', color: '#f59e0b', padding: '2px 8px', borderRadius: 999, fontWeight: 700, border: '1px solid rgba(245,158,11,0.3)' }}>⭐ VIP</span>}
                   </div>
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: 2, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: 4, flexWrap: 'wrap' }}>
                     {customer.contact && <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 3 }}><Phone size={11} /> {customer.contact}</span>}
                     {customer.city && <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 3 }}><MapPin size={11} /> {customer.city}</span>}
                     <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 3 }}><Clock size={11} /> Last contact: {lastContact}</span>
@@ -178,123 +179,80 @@ export default function Customer360({ customer, onClose }) {
                       {lead.remarks && (
                         <div style={{ gridColumn: '1/-1', marginTop: 4, fontStyle: 'italic', color: 'var(--text-dim)' }}>"{lead.remarks}"</div>
                       )}
-                      <div style={{ gridColumn: '1/-1', marginTop: 6 }}>
-                        <button className="btn btn-secondary" style={{ fontSize: '0.7rem', padding: '3px 10px' }}
-                          onClick={() => { setCurrentSection('leads'); onClose(); }}>
-                          <RefreshCw size={10} /> Open in Leads
-                        </button>
-                      </div>
                     </div>
                   )}
                 </div>
               );
             })}
-
-            {/* Invoices */}
-            <h3 style={{ margin: '0.75rem 0 0', fontSize: '0.88rem', color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: 6 }}><FileText size={14} /> Invoices ({custInvoices.length})</h3>
-
-            {custInvoices.length === 0 && <div style={{ color: 'var(--text-dim)', fontSize: '0.82rem', padding: '0.5rem', textAlign: 'center' }}>No invoices yet</div>}
-
-            {custInvoices.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(inv => {
-              const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
-              const pc = PAY_COLOR[latest.paymentStatus] || '#94a3b8';
-              return (
-                <div key={inv.invoiceNumber} style={{ background: 'var(--bg-card2)', borderRadius: '0.6rem', border: '1px solid var(--glass-border)', padding: '0.65rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer' }}
-                  onClick={() => setViewInvoice(inv)}>
-                  <FileText size={13} style={{ color: '#8b5cf6', flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#8b5cf6' }}>{inv.invoiceNumber}</div>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>{latest.invoiceDate || '—'} · ₹{(latest.totalAmount || 0).toLocaleString()}</div>
-                  </div>
-                  <span style={{ fontSize: '0.65rem', background: `${pc}22`, color: pc, padding: '2px 7px', borderRadius: 999, fontWeight: 600, flexShrink: 0 }}>{latest.paymentStatus || 'Pending'}</span>
-                </div>
-              );
-            })}
           </div>
 
-          {/* RIGHT — Activity / Notes */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <h3 style={{ margin: 0, fontSize: '0.88rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 6 }}><MessageCircle size={14} /> Activity Log</h3>
+          {/* RIGHT — Invoices & Activity */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <h3 style={{ margin: '0 0 0.65rem', fontSize: '0.88rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 6 }}><FileText size={14} /> Invoices ({custInvoices.length})</h3>
 
-            {/* Add note */}
-            <div style={{ background: 'var(--bg-card2)', borderRadius: '0.6rem', border: '1px solid var(--glass-border)', padding: '0.85rem' }}>
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                {NOTE_TYPES.map(t => (
-                  <button key={t} onClick={() => setNoteType(t)}
-                    style={{ fontSize: '0.7rem', padding: '3px 10px', borderRadius: 999, border: `1px solid ${noteType === t ? NOTE_COLOR[t] : 'var(--glass-border)'}`, background: noteType === t ? `${NOTE_COLOR[t]}22` : 'transparent', color: noteType === t ? NOTE_COLOR[t] : 'var(--text-dim)', cursor: 'pointer', fontWeight: noteType === t ? 700 : 400, transition: 'all 0.15s' }}>
-                    {NOTE_ICONS[t]} {t}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  ref={noteInputRef}
-                  value={noteText}
-                  onChange={e => setNoteText(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addNote(); } }}
-                  placeholder={`Add ${noteType} note...`}
-                  style={{ flex: 1, fontSize: '0.82rem' }}
-                />
-                <button className="btn btn-primary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }} onClick={addNote} disabled={!noteText.trim()}>
-                  <Plus size={13} />
-                </button>
-              </div>
-            </div>
+              {custInvoices.length === 0 && <div style={{ color: 'var(--text-dim)', fontSize: '0.82rem', padding: '0.75rem', textAlign: 'center', background: 'var(--bg-card2)', borderRadius: '0.6rem' }}>No invoices created yet</div>}
 
-            {/* Notes list */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: 420, overflowY: 'auto' }}>
-              {allNotes.length === 0 && (
-                <div style={{ color: 'var(--text-dim)', fontSize: '0.82rem', padding: '1.5rem', textAlign: 'center' }}>
-                  <MessageCircle size={24} style={{ opacity: 0.3, marginBottom: 6 }} /><br />
-                  No activity logged yet.<br />
-                  <span style={{ fontSize: '0.72rem' }}>Add a call note, WhatsApp message, or visit log above.</span>
-                </div>
-              )}
-              {allNotes.map(note => (
-                <div key={note.id} style={{ background: 'var(--bg-card2)', borderRadius: '0.55rem', border: `1px solid ${NOTE_COLOR[note.type] || '#94a3b8'}33`, padding: '0.65rem 0.85rem', display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '1rem', flexShrink: 0, lineHeight: 1.2 }}>{NOTE_ICONS[note.type] || '📝'}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                      <span style={{ fontSize: '0.65rem', color: NOTE_COLOR[note.type] || '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{note.type}</span>
-                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{new Date(note.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {custInvoices.map(inv => {
+                  const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
+                  const total = parseFloat(latest.totalAmount) || 0;
+                  const received = parseFloat(latest.receivedAmount) || 0;
+                  const pending = total - received;
+                  const ps = latest.paymentStatus || 'Pending';
+
+                  return (
+                    <div key={inv.invoiceNumber} style={{ background: 'var(--bg-card2)', borderRadius: '0.6rem', border: '1px solid var(--glass-border)', padding: '0.65rem 0.85rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--primary)', cursor: 'pointer' }} onClick={() => setViewInvoice(inv)}>
+                          {inv.invoiceNumber}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-dim)', marginTop: 2 }}>{latest.invoiceDate || '—'}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>₹{total.toLocaleString()}</div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end', marginTop: 2 }}>
+                          <span style={{ fontSize: '0.65rem', color: PAY_COLOR[ps] || '#ef4444', fontWeight: 700 }}>● {ps}</span>
+                          {pending > 0 && <span style={{ fontSize: '0.65rem', color: '#ef4444' }}>Due: ₹{pending.toLocaleString()}</span>}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.82rem', lineHeight: 1.45 }}>{note.text}</div>
-                  </div>
-                  <button className="btn-icon" style={{ color: '#ef444466', flexShrink: 0, padding: '2px' }} onClick={() => deleteNote(note.id)} title="Delete note">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Quick Actions */}
+            {customer.contact && (
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <a
+                  href={getWhatsAppLink(customer.contact)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-secondary"
+                  style={{ flex: 1, textDecoration: 'none', justifyContent: 'center', fontSize: '0.78rem', color: '#25d366', borderColor: 'rgba(37,211,102,0.3)' }}
+                >
+                  <MessageCircle size={14} /> WhatsApp Chat
+                </a>
+                {totalOutstanding > 0 && (
+                  <a
+                    href={getWhatsAppLink(customer.contact, `Dear ${customer.name}, your outstanding payment of ₹${totalOutstanding.toLocaleString()} is pending. Please clear at your earliest. Thank you!`)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-secondary"
+                    style={{ flex: 1, textDecoration: 'none', justifyContent: 'center', fontSize: '0.78rem', color: '#f59e0b', borderColor: 'rgba(245,158,11,0.3)' }}
+                  >
+                    💰 Send Payment Reminder
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* WhatsApp quick action footer */}
-        {customer.contact && (
-          <div style={{ padding: '0.75rem 1.5rem', borderTop: '1px solid var(--glass-border)', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', background: 'var(--bg-card)' }}>
-            <a
-              href={`https://wa.me/91${customer.contact.replace(/\D/g, '')}`}
-              target="_blank" rel="noreferrer"
-              className="btn btn-primary"
-              style={{ fontSize: '0.78rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              💬 WhatsApp
-            </a>
-            {totalOutstanding > 0 && (
-              <a
-                href={`https://wa.me/91${customer.contact.replace(/\D/g, '')}?text=${encodeURIComponent(`Dear ${customer.name}, your outstanding payment of ₹${totalOutstanding.toLocaleString()} is pending. Please clear at your earliest. Thank you!`)}`}
-                target="_blank" rel="noreferrer"
-                className="btn btn-secondary"
-                style={{ fontSize: '0.78rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, borderColor: '#ef4444', color: '#ef4444' }}
-              >
-                💰 Payment Reminder
-              </a>
-            )}
-          </div>
-        )}
+        {/* Invoice View Modal */}
+        {viewInvoice && <InvoiceModal invoice={invoiceHistory.find(i => i.invoiceNumber === viewInvoice.invoiceNumber) || viewInvoice} onClose={() => setViewInvoice(null)} />}
       </div>
-
-      {viewInvoice && <InvoiceModal invoice={invoiceHistory.find(i => i.invoiceNumber === viewInvoice.invoiceNumber) || viewInvoice} onClose={() => setViewInvoice(null)} />}
     </div>
   );
 }

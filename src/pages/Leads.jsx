@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, Link, X, LayoutGrid, List, Phone, MapPin, Calendar, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../context/AppUIContext';
-import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
+import { DATA_CONFIG, normalizeDisplayDate, getWhatsAppLink, detectCountry } from '../utils/dataConfig';
 import LeadModal from '../components/LeadModal';
 import LeadDetails from '../components/LeadDetails';
 import ProductPicker from '../components/ProductPicker';
@@ -372,7 +372,7 @@ export default function Leads() {
                 </div>
 
                 <button 
-                  onClick={() => window.open(`https://wa.me/91${lead.contact}`)}
+                  onClick={() => window.open(getWhatsAppLink(lead.contact))}
                   style={{
                     background: 'rgba(37, 211, 102, 0.15)',
                     border: '1px solid rgba(37, 211, 102, 0.35)',
@@ -652,7 +652,7 @@ export default function Leads() {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
-                        <button className="btn-icon" style={{ color: '#25d366' }} title="WhatsApp" onClick={() => window.open(`https://wa.me/91${lead.contact}`)}>
+                        <button className="btn-icon" style={{ color: '#25d366' }} title="WhatsApp" onClick={() => window.open(getWhatsAppLink(lead.contact))}>
                           <MessageCircle size={15} />
                         </button>
                         <button className="btn-icon" style={{ color: '#38bdf8' }} title="View Details" onClick={() => setDetailsLeadId(lead.id)}>

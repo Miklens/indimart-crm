@@ -31,6 +31,12 @@ export const DATA_CONFIG = {
   getContactedStatusLabels() {
     return ['Contacted', 'Requirement Discussed', 'Quoted', 'Quotation Requested', 'Quotation Sent', 'Negotiation', 'Won', 'Converted', 'Purchased', 'Repeat Customer', 'Material Dispatched', 'Material Reached'];
   },
+  getQuotedStatusLabels() {
+    return ['Quoted', 'Quotation Requested', 'Quotation Sent', 'Negotiation'];
+  },
+  getPipelineStatusLabels() {
+    return ['New Enquiry', 'Contacted', 'Requirement Discussed'];
+  },
   getSimpleStatusLabel(status) {
     const map = {
       'New Enquiry': 'New Enquiry',
@@ -156,13 +162,11 @@ export function flattenInvoices(invoiceHistory) {
       receivedAmount: latest.receivedAmount || 0, paymentStatus: latest.paymentStatus || 'Pending',
       status: latest.status, versions, latestVersion: inv.latestVersion || versions.length,
       createdAt: inv.createdAt, updatedAt: inv.updatedAt,
-      // Consignee fields
       consigneeName: inv.consigneeName || '',
       consigneeAddr: inv.consigneeAddr || '',
       consigneeState: inv.consigneeState || '',
       consigneeMob: inv.consigneeMob || '',
       consigneeGst: inv.consigneeGst || '',
-      // Company details
       companyName: inv.companyName || '',
       companyAddress: inv.companyAddress || '',
       companyGst: inv.companyGst || '',
@@ -175,7 +179,6 @@ export function flattenInvoices(invoiceHistory) {
       companyVat: inv.companyVat || '',
       companyCst: inv.companyCst || '',
       companyPan: inv.companyPan || '',
-      // Metadata
       deliveryNote: inv.deliveryNote || '',
       paymentTerms: inv.paymentTerms || '',
       supplierRef: inv.supplierRef || '',
@@ -219,14 +222,10 @@ export function normalizeContact(raw) {
 
 export function getLeadForInvoice(inv, leadsList) {
   if (!inv || !leadsList) return null;
-  
-  // 1. Exact leadId match (highest priority, avoids matching incorrect duplicate customer leads)
   if (inv.leadId) {
     const lead = leadsList.find(l => l.id === inv.leadId);
     if (lead) return lead;
   }
-  
-  // 2. Fallback matching by normalized contact number
   const normInvContact = normalizeContact(inv.customerContact || inv.contact);
   if (normInvContact) {
     const matchingLeads = leadsList.filter(l => normalizeContact(l.contact) === normInvContact);
@@ -234,10 +233,8 @@ export function getLeadForInvoice(inv, leadsList) {
       return matchingLeads.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
     }
   }
-  
   return null;
 }
 
-// Add these to DATA_CONFIG export
 DATA_CONFIG.normalizeContact = normalizeContact;
 DATA_CONFIG.getLeadForInvoice = getLeadForInvoice;

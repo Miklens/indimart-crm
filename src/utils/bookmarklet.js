@@ -1,7 +1,7 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with multi-selector support, adaptive scroll container detection,
- * React fiber & DOM extraction, auto-product fuzzy mapping, and live progress UI.
+ * auto-product fuzzy mapping, and live progress UI.
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -31,11 +31,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     const existingLeads = ${existingLeadsStr};
     let nextIdNum = ${calculatedNextIdNum};
     
-    // Remove existing sync panel if any
     const oldPanel = document.getElementById('indimart-sync-panel');
     if (oldPanel) oldPanel.remove();
     
-    // Create UI Panel
     const panel = document.createElement('div');
     panel.id = 'indimart-sync-panel';
     panel.style.cssText = 'position:fixed; top:24px; right:24px; width:380px; z-index:9999999; background:rgba(15,23,42,0.96); color:#f8fafc; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; border:1px solid #334155; border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05); padding:18px; box-sizing:border-box; backdrop-filter:blur(16px); user-select:none;';
@@ -104,33 +102,29 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     
     document.body.appendChild(panel);
     
-    // Draggable panel
-    (function makeDraggable() {
-      const header = document.getElementById('sync-header');
-      let isDragging = false, startX, startY, startLeft, startTop;
-      header.onmousedown = (e) => {
-        if (e.target.id === 'close-sync-panel') return;
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        const rect = panel.getBoundingClientRect();
-        startLeft = rect.left;
-        startTop = rect.top;
-        document.onmousemove = (me) => {
-          if (!isDragging) return;
-          panel.style.right = 'auto';
-          panel.style.left = (startLeft + (me.clientX - startX)) + 'px';
-          panel.style.top = (startTop + (me.clientY - startY)) + 'px';
-        };
-        document.onmouseup = () => {
-          isDragging = false;
-          document.onmousemove = null;
-          document.onmouseup = null;
-        };
+    const header = document.getElementById('sync-header');
+    let isDragging = false, startX, startY, startLeft, startTop;
+    header.onmousedown = function(e) {
+      if (e.target.id === 'close-sync-panel') return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      const rect = panel.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+      document.onmousemove = function(me) {
+        if (!isDragging) return;
+        panel.style.right = 'auto';
+        panel.style.left = (startLeft + (me.clientX - startX)) + 'px';
+        panel.style.top = (startTop + (me.clientY - startY)) + 'px';
       };
-    })();
+      document.onmouseup = function() {
+        isDragging = false;
+        document.onmousemove = null;
+        document.onmouseup = null;
+      };
+    };
 
-    // Date Presets
     const today = new Date().toISOString().split('T')[0];
     const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const past30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -140,14 +134,12 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     startInput.value = past30;
     endInput.value = today;
 
-    document.getElementById('preset-7d').onclick = () => { startInput.value = past7; endInput.value = today; };
-    document.getElementById('preset-30d').onclick = () => { startInput.value = past30; endInput.value = today; };
-    document.getElementById('preset-today').onclick = () => { startInput.value = today; endInput.value = today; };
-    document.getElementById('close-sync-panel').onclick = () => panel.remove();
+    document.getElementById('preset-7d').onclick = function() { startInput.value = past7; endInput.value = today; };
+    document.getElementById('preset-30d').onclick = function() { startInput.value = past30; endInput.value = today; };
+    document.getElementById('preset-today').onclick = function() { startInput.value = today; endInput.value = today; };
+    document.getElementById('close-sync-panel').onclick = function() { panel.remove(); };
 
-    // Helper: Find Contacts Container and Elements across all IndiaMART layouts
     function findContactCards() {
-      // 1. Specific known selectors
       const selectorGroups = [
         '.lftcntctnew',
         '.lftcntct',
@@ -165,15 +157,14 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         '[data-testid*="contact"]'
       ];
 
-      for (const sel of selectorGroups) {
-        const els = Array.from(document.querySelectorAll(sel));
+      for (let s = 0; s < selectorGroups.length; s++) {
+        const els = Array.from(document.querySelectorAll(selectorGroups[s]));
         if (els.length > 0) return els;
       }
 
-      // 2. Search within left sidebar / message center column
       const leftCol = document.querySelector('.lms_left, [class*="left"], [class*="sidebar"], [class*="contactList"], [class*="chatList"], [class*="list-container"]');
       if (leftCol) {
-        const children = Array.from(leftCol.querySelectorAll('div, li')).filter(el => {
+        const children = Array.from(leftCol.querySelectorAll('div, li')).filter(function(el) {
           if (el.children.length > 8 || el.children.length < 1) return false;
           const txt = el.innerText || '';
           const hasTimeOrDate = /\\b(\\d{1,2}:\\d{2}\\s*(am|pm)|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\b/i.test(txt);
@@ -182,8 +173,8 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         });
 
         const validCards = [];
-        children.forEach(c => {
-          if (!validCards.some(existing => existing.contains(c) || c.contains(existing))) {
+        children.forEach(function(c) {
+          if (!validCards.some(function(existing) { return existing.contains(c) || c.contains(existing); })) {
             validCards.push(c);
           }
         });
@@ -193,7 +184,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       return [];
     }
 
-    // Helper: Find Scroll Container
     function findScrollContainer(firstCard) {
       if (firstCard) {
         let p = firstCard.parentElement;
@@ -206,7 +196,8 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
       const candidates = document.querySelectorAll('.lms_left, [class*="left"], [class*="contactList"], [class*="scroll"], [id*="list"]');
-      for (const el of candidates) {
+      for (let c = 0; c < candidates.length; c++) {
+        const el = candidates[c];
         const style = window.getComputedStyle(el);
         if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
           return el;
@@ -215,7 +206,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       return document.documentElement || document.body;
     }
 
-    // Helper: Parse Date from text line
     function parseLeadDate(dateStr) {
       let leadDate = new Date();
       if (!dateStr) return leadDate;
@@ -255,7 +245,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       return leadDate;
     }
 
-    // Helper: Parse Location
     function parseLocation(lines) {
       let city = '';
       let state = '';
@@ -267,16 +256,17 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         'uttarakhand', 'west bengal', 'delhi', 'chandigarh', 'puducherry', 'jammu and kashmir', 'ladakh'
       ];
 
-      for (const line of lines) {
+      for (let lIdx = 0; lIdx < lines.length; lIdx++) {
+        const line = lines[lIdx];
         const lLower = line.toLowerCase();
         if (line.includes(',')) {
-          const parts = line.split(',').map(p => p.trim()).filter(p => {
+          const parts = line.split(',').map(function(p) { return p.trim(); }).filter(function(p) {
             const low = p.toLowerCase();
             return low !== 'india' && !/^\\d{6}$/.test(low) && !low.startsWith('india -') && !/^\\d+$/.test(low);
           });
           if (parts.length >= 2) {
             const lastPart = parts[parts.length - 1];
-            const stateFound = indianStates.find(s => lastPart.toLowerCase().includes(s));
+            const stateFound = indianStates.find(function(s) { return lastPart.toLowerCase().includes(s); });
             if (stateFound) {
               state = lastPart;
               city = parts[parts.length - 2] || '';
@@ -287,24 +277,23 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
               break;
             }
           } else if (parts.length === 1) {
-            const st = indianStates.find(s => parts[0].toLowerCase().includes(s));
+            const st = indianStates.find(function(s) { return parts[0].toLowerCase().includes(s); });
             if (st) state = parts[0];
             else city = parts[0];
             break;
           }
         } else {
-          const st = indianStates.find(s => lLower === s || lLower.includes(s));
+          const st = indianStates.find(function(s) { return lLower === s || lLower.includes(s); });
           if (st) {
             state = line;
             break;
           }
         }
       }
-      return { city, state };
+      return { city: city, state: state };
     }
 
-    // Main Scan Loop
-    document.getElementById('start-sync-btn').onclick = async () => {
+    document.getElementById('start-sync-btn').onclick = async function() {
       const btn = document.getElementById('start-sync-btn');
       btn.disabled = true;
       btn.style.opacity = '0.7';
@@ -332,7 +321,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       
       if (foundCards.length === 0) {
         statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ No contact cards detected yet. Waiting 2s for page elements to load...</span><br>';
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(function(r) { setTimeout(r, 2000); });
         foundCards = findContactCards();
       }
 
@@ -349,7 +338,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         scrollContainer.scrollTop = 0;
         scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
       }
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(function(r) { setTimeout(r, 600); });
 
       let syncedCount = 0;
       let skippedCount = 0;
@@ -369,9 +358,8 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         for (let i = 0; i < visibleCards.length; i++) {
           const card = visibleCards[i];
           const cardText = card.innerText || '';
-          const lines = cardText.split('\\n').map(l => l.trim()).filter(l => l.length > 0);
+          const lines = cardText.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
 
-          // Buyer Name
           let customerName = 'Unknown Buyer';
           const nameEl = card.querySelector('.fs14.fwb, [class*="name"], [class*="buyer"], h4, h5, strong, b');
           if (nameEl && nameEl.innerText.trim()) {
@@ -380,13 +368,11 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             customerName = lines[0];
           }
 
-          // Date extraction
           let leadDate = new Date();
-          const dateLine = lines.find(l => /\\b(\\d{1,2}:\\d{2}\\s*(am|pm)|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\\d{1,2}[\\/\\-]\\d{1,2})\\b/i.test(l)) || lines[lines.length - 1] || '';
+          const dateLine = lines.find(function(l) { return /\\b(\\d{1,2}:\\d{2}\\s*(am|pm)|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\\d{1,2}[\\/\\-]\\d{1,2})\\b/i.test(l); }) || lines[lines.length - 1] || '';
           leadDate = parseLeadDate(dateLine);
           const formattedDate = leadDate.toISOString().split('T')[0];
 
-          // Unique deduplication key
           const uniqueKey = customerName.toLowerCase() + '_' + formattedDate;
           if (processedUniqueKeys.has(uniqueKey)) {
             continue;
@@ -394,7 +380,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           processedUniqueKeys.add(uniqueKey);
           newProcessedInRound++;
 
-          // Date Boundary Checks
           if (startLimit && leadDate < startLimit) {
             reachedDateLimit = true;
             statusDiv.innerHTML += \`<span style="color:#eab308;">[STOP] Reached leads older than Start Date (\${formattedDate}). Stopping.</span><br>\`;
@@ -406,14 +391,12 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             continue;
           }
 
-          // Click card to open conversation details
           card.click();
-          await new Promise(r => setTimeout(r, 650));
+          await new Promise(function(r) { setTimeout(r, 650); });
 
-          // Phone Number Extraction
           let contact = '';
-          for (const line of lines) {
-            const digits = line.replace(/[^0-9]/g, '');
+          for (let l = 0; l < lines.length; l++) {
+            const digits = lines[l].replace(/[^0-9]/g, '');
             if (digits.length >= 10) {
               const last10 = digits.slice(-10);
               if (last10[0] >= '6' && last10[0] <= '9' && last10 !== sellerMobileDigits) {
@@ -427,8 +410,8 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             const detailArea = document.querySelector('.lms_right, [class*="right"], [class*="detail"], [class*="header"], [class*="buyerInfo"], [class*="chat"]') || document.body;
             const detailText = detailArea.innerText || '';
             const phoneMatches = detailText.match(/(?:\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/g) || [];
-            for (const m of phoneMatches) {
-              const clean = m.replace(/[^0-9]/g, '').slice(-10);
+            for (let pm = 0; pm < phoneMatches.length; pm++) {
+              const clean = phoneMatches[pm].replace(/[^0-9]/g, '').slice(-10);
               if (clean !== sellerMobileDigits) {
                 contact = clean;
                 break;
@@ -440,10 +423,10 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             contact = '0000000000';
           }
 
-          // Location
-          const { city, state } = parseLocation(lines);
+          const loc = parseLocation(lines);
+          const city = loc.city;
+          const state = loc.state;
 
-          // Product Extraction
           let product = 'IndiaMART Enquiry';
           const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
           if (rightCol) {
@@ -454,7 +437,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           }
 
           if (product === 'IndiaMART Enquiry' || !product) {
-            const candidateLines = lines.filter(line => {
+            const candidateLines = lines.filter(function(line) {
               const l = line.toLowerCase();
               const isName = l.includes(customerName.toLowerCase());
               const isLoc = l.includes(city.toLowerCase()) || l.includes(state.toLowerCase()) || l.includes('india');
@@ -467,16 +450,16 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             }
           }
 
-          // Fuzzy catalog matching
           let matched = null;
           if (Array.isArray(catalogProducts) && catalogProducts.length > 0) {
-            const clean = s => String(s || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(w => w.length > 2);
+            const clean = function(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(function(w) { return w.length > 2; }); };
             const scrapedTokens = clean(product);
             
             let bestScore = 0;
-            for (const p of catalogProducts) {
+            for (let cp = 0; cp < catalogProducts.length; cp++) {
+              const p = catalogProducts[cp];
               const catalogTokens = clean(p.name);
-              const intersection = scrapedTokens.filter(t => catalogTokens.includes(t));
+              const intersection = scrapedTokens.filter(function(t) { return catalogTokens.includes(t); });
               const unionSize = new Set([...scrapedTokens, ...catalogTokens]).size;
               const jaccard = unionSize > 0 ? (intersection.length / unionSize) : 0;
               
@@ -514,8 +497,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             syncStatus = 'New Enquiry';
           }
 
-          // Deduplicate with existing CRM leads
-          const existing = existingLeads.find(l => l.contact === contact && l.date === formattedDate);
+          const existing = existingLeads.find(function(l) { return l.contact === contact && l.date === formattedDate; });
           let docId = existing ? existing.id : 'IM' + String(nextIdNum++).padStart(3, '0');
 
           const leadPayload = { 
@@ -537,16 +519,15 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           };
 
           const firestoreFields = {};
-          Object.keys(leadPayload).forEach(key => {
+          Object.keys(leadPayload).forEach(function(key) {
             const val = leadPayload[key];
             if (typeof val === 'string') firestoreFields[key] = { stringValue: val };
             else if (typeof val === 'number') firestoreFields[key] = { doubleValue: val };
             else if (Array.isArray(val)) {
-              firestoreFields[key] = { arrayValue: { values: val.map(item => ({ mapValue: { fields: Object.keys(item).reduce((acc, itemKey) => { const v = item[itemKey]; acc[itemKey] = typeof v === 'number' ? { doubleValue: v } : { stringValue: String(v) }; return acc; }, {}) } })) } };
+              firestoreFields[key] = { arrayValue: { values: val.map(function(item) { return { mapValue: { fields: Object.keys(item).reduce(function(acc, itemKey) { const v = item[itemKey]; acc[itemKey] = typeof v === 'number' ? { doubleValue: v } : { stringValue: String(v) }; return acc; }, {}) } }; }) } };
             }
           });
 
-          // Upload to Firestore REST API
           try {
             const url = \`https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads/\${docId}?updateMask.fieldPaths=id&updateMask.fieldPaths=date&updateMask.fieldPaths=customerName&updateMask.fieldPaths=contact&updateMask.fieldPaths=product&updateMask.fieldPaths=status&updateMask.fieldPaths=remarks&updateMask.fieldPaths=state&updateMask.fieldPaths=city&updateMask.fieldPaths=source&updateMask.fieldPaths=timestamp&updateMask.fieldPaths=productList&updateMask.fieldPaths=history\`;
             const response = await fetch(url, {
@@ -586,7 +567,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           noNewCardsRounds = 0;
         }
 
-        // Auto Scroll down
         if (visibleCards.length > 0) {
           const lastCard = visibleCards[visibleCards.length - 1];
           lastCard.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -596,7 +576,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           }
         }
         
-        await new Promise(r => setTimeout(r, 1200));
+        await new Promise(function(r) { setTimeout(r, 1200); });
         scrollAttempts++;
       }
 
@@ -610,5 +590,12 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     };
   })();`;
 
-  return `javascript:${encodeURIComponent(scriptContent.replace(/\s+/g, ' '))}`;
+  // Safely clean and wrap without breaking on single-line comments
+  const cleanCode = scriptContent
+    .replace(/\/\/[^\n\r]*/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return `javascript:${encodeURIComponent(cleanCode)}`;
 }

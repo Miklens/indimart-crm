@@ -25,91 +25,83 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
   });
 
   const scriptContent = `(function() {
-    const config = ${configStr};
-    const sellerMobileDigits = String(config.sellerMobile || '').replace(/[^0-9]/g, '').slice(-10);
-    const catalogProducts = ${catalogStr};
-    const existingLeads = ${existingLeadsStr};
-    let nextIdNum = ${calculatedNextIdNum};
+    var config = ${configStr};
+    var sellerMobileDigits = String(config.sellerMobile || '').replace(/[^0-9]/g, '').slice(-10);
+    var catalogProducts = ${catalogStr};
+    var existingLeads = ${existingLeadsStr};
+    var nextIdNum = ${calculatedNextIdNum};
     
-    const oldPanel = document.getElementById('indimart-sync-panel');
+    var oldPanel = document.getElementById('indimart-sync-panel');
     if (oldPanel) oldPanel.remove();
     
-    const panel = document.createElement('div');
+    var panel = document.createElement('div');
     panel.id = 'indimart-sync-panel';
     panel.style.cssText = 'position:fixed; top:24px; right:24px; width:380px; z-index:9999999; background:rgba(15,23,42,0.96); color:#f8fafc; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; border:1px solid #334155; border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05); padding:18px; box-sizing:border-box; backdrop-filter:blur(16px); user-select:none;';
     
-    panel.innerHTML = \`
-      <div id="sync-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #334155; cursor:move;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:18px;">🇮🇳</span>
-          <h3 style="margin:0; font-size:15px; color:#10b981; font-weight:700; letter-spacing:-0.01em;">IndiaMART Sync CRM</h3>
-        </div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <span id="sync-live-badge" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 8px #10b981;"></span>
-          <button id="close-sync-panel" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:18px; padding:2px 6px; border-radius:4px; line-height:1;">✕</button>
-        </div>
-      </div>
-
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
-        <div>
-          <label style="display:block; font-size:11px; font-weight:600; color:#94a3b8; margin-bottom:4px; text-transform:uppercase;">Start Date</label>
-          <input type="date" id="sync-start-date" style="width:100%; box-sizing:border-box; padding:7px 10px; border-radius:8px; border:1px solid #475569; background:#0f172a; color:#fff; font-size:12px; outline:none;" />
-        </div>
-        <div>
-          <label style="display:block; font-size:11px; font-weight:600; color:#94a3b8; margin-bottom:4px; text-transform:uppercase;">End Date</label>
-          <input type="date" id="sync-end-date" style="width:100%; box-sizing:border-box; padding:7px 10px; border-radius:8px; border:1px solid #475569; background:#0f172a; color:#fff; font-size:12px; outline:none;" />
-        </div>
-      </div>
-
-      <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
-        <button id="preset-7d" style="flex:1; padding:4px 8px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Last 7D</button>
-        <button id="preset-30d" style="flex:1; padding:4px 8px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Last 30D</button>
-        <button id="preset-today" style="flex:1; padding:4px 8px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Today</button>
-      </div>
-
-      <div style="display:flex; gap:8px; margin-bottom:12px;">
-        <button id="start-sync-btn" style="flex:1; padding:11px; background:linear-gradient(135deg,#10b981,#059669); border:none; border-radius:8px; color:#fff; font-weight:700; cursor:pointer; font-size:13px; box-shadow:0 4px 12px rgba(16,185,129,0.3); display:flex; align-items:center; justify-content:center; gap:6px; transition:transform 0.1s;">
-          <span>⚡</span> Scan & Sync Leads
-        </button>
-      </div>
-
-      <div id="sync-stats-grid" style="display:none; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:12px; text-align:center;">
-        <div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">
-          <div style="font-size:10px; color:#94a3b8;">FOUND</div>
-          <div id="stat-found" style="font-size:14px; font-weight:700; color:#38bdf8;">0</div>
-        </div>
-        <div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">
-          <div style="font-size:10px; color:#94a3b8;">SYNCED</div>
-          <div id="stat-synced" style="font-size:14px; font-weight:700; color:#10b981;">0</div>
-        </div>
-        <div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">
-          <div style="font-size:10px; color:#94a3b8;">SKIPPED</div>
-          <div id="stat-skipped" style="font-size:14px; font-weight:700; color:#eab308;">0</div>
-        </div>
-        <div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">
-          <div style="font-size:10px; color:#94a3b8;">FAILED</div>
-          <div id="stat-failed" style="font-size:14px; font-weight:700; color:#f43f5e;">0</div>
-        </div>
-      </div>
-
-      <div id="sync-progress-bar-container" style="display:none; height:4px; background:#1e293b; border-radius:4px; overflow:hidden; margin-bottom:10px;">
-        <div id="sync-progress-bar" style="height:100%; width:0%; background:linear-gradient(90deg,#10b981,#38bdf8); transition:width 0.2s;"></div>
-      </div>
-
-      <div id="sync-status" style="font-size:11px; color:#94a3b8; line-height:1.5; max-height:180px; overflow-y:auto; border-radius:8px; background:#020617; padding:10px; display:none; border:1px solid #1e293b; font-family:Consolas, Monaco, monospace;">
-      </div>
-    \`;
+    var panelHtml = '<div id="sync-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #334155; cursor:move;">' +
+      '<div style="display:flex; align-items:center; gap:8px;">' +
+        '<span style="font-size:18px;">🇮🇳</span>' +
+        '<h3 style="margin:0; font-size:15px; color:#10b981; font-weight:700; letter-spacing:-0.01em;">IndiaMART Sync CRM</h3>' +
+      '</div>' +
+      '<div style="display:flex; align-items:center; gap:6px;">' +
+        '<span id="sync-live-badge" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 8px #10b981;"></span>' +
+        '<button id="close-sync-panel" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:18px; padding:2px 6px; border-radius:4px; line-height:1;">✕</button>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">' +
+      '<div>' +
+        '<label style="display:block; font-size:11px; font-weight:600; color:#94a3b8; margin-bottom:4px; text-transform:uppercase;">Start Date</label>' +
+        '<input type="date" id="sync-start-date" style="width:100%; box-sizing:border-box; padding:7px 10px; border-radius:8px; border:1px solid #475569; background:#0f172a; color:#fff; font-size:12px; outline:none;" />' +
+      '</div>' +
+      '<div>' +
+        '<label style="display:block; font-size:11px; font-weight:600; color:#94a3b8; margin-bottom:4px; text-transform:uppercase;">End Date</label>' +
+        '<input type="date" id="sync-end-date" style="width:100%; box-sizing:border-box; padding:7px 10px; border-radius:8px; border:1px solid #475569; background:#0f172a; color:#fff; font-size:12px; outline:none;" />' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">' +
+      '<button id="preset-7d" style="flex:1; padding:4px 8px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Last 7D</button>' +
+      '<button id="preset-30d" style="flex:1; padding:4px 8px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Last 30D</button>' +
+      '<button id="preset-today" style="flex:1; padding:4px 8px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Today</button>' +
+    '</div>' +
+    '<div style="display:flex; gap:8px; margin-bottom:12px;">' +
+      '<button id="start-sync-btn" style="flex:1; padding:11px; background:linear-gradient(135deg,#10b981,#059669); border:none; border-radius:8px; color:#fff; font-weight:700; cursor:pointer; font-size:13px; box-shadow:0 4px 12px rgba(16,185,129,0.3); display:flex; align-items:center; justify-content:center; gap:6px;">' +
+        '<span>⚡</span> Scan & Sync Leads' +
+      '</button>' +
+    '</div>' +
+    '<div id="sync-stats-grid" style="display:none; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:12px; text-align:center;">' +
+      '<div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">' +
+        '<div style="font-size:10px; color:#94a3b8;">FOUND</div>' +
+        '<div id="stat-found" style="font-size:14px; font-weight:700; color:#38bdf8;">0</div>' +
+      '</div>' +
+      '<div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">' +
+        '<div style="font-size:10px; color:#94a3b8;">SYNCED</div>' +
+        '<div id="stat-synced" style="font-size:14px; font-weight:700; color:#10b981;">0</div>' +
+      '</div>' +
+      '<div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">' +
+        '<div style="font-size:10px; color:#94a3b8;">SKIPPED</div>' +
+        '<div id="stat-skipped" style="font-size:14px; font-weight:700; color:#eab308;">0</div>' +
+      '</div>' +
+      '<div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">' +
+        '<div style="font-size:10px; color:#94a3b8;">FAILED</div>' +
+        '<div id="stat-failed" style="font-size:14px; font-weight:700; color:#f43f5e;">0</div>' +
+      '</div>' +
+    '</div>' +
+    '<div id="sync-progress-bar-container" style="display:none; height:4px; background:#1e293b; border-radius:4px; overflow:hidden; margin-bottom:10px;">' +
+      '<div id="sync-progress-bar" style="height:100%; width:0%; background:linear-gradient(90deg,#10b981,#38bdf8); transition:width 0.2s;"></div>' +
+    '</div>' +
+    '<div id="sync-status" style="font-size:11px; color:#94a3b8; line-height:1.5; max-height:180px; overflow-y:auto; border-radius:8px; background:#020617; padding:10px; display:none; border:1px solid #1e293b; font-family:Consolas, Monaco, monospace;"></div>';
     
+    panel.innerHTML = panelHtml;
     document.body.appendChild(panel);
     
-    const header = document.getElementById('sync-header');
-    let isDragging = false, startX, startY, startLeft, startTop;
+    var header = document.getElementById('sync-header');
+    var isDragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
     header.onmousedown = function(e) {
       if (e.target.id === 'close-sync-panel') return;
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
-      const rect = panel.getBoundingClientRect();
+      var rect = panel.getBoundingClientRect();
       startLeft = rect.left;
       startTop = rect.top;
       document.onmousemove = function(me) {
@@ -125,12 +117,12 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       };
     };
 
-    const today = new Date().toISOString().split('T')[0];
-    const past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const past30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    var today = new Date().toISOString().split('T')[0];
+    var past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    var past30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
-    const startInput = document.getElementById('sync-start-date');
-    const endInput = document.getElementById('sync-end-date');
+    var startInput = document.getElementById('sync-start-date');
+    var endInput = document.getElementById('sync-end-date');
     startInput.value = past30;
     endInput.value = today;
 
@@ -140,7 +132,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     document.getElementById('close-sync-panel').onclick = function() { panel.remove(); };
 
     function findContactCards() {
-      const selectorGroups = [
+      var selectorGroups = [
         '.lftcntctnew',
         '.lftcntct',
         '[class*="lftcntct"]',
@@ -157,22 +149,22 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         '[data-testid*="contact"]'
       ];
 
-      for (let s = 0; s < selectorGroups.length; s++) {
-        const els = Array.from(document.querySelectorAll(selectorGroups[s]));
+      for (var s = 0; s < selectorGroups.length; s++) {
+        var els = Array.from(document.querySelectorAll(selectorGroups[s]));
         if (els.length > 0) return els;
       }
 
-      const leftCol = document.querySelector('.lms_left, [class*="left"], [class*="sidebar"], [class*="contactList"], [class*="chatList"], [class*="list-container"]');
+      var leftCol = document.querySelector('.lms_left, [class*="left"], [class*="sidebar"], [class*="contactList"], [class*="chatList"], [class*="list-container"]');
       if (leftCol) {
-        const children = Array.from(leftCol.querySelectorAll('div, li')).filter(function(el) {
+        var children = Array.from(leftCol.querySelectorAll('div, li')).filter(function(el) {
           if (el.children.length > 8 || el.children.length < 1) return false;
-          const txt = el.innerText || '';
-          const hasTimeOrDate = /\\b(\\d{1,2}:\\d{2}\\s*(am|pm)|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\b/i.test(txt);
-          const hasStateOrCity = /(karnataka|maharashtra|andhra|tamil|delhi|gujarat|bengal|punjab|india|,)/i.test(txt);
+          var txt = el.innerText || '';
+          var hasTimeOrDate = /\\b(\\d{1,2}:\\d{2}\\s*(am|pm)|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\b/i.test(txt);
+          var hasStateOrCity = /(karnataka|maharashtra|andhra|tamil|delhi|gujarat|bengal|punjab|india|,)/i.test(txt);
           return (hasTimeOrDate || hasStateOrCity) && txt.length > 10 && txt.length < 500;
         });
 
-        const validCards = [];
+        var validCards = [];
         children.forEach(function(c) {
           if (!validCards.some(function(existing) { return existing.contains(c) || c.contains(existing); })) {
             validCards.push(c);
@@ -186,20 +178,20 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
     function findScrollContainer(firstCard) {
       if (firstCard) {
-        let p = firstCard.parentElement;
+        var p = firstCard.parentElement;
         while (p && p !== document.body) {
-          const style = window.getComputedStyle(p);
+          var style = window.getComputedStyle(p);
           if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && p.scrollHeight > p.clientHeight) {
             return p;
           }
           p = p.parentElement;
         }
       }
-      const candidates = document.querySelectorAll('.lms_left, [class*="left"], [class*="contactList"], [class*="scroll"], [id*="list"]');
-      for (let c = 0; c < candidates.length; c++) {
-        const el = candidates[c];
-        const style = window.getComputedStyle(el);
-        if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+      var candidates = document.querySelectorAll('.lms_left, [class*="left"], [class*="contactList"], [class*="scroll"], [id*="list"]');
+      for (var c = 0; c < candidates.length; c++) {
+        var el = candidates[c];
+        var s = window.getComputedStyle(el);
+        if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
           return el;
         }
       }
@@ -207,9 +199,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     }
 
     function parseLeadDate(dateStr) {
-      let leadDate = new Date();
+      var leadDate = new Date();
       if (!dateStr) return leadDate;
-      const dLower = dateStr.toLowerCase().trim();
+      var dLower = dateStr.toLowerCase().trim();
       
       if (dLower.includes('today') || dLower.includes('am') || dLower.includes('pm') || /\\b\\d{1,2}:\\d{2}\\b/.test(dLower)) {
         return new Date();
@@ -218,26 +210,26 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         return new Date(Date.now() - 24 * 60 * 60 * 1000);
       }
       
-      const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-      const monthRegex = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
-      const monthMatch = dLower.match(monthRegex);
+      var months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+      var monthRegex = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
+      var monthMatch = dLower.match(monthRegex);
       
       if (monthMatch) {
-        const mIndex = months.indexOf(monthMatch[1].toLowerCase());
-        const dayMatch = dLower.match(/\\b(\\d{1,2})\\b/);
-        const yearMatch = dLower.match(/\\b(20\\d{2})\\b/);
-        const day = dayMatch ? parseInt(dayMatch[1], 10) : 1;
-        const year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+        var mIndex = months.indexOf(monthMatch[1].toLowerCase());
+        var dayMatch = dLower.match(/\\b(\\d{1,2})\\b/);
+        var yearMatch = dLower.match(/\\b(20\\d{2})\\b/);
+        var day = dayMatch ? parseInt(dayMatch[1], 10) : 1;
+        var year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
         if (!isNaN(day) && mIndex !== -1) {
           return new Date(year, mIndex, day);
         }
       }
       
-      const numDateMatch = dLower.match(/(\\d{1,2})[\\/\\-\\.](\\d{1,2})(?:[\\/\\-\\.](\\d{2,4}))?/);
+      var numDateMatch = dLower.match(/(\\d{1,2})[\\/\\-\\.](\\d{1,2})(?:[\\/\\-\\.](\\d{2,4}))?/);
       if (numDateMatch) {
-        const d = parseInt(numDateMatch[1], 10);
-        const m = parseInt(numDateMatch[2], 10) - 1;
-        let y = numDateMatch[3] ? parseInt(numDateMatch[3], 10) : new Date().getFullYear();
+        var d = parseInt(numDateMatch[1], 10);
+        var m = parseInt(numDateMatch[2], 10) - 1;
+        var y = numDateMatch[3] ? parseInt(numDateMatch[3], 10) : new Date().getFullYear();
         if (y < 100) y += 2000;
         return new Date(y, m, d);
       }
@@ -246,9 +238,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     }
 
     function parseLocation(lines) {
-      let city = '';
-      let state = '';
-      const indianStates = [
+      var city = '';
+      var state = '';
+      var indianStates = [
         'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat',
         'haryana', 'himachal pradesh', 'jharkhand', 'karnataka', 'kerala', 'madhya pradesh',
         'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'odisha', 'punjab',
@@ -256,17 +248,17 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         'uttarakhand', 'west bengal', 'delhi', 'chandigarh', 'puducherry', 'jammu and kashmir', 'ladakh'
       ];
 
-      for (let lIdx = 0; lIdx < lines.length; lIdx++) {
-        const line = lines[lIdx];
-        const lLower = line.toLowerCase();
+      for (var lIdx = 0; lIdx < lines.length; lIdx++) {
+        var line = lines[lIdx];
+        var lLower = line.toLowerCase();
         if (line.includes(',')) {
-          const parts = line.split(',').map(function(p) { return p.trim(); }).filter(function(p) {
-            const low = p.toLowerCase();
+          var parts = line.split(',').map(function(p) { return p.trim(); }).filter(function(p) {
+            var low = p.toLowerCase();
             return low !== 'india' && !/^\\d{6}$/.test(low) && !low.startsWith('india -') && !/^\\d+$/.test(low);
           });
           if (parts.length >= 2) {
-            const lastPart = parts[parts.length - 1];
-            const stateFound = indianStates.find(function(s) { return lastPart.toLowerCase().includes(s); });
+            var lastPart = parts[parts.length - 1];
+            var stateFound = indianStates.find(function(s) { return lastPart.toLowerCase().includes(s); });
             if (stateFound) {
               state = lastPart;
               city = parts[parts.length - 2] || '';
@@ -277,14 +269,14 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
               break;
             }
           } else if (parts.length === 1) {
-            const st = indianStates.find(function(s) { return parts[0].toLowerCase().includes(s); });
+            var st = indianStates.find(function(s) { return parts[0].toLowerCase().includes(s); });
             if (st) state = parts[0];
             else city = parts[0];
             break;
           }
         } else {
-          const st = indianStates.find(function(s) { return lLower === s || lLower.includes(s); });
-          if (st) {
+          var stSingle = indianStates.find(function(s) { return lLower === s || lLower.includes(s); });
+          if (stSingle) {
             state = line;
             break;
           }
@@ -294,15 +286,15 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     }
 
     document.getElementById('start-sync-btn').onclick = async function() {
-      const btn = document.getElementById('start-sync-btn');
+      var btn = document.getElementById('start-sync-btn');
       btn.disabled = true;
       btn.style.opacity = '0.7';
       btn.innerHTML = '<span>⏳</span> Syncing Leads...';
 
-      const statusDiv = document.getElementById('sync-status');
-      const statsGrid = document.getElementById('sync-stats-grid');
-      const progBarContainer = document.getElementById('sync-progress-bar-container');
-      const progBar = document.getElementById('sync-progress-bar');
+      var statusDiv = document.getElementById('sync-status');
+      var statsGrid = document.getElementById('sync-stats-grid');
+      var progBarContainer = document.getElementById('sync-progress-bar-container');
+      var progBar = document.getElementById('sync-progress-bar');
       
       statusDiv.style.display = 'block';
       statsGrid.style.display = 'grid';
@@ -310,14 +302,14 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       
       statusDiv.innerHTML = '<span style="color:#38bdf8;">[INIT] Starting IndiaMART Sync Engine...</span><br>';
 
-      const startDateVal = document.getElementById('sync-start-date').value;
-      const endDateVal = document.getElementById('sync-end-date').value;
-      const startLimit = startDateVal ? new Date(startDateVal) : null;
+      var startDateVal = document.getElementById('sync-start-date').value;
+      var endDateVal = document.getElementById('sync-end-date').value;
+      var startLimit = startDateVal ? new Date(startDateVal) : null;
       if (startLimit) startLimit.setHours(0, 0, 0, 0);
-      const endLimit = endDateVal ? new Date(endDateVal) : null;
+      var endLimit = endDateVal ? new Date(endDateVal) : null;
       if (endLimit) endLimit.setHours(23, 59, 59, 999);
 
-      let foundCards = findContactCards();
+      var foundCards = findContactCards();
       
       if (foundCards.length === 0) {
         statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ No contact cards detected yet. Waiting 2s for page elements to load...</span><br>';
@@ -333,47 +325,47 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         return;
       }
 
-      const scrollContainer = findScrollContainer(foundCards[0]);
+      var scrollContainer = findScrollContainer(foundCards[0]);
       if (scrollContainer && scrollContainer.scrollTop !== undefined) {
         scrollContainer.scrollTop = 0;
         scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
       }
       await new Promise(function(r) { setTimeout(r, 600); });
 
-      let syncedCount = 0;
-      let skippedCount = 0;
-      let errorCount = 0;
-      const processedUniqueKeys = new Set();
+      var syncedCount = 0;
+      var skippedCount = 0;
+      var errorCount = 0;
+      var processedUniqueKeys = new Set();
       
-      let scrollAttempts = 0;
-      let noNewCardsRounds = 0;
-      let reachedDateLimit = false;
+      var scrollAttempts = 0;
+      var noNewCardsRounds = 0;
+      var reachedDateLimit = false;
 
       while (scrollAttempts < 120 && !reachedDateLimit) {
-        const visibleCards = findContactCards();
+        var visibleCards = findContactCards();
         document.getElementById('stat-found').innerText = String(visibleCards.length);
         
-        let newProcessedInRound = 0;
+        var newProcessedInRound = 0;
 
-        for (let i = 0; i < visibleCards.length; i++) {
-          const card = visibleCards[i];
-          const cardText = card.innerText || '';
-          const lines = cardText.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
+        for (var i = 0; i < visibleCards.length; i++) {
+          var card = visibleCards[i];
+          var cardText = card.innerText || '';
+          var lines = cardText.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
 
-          let customerName = 'Unknown Buyer';
-          const nameEl = card.querySelector('.fs14.fwb, [class*="name"], [class*="buyer"], h4, h5, strong, b');
+          var customerName = 'Unknown Buyer';
+          var nameEl = card.querySelector('.fs14.fwb, [class*="name"], [class*="buyer"], h4, h5, strong, b');
           if (nameEl && nameEl.innerText.trim()) {
             customerName = nameEl.innerText.trim();
           } else if (lines.length > 0) {
             customerName = lines[0];
           }
 
-          let leadDate = new Date();
-          const dateLine = lines.find(function(l) { return /\\b(\\d{1,2}:\\d{2}\\s*(am|pm)|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\\d{1,2}[\\/\\-]\\d{1,2})\\b/i.test(l); }) || lines[lines.length - 1] || '';
+          var leadDate = new Date();
+          var dateLine = lines.find(function(l) { return /\\b(\\d{1,2}:\\d{2}\\s*(am|pm)|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\\d{1,2}[\\/\\-]\\d{1,2})\\b/i.test(l); }) || lines[lines.length - 1] || '';
           leadDate = parseLeadDate(dateLine);
-          const formattedDate = leadDate.toISOString().split('T')[0];
+          var formattedDate = leadDate.toISOString().split('T')[0];
 
-          const uniqueKey = customerName.toLowerCase() + '_' + formattedDate;
+          var uniqueKey = customerName.toLowerCase() + '_' + formattedDate;
           if (processedUniqueKeys.has(uniqueKey)) {
             continue;
           }
@@ -382,7 +374,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
           if (startLimit && leadDate < startLimit) {
             reachedDateLimit = true;
-            statusDiv.innerHTML += \`<span style="color:#eab308;">[STOP] Reached leads older than Start Date (\${formattedDate}). Stopping.</span><br>\`;
+            statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached leads older than Start Date (' + formattedDate + '). Stopping.</span><br>';
             break;
           }
           if (endLimit && leadDate > endLimit) {
@@ -394,11 +386,11 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           card.click();
           await new Promise(function(r) { setTimeout(r, 650); });
 
-          let contact = '';
-          for (let l = 0; l < lines.length; l++) {
-            const digits = lines[l].replace(/[^0-9]/g, '');
+          var contact = '';
+          for (var l = 0; l < lines.length; l++) {
+            var digits = lines[l].replace(/[^0-9]/g, '');
             if (digits.length >= 10) {
-              const last10 = digits.slice(-10);
+              var last10 = digits.slice(-10);
               if (last10[0] >= '6' && last10[0] <= '9' && last10 !== sellerMobileDigits) {
                 contact = last10;
                 break;
@@ -407,13 +399,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           }
 
           if (!contact) {
-            const detailArea = document.querySelector('.lms_right, [class*="right"], [class*="detail"], [class*="header"], [class*="buyerInfo"], [class*="chat"]') || document.body;
-            const detailText = detailArea.innerText || '';
-            const phoneMatches = detailText.match(/(?:\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/g) || [];
-            for (let pm = 0; pm < phoneMatches.length; pm++) {
-              const clean = phoneMatches[pm].replace(/[^0-9]/g, '').slice(-10);
-              if (clean !== sellerMobileDigits) {
-                contact = clean;
+            var detailArea = document.querySelector('.lms_right, [class*="right"], [class*="detail"], [class*="header"], [class*="buyerInfo"], [class*="chat"]') || document.body;
+            var detailText = detailArea.innerText || '';
+            var phoneMatches = detailText.match(/(?:\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/g) || [];
+            for (var pm = 0; pm < phoneMatches.length; pm++) {
+              var cleanP = phoneMatches[pm].replace(/[^0-9]/g, '').slice(-10);
+              if (cleanP !== sellerMobileDigits) {
+                contact = cleanP;
                 break;
               }
             }
@@ -423,66 +415,66 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             contact = '0000000000';
           }
 
-          const loc = parseLocation(lines);
-          const city = loc.city;
-          const state = loc.state;
+          var loc = parseLocation(lines);
+          var city = loc.city;
+          var state = loc.state;
 
-          let product = 'IndiaMART Enquiry';
-          const rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
+          var product = 'IndiaMART Enquiry';
+          var rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
           if (rightCol) {
-            const prodLink = rightCol.querySelector('a[href*="proddetail"], a[href*="product"], .m-pname, [class*="pname"], [class*="prod-name"], [class*="productName"]');
+            var prodLink = rightCol.querySelector('a[href*="proddetail"], a[href*="product"], .m-pname, [class*="pname"], [class*="prod-name"], [class*="productName"]');
             if (prodLink && prodLink.innerText.trim()) {
               product = prodLink.innerText.trim();
             }
           }
 
           if (product === 'IndiaMART Enquiry' || !product) {
-            const candidateLines = lines.filter(function(line) {
-              const l = line.toLowerCase();
-              const isName = l.includes(customerName.toLowerCase());
-              const isLoc = l.includes(city.toLowerCase()) || l.includes(state.toLowerCase()) || l.includes('india');
-              const isTime = /\\b(\\d{1,2}:\\d{2}|am|pm|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\b/i.test(l);
-              const isGeneric = /^(hi|hello|dear|good|thank|enquir|interest|viewed|message|reply|contact|requirements|looking|additional|call|missed|duration|gst|outgoing|incoming)\\b/i.test(l);
-              return !isName && !isLoc && !isTime && !isGeneric && l.length > 2;
+            var candidateLines = lines.filter(function(line) {
+              var lStr = line.toLowerCase();
+              var isName = lStr.includes(customerName.toLowerCase());
+              var isLoc = lStr.includes(city.toLowerCase()) || lStr.includes(state.toLowerCase()) || lStr.includes('india');
+              var isTime = /\\b(\\d{1,2}:\\d{2}|am|pm|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\b/i.test(lStr);
+              var isGeneric = /^(hi|hello|dear|good|thank|enquir|interest|viewed|message|reply|contact|requirements|looking|additional|call|missed|duration|gst|outgoing|incoming)\\b/i.test(lStr);
+              return !isName && !isLoc && !isTime && !isGeneric && lStr.length > 2;
             });
             if (candidateLines.length > 0) {
               product = candidateLines[0];
             }
           }
 
-          let matched = null;
+          var matched = null;
           if (Array.isArray(catalogProducts) && catalogProducts.length > 0) {
-            const clean = function(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(function(w) { return w.length > 2; }); };
-            const scrapedTokens = clean(product);
+            var cleanFn = function(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(function(w) { return w.length > 2; }); };
+            var scrapedTokens = cleanFn(product);
             
-            let bestScore = 0;
-            for (let cp = 0; cp < catalogProducts.length; cp++) {
-              const p = catalogProducts[cp];
-              const catalogTokens = clean(p.name);
-              const intersection = scrapedTokens.filter(function(t) { return catalogTokens.includes(t); });
-              const unionSize = new Set([...scrapedTokens, ...catalogTokens]).size;
-              const jaccard = unionSize > 0 ? (intersection.length / unionSize) : 0;
+            var bestScore = 0;
+            for (var cp = 0; cp < catalogProducts.length; cp++) {
+              var pItem = catalogProducts[cp];
+              var catalogTokens = cleanFn(pItem.name);
+              var intersection = scrapedTokens.filter(function(t) { return catalogTokens.includes(t); });
+              var unionSet = new Set(scrapedTokens.concat(catalogTokens));
+              var jaccard = unionSet.size > 0 ? (intersection.length / unionSet.size) : 0;
               
-              const cleanScraped = String(product || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              const cleanCatalog = String(p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              let contain = 0;
+              var cleanScraped = String(product || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              var cleanCatalog = String(pItem.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              var contain = 0;
               if (cleanScraped && cleanCatalog && (cleanScraped.includes(cleanCatalog) || cleanCatalog.includes(cleanScraped))) {
                 contain = 0.6;
               }
               
-              const finalScore = Math.max(jaccard, contain);
+              var finalScore = Math.max(jaccard, contain);
               if (finalScore >= 0.4 && finalScore > bestScore) {
                 bestScore = finalScore;
-                matched = p;
+                matched = pItem;
               }
             }
           }
 
-          let displayProduct = product;
-          let productPrice = 0;
-          let productGst = '5';
-          let productHsn = '';
-          let syncStatus = 'New Enquiry';
+          var displayProduct = product;
+          var productPrice = 0;
+          var productGst = '5';
+          var productHsn = '';
+          var syncStatus = 'New Enquiry';
           
           if (matched) {
             displayProduct = matched.name;
@@ -497,10 +489,10 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             syncStatus = 'New Enquiry';
           }
 
-          const existing = existingLeads.find(function(l) { return l.contact === contact && l.date === formattedDate; });
-          let docId = existing ? existing.id : 'IM' + String(nextIdNum++).padStart(3, '0');
+          var existing = existingLeads.find(function(l) { return l.contact === contact && l.date === formattedDate; });
+          var docId = existing ? existing.id : 'IM' + String(nextIdNum++).padStart(3, '0');
 
-          const leadPayload = { 
+          var leadPayload = { 
             id: docId, 
             date: formattedDate, 
             customerName: customerName, 
@@ -518,37 +510,55 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             history: [{ status: syncStatus, timestamp: Date.now() }] 
           };
 
-          const firestoreFields = {};
-          Object.keys(leadPayload).forEach(function(key) {
-            const val = leadPayload[key];
-            if (typeof val === 'string') firestoreFields[key] = { stringValue: val };
-            else if (typeof val === 'number') firestoreFields[key] = { doubleValue: val };
-            else if (Array.isArray(val)) {
-              firestoreFields[key] = { arrayValue: { values: val.map(function(item) { return { mapValue: { fields: Object.keys(item).reduce(function(acc, itemKey) { const v = item[itemKey]; acc[itemKey] = typeof v === 'number' ? { doubleValue: v } : { stringValue: String(v) }; return acc; }, {}) } }; }) } };
+          var firestoreFields = {};
+          var keys = Object.keys(leadPayload);
+          for (var kIdx = 0; kIdx < keys.length; kIdx++) {
+            var k = keys[kIdx];
+            var val = leadPayload[k];
+            if (typeof val === 'string') {
+              firestoreFields[k] = { stringValue: val };
+            } else if (typeof val === 'number') {
+              firestoreFields[k] = { doubleValue: val };
+            } else if (Array.isArray(val)) {
+              firestoreFields[k] = {
+                arrayValue: {
+                  values: val.map(function(item) {
+                    var itemFields = {};
+                    var itemKeys = Object.keys(item);
+                    for (var ik = 0; ik < itemKeys.length; ik++) {
+                      var ikKey = itemKeys[ik];
+                      var v = item[ikKey];
+                      itemFields[ikKey] = typeof v === 'number' ? { doubleValue: v } : { stringValue: String(v) };
+                    }
+                    return { mapValue: { fields: itemFields } };
+                  })
+                }
+              };
             }
-          });
+          }
 
           try {
-            const url = \`https://firestore.googleapis.com/v1/projects/\${config.projectId}/databases/(default)/documents/leads/\${docId}?updateMask.fieldPaths=id&updateMask.fieldPaths=date&updateMask.fieldPaths=customerName&updateMask.fieldPaths=contact&updateMask.fieldPaths=product&updateMask.fieldPaths=status&updateMask.fieldPaths=remarks&updateMask.fieldPaths=state&updateMask.fieldPaths=city&updateMask.fieldPaths=source&updateMask.fieldPaths=timestamp&updateMask.fieldPaths=productList&updateMask.fieldPaths=history\`;
-            const response = await fetch(url, {
+            var patchUrl = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(config.projectId) + '/databases/(default)/documents/leads/' + encodeURIComponent(docId) + '?updateMask.fieldPaths=id&updateMask.fieldPaths=date&updateMask.fieldPaths=customerName&updateMask.fieldPaths=contact&updateMask.fieldPaths=product&updateMask.fieldPaths=status&updateMask.fieldPaths=remarks&updateMask.fieldPaths=state&updateMask.fieldPaths=city&updateMask.fieldPaths=source&updateMask.fieldPaths=timestamp&updateMask.fieldPaths=productList&updateMask.fieldPaths=history';
+            var patchDocName = 'projects/' + config.projectId + '/databases/(default)/documents/leads/' + docId;
+            var response = await fetch(patchUrl, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: \`projects/\${config.projectId}/databases/(default)/documents/leads/\${docId}\`, fields: firestoreFields })
+              body: JSON.stringify({ name: patchDocName, fields: firestoreFields })
             });
 
             if (response.ok) {
               syncedCount++;
               document.getElementById('stat-synced').innerText = String(syncedCount);
-              statusDiv.innerHTML += \`<span style="color:#10b981;">[SYNCED] \${customerName} (\${contact})</span><br>\`;
+              statusDiv.innerHTML += '<span style="color:#10b981;">[SYNCED] ' + customerName + ' (' + contact + ')</span><br>';
             } else {
               errorCount++;
               document.getElementById('stat-failed').innerText = String(errorCount);
-              statusDiv.innerHTML += \`<span style="color:#f43f5e;">[FAIL] Upload rejected for \${customerName}</span><br>\`;
+              statusDiv.innerHTML += '<span style="color:#f43f5e;">[FAIL] Upload rejected for ' + customerName + '</span><br>';
             }
           } catch (err) {
             errorCount++;
             document.getElementById('stat-failed').innerText = String(errorCount);
-            statusDiv.innerHTML += \`<span style="color:#f43f5e;">[ERR] Network error: \${err.message || 'Unknown'}</span><br>\`;
+            statusDiv.innerHTML += '<span style="color:#f43f5e;">[ERR] Network error: ' + (err.message || 'Unknown') + '</span><br>';
           }
 
           statusDiv.scrollTop = statusDiv.scrollHeight;
@@ -568,7 +578,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
 
         if (visibleCards.length > 0) {
-          const lastCard = visibleCards[visibleCards.length - 1];
+          var lastCard = visibleCards[visibleCards.length - 1];
           lastCard.scrollIntoView({ block: 'end', behavior: 'smooth' });
           if (scrollContainer && scrollContainer.scrollHeight) {
             scrollContainer.scrollTop = scrollContainer.scrollHeight;
@@ -581,7 +591,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       }
 
       progBar.style.width = '100%';
-      statusDiv.innerHTML += \`<br><strong style="color:#10b981; font-size:12px;">🎉 Sync Completed!</strong><br><span style="color:#cbd5e1;">Synced: \${syncedCount} | Skipped: \${skippedCount} | Failed: \${errorCount}</span>\`;
+      statusDiv.innerHTML += '<br><strong style="color:#10b981; font-size:12px;">🎉 Sync Completed!</strong><br><span style="color:#cbd5e1;">Synced: ' + syncedCount + ' | Skipped: ' + skippedCount + ' | Failed: ' + errorCount + '</span>';
       statusDiv.scrollTop = statusDiv.scrollHeight;
 
       btn.disabled = false;
@@ -590,12 +600,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     };
   })();`;
 
-  // Safely clean and wrap without breaking on single-line comments
-  const cleanCode = scriptContent
-    .replace(/\/\/[^\n\r]*/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
+  const cleanCode = scriptContent.replace(/\s+/g, ' ').trim();
   return `javascript:${encodeURIComponent(cleanCode)}`;
 }

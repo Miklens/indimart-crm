@@ -1,11 +1,11 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - Guaranteed scroll-to-top on scan start (captures newest leads from today downwards)
- * - Timezone-safe local date formatting and parsing
- * - Resilient consecutive older date threshold (20 consecutive items before stopping)
+ * - Precise card date extractor (accurately parses "20 Jul", "24 Aug", "6:05 PM", "Yesterday", etc.)
+ * - Strict sidebar boundary (rect.left < 80px, rect.right <= 400px) preventing chat date headers from being treated as cards
+ * - Proper date-range stopping (stops when encountering leads older than Start Date)
+ * - Guaranteed scroll-to-top on scan start
  * - Multi-stage phone extraction (conversation header badge, tel: links, call logs, chat body)
- * - "All Leads", "90D", "30D", "7D", "Today" quick presets
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -136,16 +136,16 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     var now = new Date();
     var todayStr = formatLocalDate(now);
     var past7Str = formatLocalDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
-    var past35Str = formatLocalDate(new Date(now.getTime() - 35 * 24 * 60 * 60 * 1000));
+    var past30Str = formatLocalDate(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
     
     var startInput = document.getElementById('sync-start-date');
     var endInput = document.getElementById('sync-end-date');
-    startInput.value = past35Str;
+    startInput.value = past30Str;
     endInput.value = todayStr;
 
     document.getElementById('preset-today').onclick = function() { startInput.value = todayStr; endInput.value = todayStr; };
     document.getElementById('preset-7d').onclick = function() { startInput.value = past7Str; endInput.value = todayStr; };
-    document.getElementById('preset-30d').onclick = function() { startInput.value = past35Str; endInput.value = todayStr; };
+    document.getElementById('preset-30d').onclick = function() { startInput.value = past30Str; endInput.value = todayStr; };
     document.getElementById('preset-all').onclick = function() { startInput.value = ''; endInput.value = todayStr; };
     document.getElementById('close-sync-panel').onclick = function() { panel.remove(); };
 
@@ -172,17 +172,18 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         if (els.length > 0) { return els; }
       }
 
-      var maxLeftX = Math.min(500, window.innerWidth * 0.45);
+      /* Strict left sidebar search (rect.left < 80px, rect.right <= 380px) */
       var allDivsAndLis = Array.from(document.querySelectorAll('div, li'));
       var timeRegex = /\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))\\b/i;
       
       var matchedCards = [];
       for (var i = 0; i < allDivsAndLis.length; i++) {
         var el = allDivsAndLis[i];
+        if (el.id && el.id.includes('indimart-sync')) continue;
         var rect = el.getBoundingClientRect();
-        if (rect.left < maxLeftX && rect.width >= 160 && rect.height >= 45 && rect.height <= 260 && rect.top >= 60) {
+        if (rect.left <= 80 && rect.right <= 400 && rect.width >= 160 && rect.height >= 45 && rect.height <= 260 && rect.top >= 60) {
           var txt = el.innerText || '';
-          if (timeRegex.test(txt) && txt.length >= 10 && txt.length <= 600) {
+          if (timeRegex.test(txt) && txt.length >= 10 && txt.length <= 600 && !txt.startsWith('July ') && !txt.startsWith('August ')) {
             matchedCards.push(el);
           }
         }
@@ -208,8 +209,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       }
 
       var leftElements = Array.from(document.querySelectorAll('*')).filter(function(node) {
+        if (node.id && node.id.includes('indimart-sync')) return false;
         var r = node.getBoundingClientRect();
-        return r.left < 50 && r.width >= 200 && r.width <= 480 && r.height > 200;
+        return r.left < 50 && r.width >= 200 && r.width <= 380 && r.height > 200;
       });
       for (var le = 0; le < leftElements.length; le++) {
         var container = leftElements[le];
@@ -229,7 +231,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       var allLeft = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
         var r = el.getBoundingClientRect();
-        return r.left < 500 && r.scrollHeight > r.clientHeight && r.clientHeight > 100;
+        return r.left < 380 && r.scrollHeight > r.clientHeight && r.clientHeight > 100;
       });
       for (var i = 0; i < allLeft.length; i++) {
         allLeft[i].scrollTop = 0;
@@ -250,8 +252,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
       var allLeft = Array.from(document.querySelectorAll('div, section, aside, nav, ul')).filter(function(el) {
+        if (el.id && el.id.includes('indimart-sync')) return false;
         var r = el.getBoundingClientRect();
-        return r.left < 400 && r.width > 150;
+        return r.left < 380 && r.width > 150;
       });
       for (var c = 0; c < allLeft.length; c++) {
         var el = allLeft[c];
@@ -263,44 +266,59 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       return document.documentElement || document.body;
     }
 
-    function parseLeadDate(dateStr) {
+    function extractCardDate(cardText) {
       var n = new Date();
-      if (!dateStr) { return n; }
-      var dLower = String(dateStr).toLowerCase().trim();
-      
-      if (dLower.includes('today') || /\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?)\\b/i.test(dLower)) {
-        return n;
-      }
-      if (dLower.includes('yesterday')) {
-        return new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1, 12, 0, 0);
-      }
-      
+      if (!cardText) return n;
+
       var months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-      var monthRegex = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
-      var monthMatch = dLower.match(monthRegex);
-      
-      if (monthMatch) {
-        var mIndex = months.indexOf(monthMatch[1].toLowerCase());
-        var dayMatch = dLower.match(/\\b(\\d{1,2})\\b/);
-        var yearMatch = dLower.match(/\\b(20\\d{2})\\b/);
-        var day = dayMatch ? parseInt(dayMatch[1], 10) : 1;
-        var year = yearMatch ? parseInt(yearMatch[1], 10) : n.getFullYear();
+
+      /* 1. Day Month Year: "20 Jul 2026" */
+      var dmyRegex = /\\b(\\d{1,2})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+(\\d{4})\\b/i;
+      var dmyMatch = cardText.match(dmyRegex);
+      if (dmyMatch) {
+        var day = parseInt(dmyMatch[1], 10);
+        var mIndex = months.indexOf(dmyMatch[2].toLowerCase().slice(0, 3));
+        var year = parseInt(dmyMatch[3], 10);
         if (!isNaN(day) && mIndex !== -1) {
           return new Date(year, mIndex, day, 12, 0, 0);
         }
       }
-      
-      var ymdMatch = dLower.match(/(\\d{4})[-\\/](\\d{1,2})[-\\/](\\d{1,2})/);
-      if (ymdMatch) {
-        return new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10), 12, 0, 0);
+
+      /* 2. Day Month: "20 Jul" or "24 Aug" */
+      var dmRegex = /\\b(\\d{1,2})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\b/i;
+      var dmMatch = cardText.match(dmRegex);
+      if (dmMatch) {
+        var day2 = parseInt(dmMatch[1], 10);
+        var mIndex2 = months.indexOf(dmMatch[2].toLowerCase().slice(0, 3));
+        var year2 = n.getFullYear();
+        if (mIndex2 > n.getMonth()) {
+          year2 -= 1;
+        }
+        if (!isNaN(day2) && mIndex2 !== -1) {
+          return new Date(year2, mIndex2, day2, 12, 0, 0);
+        }
       }
-      
-      var dmyMatch = dLower.match(/(\\d{1,2})[-\\/](\\d{1,2})[-\\/](\\d{4})/);
-      if (dmyMatch) {
-        return new Date(parseInt(dmyMatch[3], 10), parseInt(dmyMatch[2], 10) - 1, parseInt(dmyMatch[1], 10), 12, 0, 0);
+
+      /* 3. Yesterday */
+      if (/\\byesterday\\b/i.test(cardText)) {
+        return new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1, 12, 0, 0);
       }
-      
+
+      /* 4. Today / Time: "6:05 PM" or "11:08 AM" or "today" */
+      if (/\\b(?:today|\\d{1,2}:\\d{2}\\s*(?:am|pm)?)\\b/i.test(cardText)) {
+        return n;
+      }
+
       return n;
+    }
+
+    function parseInputDate(str) {
+      if (!str) return null;
+      var parts = str.split('-');
+      if (parts.length === 3) {
+        return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12, 0, 0);
+      }
+      return new Date(str);
     }
 
     function parseLocation(lines) {
@@ -425,12 +443,11 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
       var startDateVal = document.getElementById('sync-start-date').value;
       var endDateVal = document.getElementById('sync-end-date').value;
-      var startLimit = startDateVal ? parseLeadDate(startDateVal) : null;
+      var startLimit = startDateVal ? parseInputDate(startDateVal) : null;
       if (startLimit) { startLimit.setHours(0, 0, 0, 0); }
-      var endLimit = endDateVal ? parseLeadDate(endDateVal) : null;
+      var endLimit = endDateVal ? parseInputDate(endDateVal) : null;
       if (endLimit) { endLimit.setHours(23, 59, 59, 999); }
 
-      /* Always scroll to the top first so we start from the most recent leads */
       statusDiv.innerHTML += '<span style="color:#94a3b8;">[SCROLL] Resetting to top of message list...</span><br>';
       scrollAllLeftToTop();
       await new Promise(function(r) { setTimeout(r, 800); });
@@ -485,22 +502,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             }
           }
 
-          /* 2. Date extraction */
-          var dateLine = '';
-          var dateEl = card.querySelector('[class*="date"], [class*="time"], [class*="fs11"], [class*="fs12"], [class*="stamp"], .fr');
-          if (dateEl && dateEl.innerText.trim()) {
-            dateLine = dateEl.innerText.trim();
-          }
-          if (!dateLine) {
-            for (var li = 0; li < lines.length; li++) {
-              if (/\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\\d{1,2}[-\\/]\\d{1,2})\\b/i.test(lines[li])) {
-                dateLine = lines[li];
-                break;
-              }
-            }
+          /* Ignore chat date bubble headers */
+          if (/^(january|february|march|april|may|june|july|august|september|october|november|december)\\s+\\d{1,2}/i.test(customerName)) {
+            continue;
           }
 
-          var leadDate = parseLeadDate(dateLine);
+          /* 2. Accurate Card Date Extraction */
+          var leadDate = extractCardDate(cardText);
           var formattedDate = formatLocalDate(leadDate);
 
           var uniqueKey = customerName.toLowerCase() + '_' + formattedDate;
@@ -512,14 +520,14 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
           document.getElementById('stat-found').innerText = String(processedUniqueKeys.size);
 
-          /* Check date bounds with consecutive tolerance */
+          /* Check date bounds */
           if (startLimit && leadDate < startLimit) {
             consecutiveOlderCount++;
             skippedCount++;
             document.getElementById('stat-skipped').innerText = String(skippedCount);
-            if (consecutiveOlderCount >= 20) {
+            if (consecutiveOlderCount >= 8) {
               reachedDateLimit = true;
-              statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached 20 consecutive leads older than Start Date (' + formattedDate + '). Completed scan.</span><br>';
+              statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached Start Date limit (' + formattedDate + ' is older than ' + startDateVal + '). Completed.</span><br>';
               break;
             }
             continue;

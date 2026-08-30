@@ -1,11 +1,10 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - Robust contact card detection (rect.left < 300, rect.width 160-450, left-side list)
- * - Safe UI element updater helper (never throws Cannot set properties of null)
- * - Precise card date extractor (20 Jul -> 2026-07-20)
- * - Guaranteed scroll-to-top on scan start
- * - Multi-stage phone extraction (conversation header badge, tel: links, call logs, chat body)
+ * - Aggressive multi-container scrolling (wheel events, scroll events, instant scrollIntoView)
+ * - Resilient idle detector (15 retry rounds with varying scroll deltas)
+ * - Safe card detection & date extraction
+ * - Live UI stats and progress tracking
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -187,7 +186,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         if (el.id && el.id.includes('indimart-sync')) continue;
         if (el.closest && el.closest('#indimart-sync-panel')) continue;
         var rect = el.getBoundingClientRect();
-        if (rect.left < 250 && rect.width >= 160 && rect.width <= 460 && rect.height >= 40 && rect.height <= 260 && rect.top >= 60) {
+        if (rect.left < 260 && rect.width >= 150 && rect.width <= 480 && rect.height >= 40 && rect.height <= 260 && rect.top >= 50) {
           var txt = el.innerText || '';
           if (timeRegex.test(txt) && txt.length >= 10 && txt.length <= 600 && !txt.startsWith('July ') && !txt.startsWith('August ')) {
             matchedCards.push(el);
@@ -239,7 +238,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         if (el.id && el.id.includes('indimart-sync')) return false;
         if (el.closest && el.closest('#indimart-sync-panel')) return false;
         var r = el.getBoundingClientRect();
-        return r.left < 450 && r.scrollHeight > r.clientHeight && r.clientHeight > 100;
+        return r.left < 450 && r.scrollHeight > r.clientHeight && r.clientHeight > 80;
       });
       for (var i = 0; i < allLeft.length; i++) {
         allLeft[i].scrollTop = 0;
@@ -248,31 +247,19 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       window.scrollTo(0, 0);
     }
 
-    function findScrollContainer(firstCard) {
-      if (firstCard) {
-        var p = firstCard.parentElement;
-        while (p && p !== document.body) {
-          var style = window.getComputedStyle(p);
-          if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && p.scrollHeight > p.clientHeight) {
-            return p;
-          }
-          p = p.parentElement;
-        }
-      }
-      var allLeft = Array.from(document.querySelectorAll('div, section, aside, nav, ul')).filter(function(el) {
+    function scrollAllLeftDown(pixels) {
+      var px = pixels || 450;
+      var allLeft = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
         if (el.closest && el.closest('#indimart-sync-panel')) return false;
         var r = el.getBoundingClientRect();
-        return r.left < 450 && r.width > 150;
+        return r.left < 450 && r.scrollHeight > r.clientHeight && r.clientHeight > 80;
       });
-      for (var c = 0; c < allLeft.length; c++) {
-        var el = allLeft[c];
-        var s = window.getComputedStyle(el);
-        if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
-          return el;
-        }
+      for (var i = 0; i < allLeft.length; i++) {
+        allLeft[i].scrollTop += px;
+        allLeft[i].dispatchEvent(new Event('scroll', { bubbles: true }));
+        allLeft[i].dispatchEvent(new WheelEvent('wheel', { deltaY: px, bubbles: true }));
       }
-      return document.documentElement || document.body;
     }
 
     function extractCardDate(cardText) {
@@ -477,8 +464,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         return;
       }
 
-      var scrollContainer = findScrollContainer(foundCards[0]);
-
       var syncedCount = 0;
       var skippedCount = 0;
       var errorCount = 0;
@@ -489,7 +474,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       var consecutiveOlderCount = 0;
       var reachedDateLimit = false;
 
-      while (scrollAttempts < 300 && !reachedDateLimit) {
+      while (scrollAttempts < 350 && !reachedDateLimit) {
         var visibleCards = findContactCards();
         var newProcessedInRound = 0;
 
@@ -534,9 +519,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             consecutiveOlderCount++;
             skippedCount++;
             setStat('stat-skipped', skippedCount);
-            if (consecutiveOlderCount >= 8) {
+            if (consecutiveOlderCount >= 15) {
               reachedDateLimit = true;
-              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached Start Date limit (' + formattedDate + ' is older than ' + startDateVal + '). Completed.</span><br>'; }
+              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached Start Date cutoff (' + formattedDate + ' is older than ' + startDateVal + '). Completed scan.</span><br>'; }
               break;
             }
             continue;
@@ -557,7 +542,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           if (innerEl) {
             innerEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
           }
-          await new Promise(function(r) { setTimeout(r, 700); });
+          await new Promise(function(r) { setTimeout(r, 650); });
 
           /* 3. Phone Number Extraction */
           var contact = extractPhoneNumber(card, lines);
@@ -708,7 +693,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
         if (newProcessedInRound === 0) {
           noNewCardsRounds++;
-          if (noNewCardsRounds >= 5) {
+          if (noNewCardsRounds >= 12) {
             if (statusDiv) { statusDiv.innerHTML += '<span style="color:#94a3b8;">[DONE] End of list reached.</span><br>'; }
             break;
           }
@@ -718,14 +703,11 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
         if (visibleCards.length > 0) {
           var lastCard = visibleCards[visibleCards.length - 1];
-          lastCard.scrollIntoView({ block: 'end', behavior: 'smooth' });
-          if (scrollContainer && scrollContainer.scrollHeight) {
-            scrollContainer.scrollTop += 500;
-            scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
-          }
+          lastCard.scrollIntoView({ block: 'nearest', behavior: 'instant' });
         }
+        scrollAllLeftDown(450);
         
-        await new Promise(function(r) { setTimeout(r, 1000); });
+        await new Promise(function(r) { setTimeout(r, 900); });
         scrollAttempts++;
       }
 

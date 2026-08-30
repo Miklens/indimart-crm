@@ -138,7 +138,7 @@ export default function InvoiceModal(props) {
     return () => { cancelled = true; };
   }, [invNo, getNextInvoiceNumber]);
 
-  const [isDirty, setIsDirty] = useState(!existingInvoice || isDuplicate);
+  const [isDirty, setIsDirty] = useState(!inv || isDuplicate);
   const markDirty = () => setIsDirty(true);
 
   const updateItem = (idx, field, val) => {

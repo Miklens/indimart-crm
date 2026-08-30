@@ -1,10 +1,14 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - Accurate buyer name & product separation (no class*="name" collision)
- * - Word-boundary phone number regex (handles "Call received on XXXXXXXXXX, Duration: 73 sec" & header "0XXXXXXXXXX")
- * - Live total discovered counter (updates FOUND with total scanned leads)
- * - Deep scroll engine with automatic duplicate protection
+ * - Robust click dispatching (triggers React synthetic events)
+ * - Multi-stage phone extraction:
+ *     1. Top conversation header area (rect.left > 300, rect.top < 250)
+ *     2. All tel: links and phone badges on page
+ *     3. Call logs & card text regex
+ *     4. Full conversation body
+ * - Accurate buyer name & product separation
+ * - Discovered counter and 1-click cleaner sync
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -326,6 +330,65 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       return { city: city, state: state };
     }
 
+    function extractPhoneNumber(card, lines) {
+      /* Strategy 1: Search conversation top bar / header (where 07411401144 appears next to buyer name) */
+      var headerElements = Array.from(document.querySelectorAll('*')).filter(function(el) {
+        if (el.id && el.id.includes('indimart-sync')) return false;
+        var r = el.getBoundingClientRect();
+        return r.left >= 280 && r.top >= 40 && r.top <= 240 && r.width < 700;
+      });
+
+      for (var h = 0; h < headerElements.length; h++) {
+        var hText = headerElements[h].innerText || '';
+        var hMatch = hText.match(/(?:\\+91|91|0)?([6-9]\\d{9})\\b/);
+        if (hMatch && hMatch[1] !== sellerMobileDigits) {
+          return hMatch[1];
+        }
+      }
+
+      /* Strategy 2: Check all tel: links or clickable phone elements on page */
+      var telLinks = Array.from(document.querySelectorAll('a[href^="tel:"], [data-mobile], [data-phone]'));
+      for (var t = 0; t < telLinks.length; t++) {
+        var href = telLinks[t].getAttribute('href') || telLinks[t].getAttribute('data-mobile') || telLinks[t].getAttribute('data-phone') || '';
+        var tDigits = href.replace(/[^0-9]/g, '');
+        if (tDigits.length >= 10) {
+          var last10 = tDigits.slice(-10);
+          if (last10[0] >= '6' && last10[0] <= '9' && last10 !== sellerMobileDigits) {
+            return last10;
+          }
+        }
+      }
+
+      /* Strategy 3: Check lines in the contact card (e.g. "Call received on 7813805264, Duration: 73 sec") */
+      for (var l = 0; l < lines.length; l++) {
+        var cardPhoneMatch = lines[l].match(/(?:\\+91|91|0)?([6-9]\\d{9})\\b/);
+        if (cardPhoneMatch && cardPhoneMatch[1] !== sellerMobileDigits) {
+          return cardPhoneMatch[1];
+        }
+      }
+
+      /* Strategy 4: Search entire right conversation pane */
+      var rightPane = Array.from(document.querySelectorAll('*')).filter(function(el) {
+        if (el.id && el.id.includes('indimart-sync')) return false;
+        var r = el.getBoundingClientRect();
+        return r.left >= 320 && r.width >= 300 && r.height > 100;
+      });
+      for (var rp = 0; rp < rightPane.length; rp++) {
+        var rpText = rightPane[rp].innerText || '';
+        var rpMatches = rpText.match(/(?:\\+91|91|0)?([6-9]\\d{9})\\b/g);
+        if (rpMatches) {
+          for (var m = 0; m < rpMatches.length; m++) {
+            var rawM = rpMatches[m].replace(/[^0-9]/g, '').slice(-10);
+            if (rawM[0] >= '6' && rawM[0] <= '9' && rawM !== sellerMobileDigits) {
+              return rawM;
+            }
+          }
+        }
+      }
+
+      return '0000000000';
+    }
+
     document.getElementById('start-sync-btn').onclick = async function() {
       var btn = document.getElementById('start-sync-btn');
       btn.disabled = true;
@@ -391,17 +454,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           var cardText = card.innerText || '';
           var lines = cardText.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
 
-          /* 1. Extract Buyer Name accurately */
+          /* 1. Extract Buyer Name */
           var customerName = 'Unknown Buyer';
-          
-          /* Look for specific buyer element without hitting product name */
           var buyerEl = card.querySelector('.fs14.fwb, [class*="buyerName"], [class*="buyer_name"], [class*="contactName"], [class*="sender"]');
           if (buyerEl && buyerEl.innerText.trim()) {
             customerName = buyerEl.innerText.trim();
           } else if (lines.length > 0) {
-            /* The first line of the card in IndiaMART is always the buyer name */
             var firstLine = lines[0];
-            /* Strip out any trailing date if glued */
             customerName = firstLine.replace(/\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+[a-z]{3})\\b/i, '').trim();
             if (!customerName && lines.length > 1) {
               customerName = lines[1];
@@ -421,7 +480,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           processedUniqueKeys.add(uniqueKey);
           newProcessedInRound++;
 
-          /* Update Live Discovered Counter */
           document.getElementById('stat-found').innerText = String(processedUniqueKeys.size);
 
           if (startLimit && leadDate < startLimit) {
@@ -437,38 +495,15 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
           /* Click card to open conversation details */
           card.click();
-          await new Promise(function(r) { setTimeout(r, 700); });
-
-          /* 3. Phone Number Extraction */
-          var contact = '';
-          var rightArea = document.querySelector('.lms_right, [class*="right"], [class*="detail"], [class*="header"], [class*="buyerInfo"], [class*="chat"]') || document.body;
-          var detailText = rightArea.innerText || '';
-          
-          /* Check conversation header for phone button/link (e.g. 09535880126) */
-          var phoneRegex = /(?:(?:\\+91|91|0)?[-\\s]*)?([6-9]\\d{9})\\b/g;
-          var match;
-          while ((match = phoneRegex.exec(detailText)) !== null) {
-            var extractedDigits = match[1];
-            if (extractedDigits !== sellerMobileDigits) {
-              contact = extractedDigits;
-              break;
-            }
+          card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          var innerEl = card.querySelector('div, p, span, h4, h5');
+          if (innerEl) {
+            innerEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
           }
+          await new Promise(function(r) { setTimeout(r, 800); });
 
-          /* Check card lines (e.g. "Call received on 7813805264, Duration: 73 sec") */
-          if (!contact) {
-            for (var l = 0; l < lines.length; l++) {
-              var cardPhoneMatch = lines[l].match(/(?:(?:\\+91|91|0)?[-\\s]*)?([6-9]\\d{9})\\b/);
-              if (cardPhoneMatch && cardPhoneMatch[1] !== sellerMobileDigits) {
-                contact = cardPhoneMatch[1];
-                break;
-              }
-            }
-          }
-
-          if (!contact) {
-            contact = '0000000000';
-          }
+          /* 3. Phone Number Extraction using Multi-Stage Search */
+          var contact = extractPhoneNumber(card, lines);
 
           var loc = parseLocation(lines);
           var city = loc.city;
@@ -477,29 +512,16 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           /* 4. Product Extraction */
           var product = 'IndiaMART Enquiry';
           
-          /* Find product heading in detail view */
-          var detailProdHeaders = rightArea.querySelectorAll('h2, h3, h4, [class*="pname"], [class*="product-name"], [class*="prod-name"]');
-          for (var dp = 0; dp < detailProdHeaders.length; dp++) {
-            var dpText = detailProdHeaders[dp].innerText.trim();
-            if (dpText.length > 2 && dpText.length < 80 && !dpText.includes('IndiaMART') && !dpText.includes('Close deals') && !dpText.includes('Quantity') && !dpText.includes('Packaging') && !dpText.includes(customerName)) {
-              product = dpText;
-              break;
-            }
-          }
-
-          /* If not found in detail view, extract from card's product badge/chip */
-          if (product === 'IndiaMART Enquiry' || !product) {
-            var candidateLines = lines.filter(function(line) {
-              var lStr = line.toLowerCase();
-              var isName = lStr.includes(customerName.toLowerCase());
-              var isLoc = lStr.includes(city.toLowerCase()) || lStr.includes(state.toLowerCase()) || lStr.includes('india');
-              var isTime = /\\b(\\d{1,2}:\\d{2}|am|pm|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\b/i.test(lStr);
-              var isGeneric = /^(hi|hello|dear|good|thank|enquir|interest|viewed|message|reply|contact|requirements|looking|additional|call|missed|duration|gst|outgoing|incoming)\\b/i.test(lStr);
-              return !isName && !isLoc && !isTime && !isGeneric && lStr.length > 2;
-            });
-            if (candidateLines.length > 0) {
-              product = candidateLines[candidateLines.length - 1];
-            }
+          var candidateLines = lines.filter(function(line) {
+            var lStr = line.toLowerCase();
+            var isName = lStr.includes(customerName.toLowerCase());
+            var isLoc = lStr.includes(city.toLowerCase()) || lStr.includes(state.toLowerCase()) || lStr.includes('india');
+            var isTime = /\\b(\\d{1,2}:\\d{2}|am|pm|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\b/i.test(lStr);
+            var isGeneric = /^(hi|hello|dear|good|thank|enquir|interest|viewed|message|reply|contact|requirements|looking|additional|call|missed|duration|gst|outgoing|incoming)\\b/i.test(lStr);
+            return !isName && !isLoc && !isTime && !isGeneric && lStr.length > 2;
+          });
+          if (candidateLines.length > 0) {
+            product = candidateLines[candidateLines.length - 1];
           }
 
           var matched = null;
@@ -549,7 +571,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             syncStatus = 'New Enquiry';
           }
 
-          var existing = existingLeads.find(function(l) { return l.contact === contact && l.date === formattedDate; });
+          var existing = existingLeads.find(function(l) { return l.contact === contact && l.date === formattedDate && contact !== '0000000000'; });
           var docId = existing ? existing.id : 'IM' + String(nextIdNum++).padStart(3, '0');
 
           var leadPayload = { 

@@ -58,7 +58,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
     reader.readAsText(file);
   };
 
-  // ── Complete 5-Sheet Professional Excel Export Engine ──────────────────────
+  // ── Executive Excel Export Engine ──────────────────────────────────────────
   const handleExportCSV = async () => {
     try {
       const ExcelJS = (await import('exceljs')).default;
@@ -107,10 +107,8 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
       const dsThin   = { style: 'thin' };
       const dsBord   = { top: dsThin, left: dsThin, bottom: dsThin, right: dsThin };
       const greenFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
-      const blueFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
       const purpleFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } };
       const amberFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } };
-      const redFill    = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF4444' } };
       const darkFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
       const whiteBold  = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
 
@@ -150,8 +148,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
       const dsBilledIds = new Set(dsPaidInv.map(inv => inv.leadId).filter(Boolean));
       const dsValidLeads = leads.filter(l => !DATA_CONFIG.getLostStatusLabels().includes(l.status)).length;
       const dsConvRate = dsValidLeads ? ((dsBilledIds.size / dsValidLeads) * 100).toFixed(1) : '0';
-      const dsContactedCount = leads.filter(l => ['Contacted', 'Quoted', 'Won'].includes(DATA_CONFIG.getSimpleStatusLabel(l.status))).length;
-      const dsContactRate = leads.length ? ((dsContactedCount / leads.length) * 100).toFixed(1) : '0';
       const dsPending = Math.max(0, dsConfirmedRev - dsTotalReceived);
       const dsInTransit = (invoiceHistory || []).filter(inv => { const v = inv.versions?.length ? inv.versions[inv.versions.length-1] : inv; return v.deliveryStatus === 'Material Dispatched'; }).length;
       const dsWonAll = DATA_CONFIG.getWonStatusLabels();
@@ -160,7 +156,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
       dsSection('📊  KEY PERFORMANCE INDICATORS', greenFill);
       dsColHead('KPI Metric', 'Value', 'Notes / Context');
       [
-        ['Pipeline Enquiries',    leads.length,      `${dsContactRate}% Contacted`,                    false],
+        ['Pipeline Enquiries',    leads.length,      'Total Inbound Leads',                            false],
         ['Actual Sales (Billed)', dsConfirmedRev,    `From ${dsPaidInv.length} paid orders`,           true],
         ['Outstanding Payments',  dsPending,         `Collected: ₹${dsTotalReceived.toLocaleString('en-IN')}`, true],
         ['In-Transit Orders',     dsInTransit,       'Active Material Dispatches',                     false],
@@ -172,24 +168,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
           r.getCell(2).font = { bold: true, size: 12, color: { argb: 'FF10B981' } };
           r.getCell(3).font = { size: 10, color: { argb: 'FF64748B' } };
           if (isCurrency) r.getCell(2).numFmt = '"₹"#,##0';
-        });
-      });
-      ds.addRow([]);
-
-      // Status Distribution
-      dsSection('🎯  LEAD STATUS DISTRIBUTION', blueFill);
-      dsColHead('Status', 'Count', '% of Total');
-      const dsStatusCounts = {};
-      leads.forEach(l => {
-        const simple = DATA_CONFIG.getSimpleStatusLabel(l.status);
-        dsStatusCounts[simple] = (dsStatusCounts[simple]||0) + 1;
-      });
-      const orderedStatuses = ['New Enquiry', 'Contacted', 'Quoted', 'Not Responding', 'Won', 'Lost', 'Not Interested'];
-      orderedStatuses.forEach(status => {
-        const count = dsStatusCounts[status] || 0;
-        dsDataRow(status, count, leads.length ? `${((count/leads.length)*100).toFixed(1)}%` : '0%', r => {
-          if (status === 'Won') { r.getCell(1).fill = { type:'pattern',pattern:'solid',fgColor:{argb:'FFD1FAE5'} }; r.getCell(1).font = { bold:true, color:{argb:'FF065F46'} }; }
-          else if (['Lost', 'Not Responding', 'Not Interested'].includes(status)) { r.getCell(1).fill = { type:'pattern',pattern:'solid',fgColor:{argb:'FFFEE2E2'} }; r.getCell(1).font = { color:{argb:'FF991B1B'} }; }
         });
       });
       ds.addRow([]);
@@ -256,9 +234,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
         { header: 'Unit Price', width: 12 },
         { header: 'Subtotal', width: 12 },
         { header: 'Total Value', width: 15 },
-        { header: 'Current Status', width: 20 },
-        { header: 'Follow-up', width: 15 },
-        { header: 'Lost Reason', width: 20 },
         { header: 'Remarks', width: 35 },
       ];
       const headerRow = ws.getRow(1);
@@ -291,9 +266,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
             p.price || 0,
             (p.price || 0) * (p.qty || 0),
             idx === 0 ? (l.orderValue || 0) : '',
-            idx === 0 ? DATA_CONFIG.getSimpleStatusLabel(l.status) : '',
-            idx === 0 ? normalizeDisplayDate(l.followUpDate) : '',
-            idx === 0 ? (l.lostReason || '') : '',
             idx === 0 ? (l.remarks || '') : '',
           ];
 
@@ -304,7 +276,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
         });
 
         if (rowCount > 1) {
-          const mergeCols = [1, 2, 3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 17];
+          const mergeCols = [1, 2, 3, 4, 5, 6, 7, 8, 13, 14];
           mergeCols.forEach(col => {
             ws.mergeCells(currentRow, col, currentRow + rowCount - 1, col);
           });
@@ -512,11 +484,11 @@ export default function Sidebar({ mobileOpen = false, onMobileClose, theme, onTh
         <div style={{ padding: '0.75rem 0.85rem', borderTop: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <input ref={csvRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImportCSV} />
           
-          {/* Professional 5-Sheet Excel Export Button */}
+          {/* Professional Excel Export Button */}
           <button 
             className="btn btn-primary"
             onClick={handleExportCSV}
-            title="Export full 5-sheet formatted Excel report (Dashboard, Leads, Summary, Invoices)"
+            title="Export executive formatted Excel report (Dashboard, Leads, Summary, Invoices)"
             style={{
               width: '100%',
               padding: '0.65rem 0.85rem',

@@ -1,14 +1,11 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
+ * - Resilient date scanning (no early termination on single out-of-order dates, requires 12 consecutive older leads)
+ * - "All Leads" & "Last 90D" presets for full catalogue extraction
  * - Robust click dispatching (triggers React synthetic events)
- * - Multi-stage phone extraction:
- *     1. Top conversation header area (rect.left > 300, rect.top < 250)
- *     2. All tel: links and phone badges on page
- *     3. Call logs & card text regex
- *     4. Full conversation body
- * - Accurate buyer name & product separation
- * - Discovered counter and 1-click cleaner sync
+ * - Multi-stage phone extraction (header badges, tel: links, call logs, conversation text)
+ * - Smooth step-by-step infinite scroll through all virtualized items
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -66,9 +63,10 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       '</div>' +
     '</div>' +
     '<div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">' +
-      '<button id="preset-7d" style="flex:1; padding:4px 8px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Last 7D</button>' +
-      '<button id="preset-30d" style="flex:1; padding:4px 8px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Last 30D</button>' +
-      '<button id="preset-today" style="flex:1; padding:4px 8px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">Today</button>' +
+      '<button id="preset-7d" style="flex:1; padding:4px 6px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">7D</button>' +
+      '<button id="preset-30d" style="flex:1; padding:4px 6px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">30D</button>' +
+      '<button id="preset-90d" style="flex:1; padding:4px 6px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#cbd5e1; font-size:11px; cursor:pointer; font-weight:500;">90D</button>' +
+      '<button id="preset-all" style="flex:1; padding:4px 6px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#10b981; font-size:11px; cursor:pointer; font-weight:700;">All Leads</button>' +
     '</div>' +
     '<div style="display:flex; gap:8px; margin-bottom:12px;">' +
       '<button id="start-sync-btn" style="flex:1; padding:11px; background:linear-gradient(135deg,#10b981,#059669); border:none; border-radius:8px; color:#fff; font-weight:700; cursor:pointer; font-size:13px; box-shadow:0 4px 12px rgba(16,185,129,0.3); display:flex; align-items:center; justify-content:center; gap:6px;">' +
@@ -130,7 +128,8 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
     var today = new Date().toISOString().split('T')[0];
     var past7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    var past30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    var past30 = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    var past90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
     var startInput = document.getElementById('sync-start-date');
     var endInput = document.getElementById('sync-end-date');
@@ -139,7 +138,8 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
     document.getElementById('preset-7d').onclick = function() { startInput.value = past7; endInput.value = today; };
     document.getElementById('preset-30d').onclick = function() { startInput.value = past30; endInput.value = today; };
-    document.getElementById('preset-today').onclick = function() { startInput.value = today; endInput.value = today; };
+    document.getElementById('preset-90d').onclick = function() { startInput.value = past90; endInput.value = today; };
+    document.getElementById('preset-all').onclick = function() { startInput.value = ''; endInput.value = today; };
     document.getElementById('close-sync-panel').onclick = function() { panel.remove(); };
 
     function findContactCards() {
@@ -331,7 +331,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     }
 
     function extractPhoneNumber(card, lines) {
-      /* Strategy 1: Search conversation top bar / header (where 07411401144 appears next to buyer name) */
+      /* Strategy 1: Header area of conversation */
       var headerElements = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
         var r = el.getBoundingClientRect();
@@ -346,7 +346,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
 
-      /* Strategy 2: Check all tel: links or clickable phone elements on page */
+      /* Strategy 2: All tel: links or clickable phone elements on page */
       var telLinks = Array.from(document.querySelectorAll('a[href^="tel:"], [data-mobile], [data-phone]'));
       for (var t = 0; t < telLinks.length; t++) {
         var href = telLinks[t].getAttribute('href') || telLinks[t].getAttribute('data-mobile') || telLinks[t].getAttribute('data-phone') || '';
@@ -359,7 +359,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
 
-      /* Strategy 3: Check lines in the contact card (e.g. "Call received on 7813805264, Duration: 73 sec") */
+      /* Strategy 3: Card text lines */
       for (var l = 0; l < lines.length; l++) {
         var cardPhoneMatch = lines[l].match(/(?:\\+91|91|0)?([6-9]\\d{9})\\b/);
         if (cardPhoneMatch && cardPhoneMatch[1] !== sellerMobileDigits) {
@@ -443,9 +443,10 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       
       var scrollAttempts = 0;
       var noNewCardsRounds = 0;
+      var consecutiveOlderCount = 0;
       var reachedDateLimit = false;
 
-      while (scrollAttempts < 150 && !reachedDateLimit) {
+      while (scrollAttempts < 300 && !reachedDateLimit) {
         var visibleCards = findContactCards();
         var newProcessedInRound = 0;
 
@@ -482,11 +483,21 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
           document.getElementById('stat-found').innerText = String(processedUniqueKeys.size);
 
+          /* Check date bounds with consecutive tolerance */
           if (startLimit && leadDate < startLimit) {
-            reachedDateLimit = true;
-            statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached leads older than Start Date (' + formattedDate + '). Stopping.</span><br>';
-            break;
+            consecutiveOlderCount++;
+            skippedCount++;
+            document.getElementById('stat-skipped').innerText = String(skippedCount);
+            if (consecutiveOlderCount >= 15) {
+              reachedDateLimit = true;
+              statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached 15 consecutive leads older than Start Date (' + formattedDate + '). Completed scan.</span><br>';
+              break;
+            }
+            continue;
+          } else {
+            consecutiveOlderCount = 0;
           }
+
           if (endLimit && leadDate > endLimit) {
             skippedCount++;
             document.getElementById('stat-skipped').innerText = String(skippedCount);
@@ -502,7 +513,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           }
           await new Promise(function(r) { setTimeout(r, 800); });
 
-          /* 3. Phone Number Extraction using Multi-Stage Search */
+          /* 3. Phone Number Extraction */
           var contact = extractPhoneNumber(card, lines);
 
           var loc = parseLocation(lines);
@@ -651,7 +662,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
         if (newProcessedInRound === 0) {
           noNewCardsRounds++;
-          if (noNewCardsRounds >= 4) {
+          if (noNewCardsRounds >= 5) {
             statusDiv.innerHTML += '<span style="color:#94a3b8;">[DONE] End of list reached.</span><br>';
             break;
           }
@@ -663,12 +674,12 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           var lastCard = visibleCards[visibleCards.length - 1];
           lastCard.scrollIntoView({ block: 'end', behavior: 'smooth' });
           if (scrollContainer && scrollContainer.scrollHeight) {
-            scrollContainer.scrollTop = scrollContainer.scrollHeight;
+            scrollContainer.scrollTop += 500;
             scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
           }
         }
         
-        await new Promise(function(r) { setTimeout(r, 1200); });
+        await new Promise(function(r) { setTimeout(r, 1000); });
         scrollAttempts++;
       }
 

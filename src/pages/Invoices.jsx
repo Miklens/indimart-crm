@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, FileText, Trash2, Download, RefreshCw, Eye, Copy, Phone, MapPin, Calendar, CheckCircle, AlertCircle, MessageCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../context/AppUIContext';
@@ -20,6 +20,24 @@ export default function Invoices() {
     setPrevSearch(search);
     setVisibleCount(50);
   }
+
+  // ── System Back Button / Gesture Navigation Listener ──
+  useEffect(() => {
+    const handleBack = (e) => {
+      if (viewInvoice) {
+        setViewInvoice(null);
+        e.preventDefault();
+      } else if (duplicateInvoice) {
+        setDuplicateInvoice(null);
+        e.preventDefault();
+      } else if (viewLeadId) {
+        setViewLeadId(null);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('app:system-back', handleBack);
+    return () => window.removeEventListener('app:system-back', handleBack);
+  }, [viewInvoice, duplicateInvoice, viewLeadId]);
 
   const toggleVersions = (invNo) => setExpandedVersions(prev => {
     const next = new Set(prev);

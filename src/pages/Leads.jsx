@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, Link, X, LayoutGrid, List, Phone, MapPin, Calendar, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../context/AppUIContext';
@@ -34,6 +34,27 @@ export default function Leads() {
   const [quickAddProduct, setQuickAddProduct] = useState(null);
   const [linkProductContext, setLinkProductContext] = useState(null);
   const csvRef = useRef(null);
+
+  // ── System Back Button / Gesture Navigation Listener ──
+  useEffect(() => {
+    const handleBack = (e) => {
+      if (detailsLeadId) {
+        setDetailsLeadId(null);
+        e.preventDefault();
+      } else if (showModal) {
+        setShowModal(false);
+        e.preventDefault();
+      } else if (invoiceLead) {
+        setInvoiceLead(null);
+        e.preventDefault();
+      } else if (pickerLead) {
+        setPickerLead(null);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('app:system-back', handleBack);
+    return () => window.removeEventListener('app:system-back', handleBack);
+  }, [detailsLeadId, showModal, invoiceLead, pickerLead]);
 
   const getAvatarColor = (name) => {
     const colors = [

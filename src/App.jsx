@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, Bell, FileText, Menu, Sun, Moon, Search } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { LayoutDashboard, Users, Bell, FileText, Menu, Sun, Moon, Search, ArrowLeft } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import Sidebar from './components/Sidebar';
 import SyncBanner from './components/SyncBanner';
@@ -38,6 +38,20 @@ const PAGES = {
   settings: Settings,
 };
 
+const SECTION_TITLES = {
+  dashboard: 'Overview',
+  leads: 'Leads Tracker',
+  followups: 'Daily Tasks',
+  catalog: 'Product Catalog',
+  products: 'Product Demand',
+  sales: 'Sales History',
+  invoices: 'Invoices & Billing',
+  bulk: 'Bulk Sync Tools',
+  templates: 'Message Templates',
+  segments: 'Customer Insights',
+  settings: 'Settings',
+};
+
 const MOBILE_NAV = [
   { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
   { id: 'leads', label: 'Leads', icon: Users },
@@ -59,6 +73,103 @@ function AppInner() {
     if (!isFirebaseConfigured()) return false;
     return null;
   });
+
+  // Keep track of active overlays for system back button
+  const drawerOpenRef = useRef(drawerOpen);
+  const searchOpenRef = useRef(searchOpen);
+  const customer360Ref = useRef(customer360);
+  const currentSectionRef = useRef(currentSection);
+
+  useEffect(() => { drawerOpenRef.current = drawerOpen; }, [drawerOpen]);
+  useEffect(() => { searchOpenRef.current = searchOpen; }, [searchOpen]);
+  useEffect(() => { customer360Ref.current = customer360; }, [customer360]);
+  useEffect(() => { currentSectionRef.current = currentSection; }, [currentSection]);
+
+  // ── Browser / System Navigation Integration (Hardware Back Button & Swipe Gesture) ──
+  useEffect(() => {
+    // Set initial state
+    if (!window.history.state) {
+      window.history.replaceState({ section: 'dashboard', isRoot: true }, '');
+    }
+
+    const handlePopState = (e) => {
+      // 1. If Customer 360 is open, close it
+      if (customer360Ref.current) {
+        setCustomer360(null);
+        return;
+      }
+      // 2. If Search modal is open, close it
+      if (searchOpenRef.current) {
+        setSearchOpen(false);
+        return;
+      }
+      // 3. If Navigation drawer is open, close it
+      if (drawerOpenRef.current) {
+        setDrawerOpen(false);
+        return;
+      }
+
+      // 4. Dispatch a custom event so child modals (LeadModal, InvoiceModal) can close on system back
+      const handled = window.dispatchEvent(new CustomEvent('app:system-back', { cancelable: true }));
+      if (!handled) return;
+
+      // 5. Navigate back to previous section or dashboard
+      if (e.state && e.state.section) {
+        setCurrentSection(e.state.section);
+      } else if (currentSectionRef.current !== 'dashboard') {
+        setCurrentSection('dashboard');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [setCurrentSection]);
+
+  const navigateToSection = useCallback((sec) => {
+    if (sec === currentSectionRef.current) return;
+    window.history.pushState({ section: sec }, '');
+    setCurrentSection(sec);
+    setDrawerOpen(false);
+  }, [setCurrentSection]);
+
+  const handleSystemBack = () => {
+    if (customer360) {
+      setCustomer360(null);
+    } else if (searchOpen) {
+      setSearchOpen(false);
+    } else if (drawerOpen) {
+      setDrawerOpen(false);
+    } else if (currentSection !== 'dashboard') {
+      window.history.back();
+    }
+  };
+
+  const openSearchWithHistory = (open) => {
+    if (open) {
+      window.history.pushState({ overlay: 'search', section: currentSection }, '');
+      setSearchOpen(true);
+    } else {
+      setSearchOpen(false);
+    }
+  };
+
+  const openCustomer360WithHistory = (cust) => {
+    if (cust) {
+      window.history.pushState({ overlay: 'customer360', section: currentSection }, '');
+      setCustomer360(cust);
+    } else {
+      setCustomer360(null);
+    }
+  };
+
+  const openDrawerWithHistory = (open) => {
+    if (open) {
+      window.history.pushState({ overlay: 'drawer', section: currentSection }, '');
+      setDrawerOpen(true);
+    } else {
+      setDrawerOpen(false);
+    }
+  };
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
@@ -83,12 +194,12 @@ function AppInner() {
     const handler = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setSearchOpen(s => !s);
+        openSearchWithHistory(!searchOpen);
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, []);
+  }, [searchOpen]);
 
   if (authUser === null) {
     return (
@@ -113,15 +224,16 @@ function AppInner() {
 
   const handleMobileNav = (id) => {
     if (id === 'settings') {
-      setDrawerOpen(true);
+      openDrawerWithHistory(true);
     } else {
-      setCurrentSection(id);
-      setDrawerOpen(false);
+      navigateToSection(id);
     }
   };
 
+  const isHome = currentSection === 'dashboard';
+
   return (
-    <AppUIContext.Provider value={{ openCustomer360: setCustomer360 }}>
+    <AppUIContext.Provider value={{ openCustomer360: openCustomer360WithHistory }}>
     <div style={{ display: 'flex', flex: 1, height: '100dvh', overflow: 'hidden', position: 'relative' }}>
       <Sidebar
         mobileOpen={drawerOpen}
@@ -135,27 +247,51 @@ function AppInner() {
       )}
 
       <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', minWidth: 0, height: '100dvh' }}>
-        {/* Mobile Top App Bar (Header on Mobile) */}
+        {/* Mobile Top App Bar with Native Back & Section Title */}
         <header className="mobile-top-bar">
-          <button className="btn-icon" onClick={() => setDrawerOpen(true)} title="Open Navigation Menu">
-            <Menu size={22} />
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: '7px',
-              background: 'linear-gradient(135deg, #00d09c, #059669)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '0.75rem', fontWeight: 800, color: '#fff',
-              boxShadow: '0 2px 8px rgba(16,185,129,0.4)'
-            }}>IM</div>
-            <span style={{ fontWeight: 800, fontSize: '0.96rem', letterSpacing: '-0.02em', color: 'var(--text-main)' }}>IndiaMART CRM</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            {!isHome ? (
+              <button 
+                className="btn-icon" 
+                onClick={handleSystemBack} 
+                title="Go Back"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '50%', width: 34, height: 34 }}
+              >
+                <ArrowLeft size={18} style={{ color: 'var(--primary)' }} />
+              </button>
+            ) : (
+              <button className="btn-icon" onClick={() => openDrawerWithHistory(true)} title="Open Navigation Menu">
+                <Menu size={22} />
+              </button>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              {isHome ? (
+                <>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '7px',
+                    background: 'linear-gradient(135deg, #00d09c, #059669)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.75rem', fontWeight: 800, color: '#fff',
+                    boxShadow: '0 2px 8px rgba(16,185,129,0.4)',
+                    flexShrink: 0
+                  }}>IM</div>
+                  <span style={{ fontWeight: 800, fontSize: '0.96rem', letterSpacing: '-0.02em', color: 'var(--text-main)' }}>IndiaMART CRM</span>
+                </>
+              ) : (
+                <div style={{ fontWeight: 800, fontSize: '1.02rem', color: 'var(--text-main)', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {SECTION_TITLES[currentSection] || 'IndiaMART CRM'}
+                </div>
+              )}
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button className="btn-icon" onClick={() => setSearchOpen(true)} title="Search (⌘K)">
-              <Search size={19} />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            <button className="btn-icon" onClick={() => openSearchWithHistory(true)} title="Search (⌘K)">
+              <Search size={18} />
             </button>
             <button className="btn-icon" onClick={toggleTheme} title="Toggle Dark/Light Mode">
-              {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={19} />}
             </button>
           </div>
         </header>
@@ -185,14 +321,14 @@ function AppInner() {
       {/* Global search overlay */}
       {searchOpen && (
         <GlobalSearch
-          onClose={() => setSearchOpen(false)}
-          onOpenCustomer360={(c) => { setCustomer360(c); setSearchOpen(false); }}
+          onClose={() => openSearchWithHistory(false)}
+          onOpenCustomer360={(c) => { openCustomer360WithHistory(c); openSearchWithHistory(false); }}
         />
       )}
 
       {/* Customer 360 modal */}
       {customer360 && (
-        <Customer360 customer={customer360} onClose={() => setCustomer360(null)} />
+        <Customer360 customer={customer360} onClose={() => openCustomer360WithHistory(null)} />
       )}
     </div>
     </AppUIContext.Provider>

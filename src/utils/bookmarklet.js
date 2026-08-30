@@ -1,12 +1,11 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - Phone-number-first deduplication (updates existing lead dates in-place without duplicating)
- * - Safe protection for manually created leads (only updates matched IndiaMART leads)
- * - Strict dummy name filter (ignores chat date separators like "July 20, 2026", "August 1, 2026")
- * - Smart cleanup for "Contact added through Enquiry received"
- * - Multi-container wheel & scroll engine with 12-round idle tolerance
- * - Exact date parsing (20 Jul -> 2026-07-20)
+ * - Ultra-resilient contact list scrolling engine (scrollIntoView block:start, parent traversal, elementFromPoint, synthetic wheel)
+ * - 30-round retry tolerance with progressive scroll jumps
+ * - Phone-first deduplication (updates existing lead dates in-place)
+ * - Strict dummy name filter & manual lead protection
+ * - Exact card date parser
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -180,7 +179,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         if (els.length > 0) { return els; }
       }
 
-      /* Adaptive left sidebar detector (rect.left < 260px, rect.width 150-480px) */
       var allDivsAndLis = Array.from(document.querySelectorAll('div, li'));
       var timeRegex = /\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))\\b/i;
       
@@ -190,7 +188,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         if (el.id && el.id.includes('indimart-sync')) continue;
         if (el.closest && el.closest('#indimart-sync-panel')) continue;
         var rect = el.getBoundingClientRect();
-        if (rect.left < 260 && rect.width >= 150 && rect.width <= 480 && rect.height >= 40 && rect.height <= 260 && rect.top >= 50) {
+        if (rect.left < 280 && rect.width >= 140 && rect.width <= 490 && rect.height >= 40 && rect.height <= 260 && rect.top >= 40) {
           var txt = el.innerText || '';
           if (timeRegex.test(txt) && txt.length >= 10 && txt.length <= 600 && !txt.startsWith('July ') && !txt.startsWith('August ')) {
             matchedCards.push(el);
@@ -221,7 +219,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         if (node.id && node.id.includes('indimart-sync')) return false;
         if (node.closest && node.closest('#indimart-sync-panel')) return false;
         var r = node.getBoundingClientRect();
-        return r.left < 200 && r.width >= 200 && r.width <= 460 && r.height > 200;
+        return r.left < 220 && r.width >= 180 && r.width <= 480 && r.height > 180;
       });
       for (var le = 0; le < leftElements.length; le++) {
         var container = leftElements[le];
@@ -251,8 +249,28 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       window.scrollTo(0, 0);
     }
 
-    function scrollAllLeftDown(pixels) {
-      var px = pixels || 450;
+    function triggerSidebarScrollDown(lastCard, pixels) {
+      var px = pixels || 500;
+      
+      /* 1. Pull bottom card to top of view */
+      if (lastCard && typeof lastCard.scrollIntoView === 'function') {
+        lastCard.scrollIntoView({ block: 'start', behavior: 'instant' });
+      }
+
+      /* 2. Scroll all parent chain elements of lastCard */
+      if (lastCard) {
+        var p = lastCard.parentElement;
+        while (p && p !== document.body) {
+          if (p.scrollHeight > p.clientHeight) {
+            p.scrollTop += px;
+            p.dispatchEvent(new Event('scroll', { bubbles: true }));
+            p.dispatchEvent(new WheelEvent('wheel', { deltaY: px, bubbles: true, clientX: 200, clientY: 400 }));
+          }
+          p = p.parentElement;
+        }
+      }
+
+      /* 3. Query all scrollable left containers */
       var allLeft = Array.from(document.querySelectorAll('*')).filter(function(el) {
         if (el.id && el.id.includes('indimart-sync')) return false;
         if (el.closest && el.closest('#indimart-sync-panel')) return false;
@@ -262,7 +280,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       for (var i = 0; i < allLeft.length; i++) {
         allLeft[i].scrollTop += px;
         allLeft[i].dispatchEvent(new Event('scroll', { bubbles: true }));
-        allLeft[i].dispatchEvent(new WheelEvent('wheel', { deltaY: px, bubbles: true }));
+        allLeft[i].dispatchEvent(new WheelEvent('wheel', { deltaY: px, bubbles: true, clientX: 200, clientY: 400 }));
+      }
+
+      /* 4. Element from point in sidebar */
+      var sidebarEl = document.elementFromPoint(220, 350);
+      if (sidebarEl) {
+        sidebarEl.dispatchEvent(new WheelEvent('wheel', { deltaY: px, bubbles: true }));
       }
     }
 
@@ -478,7 +502,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       var consecutiveOlderCount = 0;
       var reachedDateLimit = false;
 
-      while (scrollAttempts < 350 && !reachedDateLimit) {
+      while (scrollAttempts < 500 && !reachedDateLimit) {
         var visibleCards = findContactCards();
         var newProcessedInRound = 0;
 
@@ -500,7 +524,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             }
           }
 
-          /* Clean up system phrases like "Contact added through Enquiry received" */
+          /* Clean up system phrases */
           if (customerName.toLowerCase().startsWith('contact added')) {
             var altName = lines.find(function(l) {
               var low = l.toLowerCase();
@@ -534,7 +558,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             consecutiveOlderCount++;
             skippedCount++;
             setStat('stat-skipped', skippedCount);
-            if (consecutiveOlderCount >= 15) {
+            if (consecutiveOlderCount >= 20) {
               reachedDateLimit = true;
               if (statusDiv) { statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached Start Date cutoff (' + formattedDate + ' is older than ' + startDateVal + '). Completed scan.</span><br>'; }
               break;
@@ -628,7 +652,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             syncStatus = 'New Enquiry';
           }
 
-          /* Phone-first deduplication: Match existing lead by contact number to update date in-place */
+          /* Phone-first deduplication */
           var existing = existingLeads.find(function(l) { 
             return l.contact === contact && contact !== '0000000000' && (l.source === 'IndiaMART Direct' || !l.source); 
           });
@@ -711,7 +735,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
         if (newProcessedInRound === 0) {
           noNewCardsRounds++;
-          if (noNewCardsRounds >= 12) {
+          if (noNewCardsRounds >= 25) {
             if (statusDiv) { statusDiv.innerHTML += '<span style="color:#94a3b8;">[DONE] End of list reached.</span><br>'; }
             break;
           }
@@ -719,13 +743,11 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           noNewCardsRounds = 0;
         }
 
-        if (visibleCards.length > 0) {
-          var lastCard = visibleCards[visibleCards.length - 1];
-          lastCard.scrollIntoView({ block: 'nearest', behavior: 'instant' });
-        }
-        scrollAllLeftDown(450);
+        var lastCardToScroll = visibleCards.length > 0 ? visibleCards[visibleCards.length - 1] : null;
+        var scrollJump = (noNewCardsRounds > 3) ? (600 + noNewCardsRounds * 50) : 500;
+        triggerSidebarScrollDown(lastCardToScroll, scrollJump);
         
-        await new Promise(function(r) { setTimeout(r, 900); });
+        await new Promise(function(r) { setTimeout(r, 1100); });
         scrollAttempts++;
       }
 

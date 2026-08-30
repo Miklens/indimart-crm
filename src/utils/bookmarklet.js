@@ -1,7 +1,7 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
- * Enhanced with multi-selector support, adaptive scroll container detection,
- * auto-product fuzzy mapping, and live progress UI.
+ * Enhanced with multi-tier heuristic card detection (timestamp & geometry-based),
+ * adaptive scroll container detection, auto-product fuzzy mapping, and live progress UI.
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -32,7 +32,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     var nextIdNum = ${calculatedNextIdNum};
     
     var oldPanel = document.getElementById('indimart-sync-panel');
-    if (oldPanel) oldPanel.remove();
+    if (oldPanel) { oldPanel.remove(); }
     
     var panel = document.createElement('div');
     panel.id = 'indimart-sync-panel';
@@ -95,9 +95,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     document.body.appendChild(panel);
     
     var header = document.getElementById('sync-header');
-    var isDragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+    var isDragging = false;
+    var startX = 0;
+    var startY = 0;
+    var startLeft = 0;
+    var startTop = 0;
     header.onmousedown = function(e) {
-      if (e.target.id === 'close-sync-panel') return;
+      if (e.target.id === 'close-sync-panel') { return; }
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
@@ -105,7 +109,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       startLeft = rect.left;
       startTop = rect.top;
       document.onmousemove = function(me) {
-        if (!isDragging) return;
+        if (!isDragging) { return; }
         panel.style.right = 'auto';
         panel.style.left = (startLeft + (me.clientX - startX)) + 'px';
         panel.style.top = (startTop + (me.clientY - startY)) + 'px';
@@ -151,26 +155,57 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
       for (var s = 0; s < selectorGroups.length; s++) {
         var els = Array.from(document.querySelectorAll(selectorGroups[s]));
-        if (els.length > 0) return els;
+        if (els.length > 0) { return els; }
       }
 
-      var leftCol = document.querySelector('.lms_left, [class*="left"], [class*="sidebar"], [class*="contactList"], [class*="chatList"], [class*="list-container"]');
-      if (leftCol) {
-        var children = Array.from(leftCol.querySelectorAll('div, li')).filter(function(el) {
-          if (el.children.length > 8 || el.children.length < 1) return false;
+      var maxLeftX = Math.min(500, window.innerWidth * 0.45);
+      var allDivsAndLis = Array.from(document.querySelectorAll('div, li'));
+      var timeRegex = /\\b(\\d{1,2}:\\d{2}\\s*(?:am|pm)?|yesterday|today|\\d{1,2}\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))\\b/i;
+      
+      var matchedCards = [];
+      for (var i = 0; i < allDivsAndLis.length; i++) {
+        var el = allDivsAndLis[i];
+        var rect = el.getBoundingClientRect();
+        if (rect.left < maxLeftX && rect.width >= 160 && rect.height >= 45 && rect.height <= 260 && rect.top >= 60) {
           var txt = el.innerText || '';
-          var hasTimeOrDate = /\\b(\\d{1,2}:\\d{2}\\s*(am|pm)|yesterday|today|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\b/i.test(txt);
-          var hasStateOrCity = /(karnataka|maharashtra|andhra|tamil|delhi|gujarat|bengal|punjab|india|,)/i.test(txt);
-          return (hasTimeOrDate || hasStateOrCity) && txt.length > 10 && txt.length < 500;
-        });
-
-        var validCards = [];
-        children.forEach(function(c) {
-          if (!validCards.some(function(existing) { return existing.contains(c) || c.contains(existing); })) {
-            validCards.push(c);
+          if (timeRegex.test(txt) && txt.length >= 10 && txt.length <= 600) {
+            matchedCards.push(el);
           }
+        }
+      }
+
+      var distinctCards = [];
+      for (var m = 0; m < matchedCards.length; m++) {
+        var cardCandidate = matchedCards[m];
+        var isChildOfAnother = false;
+        for (var d = 0; d < matchedCards.length; d++) {
+          if (m !== d && matchedCards[d].contains(cardCandidate)) {
+            isChildOfAnother = true;
+            break;
+          }
+        }
+        if (!isChildOfAnother && !distinctCards.includes(cardCandidate)) {
+          distinctCards.push(cardCandidate);
+        }
+      }
+
+      if (distinctCards.length > 0) {
+        return distinctCards;
+      }
+
+      var leftElements = Array.from(document.querySelectorAll('*')).filter(function(node) {
+        var r = node.getBoundingClientRect();
+        return r.left < 50 && r.width >= 200 && r.width <= 480 && r.height > 200;
+      });
+      for (var le = 0; le < leftElements.length; le++) {
+        var container = leftElements[le];
+        var items = Array.from(container.children).filter(function(c) {
+          var cr = c.getBoundingClientRect();
+          return cr.height >= 40 && cr.height <= 240 && (c.innerText || '').length > 10;
         });
-        if (validCards.length > 0) return validCards;
+        if (items.length >= 2) {
+          return items;
+        }
       }
 
       return [];
@@ -187,9 +222,12 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           p = p.parentElement;
         }
       }
-      var candidates = document.querySelectorAll('.lms_left, [class*="left"], [class*="contactList"], [class*="scroll"], [id*="list"]');
-      for (var c = 0; c < candidates.length; c++) {
-        var el = candidates[c];
+      var allLeft = Array.from(document.querySelectorAll('div, section, aside, nav, ul')).filter(function(el) {
+        var r = el.getBoundingClientRect();
+        return r.left < 400 && r.width > 150;
+      });
+      for (var c = 0; c < allLeft.length; c++) {
+        var el = allLeft[c];
         var s = window.getComputedStyle(el);
         if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
           return el;
@@ -200,7 +238,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
     function parseLeadDate(dateStr) {
       var leadDate = new Date();
-      if (!dateStr) return leadDate;
+      if (!dateStr) { return leadDate; }
       var dLower = dateStr.toLowerCase().trim();
       
       if (dLower.includes('today') || dLower.includes('am') || dLower.includes('pm') || /\\b\\d{1,2}:\\d{2}\\b/.test(dLower)) {
@@ -230,7 +268,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         var d = parseInt(numDateMatch[1], 10);
         var m = parseInt(numDateMatch[2], 10) - 1;
         var y = numDateMatch[3] ? parseInt(numDateMatch[3], 10) : new Date().getFullYear();
-        if (y < 100) y += 2000;
+        if (y < 100) { y += 2000; }
         return new Date(y, m, d);
       }
       
@@ -270,8 +308,8 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             }
           } else if (parts.length === 1) {
             var st = indianStates.find(function(s) { return parts[0].toLowerCase().includes(s); });
-            if (st) state = parts[0];
-            else city = parts[0];
+            if (st) { state = parts[0]; }
+            else { city = parts[0]; }
             break;
           }
         } else {
@@ -305,9 +343,9 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       var startDateVal = document.getElementById('sync-start-date').value;
       var endDateVal = document.getElementById('sync-end-date').value;
       var startLimit = startDateVal ? new Date(startDateVal) : null;
-      if (startLimit) startLimit.setHours(0, 0, 0, 0);
+      if (startLimit) { startLimit.setHours(0, 0, 0, 0); }
       var endLimit = endDateVal ? new Date(endDateVal) : null;
-      if (endLimit) endLimit.setHours(23, 59, 59, 999);
+      if (endLimit) { endLimit.setHours(23, 59, 59, 999); }
 
       var foundCards = findContactCards();
       
@@ -318,7 +356,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       }
 
       if (foundCards.length === 0) {
-        statusDiv.innerHTML += '<span style="color:#ef4444; font-weight:700;">❌ No contact cards found. Please ensure you are logged into IndiaMART Message Centre (seller.indiamart.com/messagecentre).</span><br>';
+        statusDiv.innerHTML += '<span style="color:#ef4444; font-weight:700;">❌ No contact cards found. Please ensure you are on IndiaMART Message Centre (seller.indiamart.com/messagecentre).</span><br>';
         btn.disabled = false;
         btn.style.opacity = '1';
         btn.innerHTML = '<span>⚡</span> Retry Scan';
@@ -384,29 +422,31 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           }
 
           card.click();
-          await new Promise(function(r) { setTimeout(r, 650); });
+          await new Promise(function(r) { setTimeout(r, 700); });
 
           var contact = '';
-          for (var l = 0; l < lines.length; l++) {
-            var digits = lines[l].replace(/[^0-9]/g, '');
-            if (digits.length >= 10) {
-              var last10 = digits.slice(-10);
-              if (last10[0] >= '6' && last10[0] <= '9' && last10 !== sellerMobileDigits) {
-                contact = last10;
-                break;
-              }
+          var rightArea = document.querySelector('.lms_right, [class*="right"], [class*="detail"], [class*="header"], [class*="buyerInfo"], [class*="chat"]') || document.body;
+          var detailText = rightArea.innerText || '';
+          
+          var phoneRegex = /(?:(?:\\+91|91|0)?[-\\s]*)?([6-9]\\d{9})\\b/g;
+          var match;
+          while ((match = phoneRegex.exec(detailText)) !== null) {
+            var extractedDigits = match[1];
+            if (extractedDigits !== sellerMobileDigits) {
+              contact = extractedDigits;
+              break;
             }
           }
 
           if (!contact) {
-            var detailArea = document.querySelector('.lms_right, [class*="right"], [class*="detail"], [class*="header"], [class*="buyerInfo"], [class*="chat"]') || document.body;
-            var detailText = detailArea.innerText || '';
-            var phoneMatches = detailText.match(/(?:\\+91|91)?[\\s-]*([6-9]\\d{9})\\b/g) || [];
-            for (var pm = 0; pm < phoneMatches.length; pm++) {
-              var cleanP = phoneMatches[pm].replace(/[^0-9]/g, '').slice(-10);
-              if (cleanP !== sellerMobileDigits) {
-                contact = cleanP;
-                break;
+            for (var l = 0; l < lines.length; l++) {
+              var digits = lines[l].replace(/[^0-9]/g, '');
+              if (digits.length >= 10) {
+                var last10 = digits.slice(-10);
+                if (last10[0] >= '6' && last10[0] <= '9' && last10 !== sellerMobileDigits) {
+                  contact = last10;
+                  break;
+                }
               }
             }
           }
@@ -420,11 +460,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           var state = loc.state;
 
           var product = 'IndiaMART Enquiry';
-          var rightCol = document.querySelector('.lms_right, [class*="right"], [class*="detail"]');
-          if (rightCol) {
-            var prodLink = rightCol.querySelector('a[href*="proddetail"], a[href*="product"], .m-pname, [class*="pname"], [class*="prod-name"], [class*="productName"]');
-            if (prodLink && prodLink.innerText.trim()) {
-              product = prodLink.innerText.trim();
+          
+          var detailProdHeaders = rightArea.querySelectorAll('h2, h3, h4, [class*="prod"], [class*="pname"], [class*="product"]');
+          for (var dp = 0; dp < detailProdHeaders.length; dp++) {
+            var dpText = detailProdHeaders[dp].innerText.trim();
+            if (dpText.length > 2 && dpText.length < 80 && !dpText.includes('IndiaMART') && !dpText.includes('Close deals') && !dpText.includes('Quantity') && !dpText.includes('Packaging')) {
+              product = dpText;
+              break;
             }
           }
 
@@ -438,7 +480,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
               return !isName && !isLoc && !isTime && !isGeneric && lStr.length > 2;
             });
             if (candidateLines.length > 0) {
-              product = candidateLines[0];
+              product = candidateLines[candidateLines.length - 1];
             }
           }
 
@@ -565,7 +607,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
           progBar.style.width = Math.min(100, Math.round((processedUniqueKeys.size / Math.max(1, visibleCards.length)) * 100)) + '%';
         }
 
-        if (reachedDateLimit) break;
+        if (reachedDateLimit) { break; }
 
         if (newProcessedInRound === 0) {
           noNewCardsRounds++;

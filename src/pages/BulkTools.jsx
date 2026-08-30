@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageCircle, X, Upload, CheckCircle, Trash2, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { MessageCircle, X, Upload, CheckCircle, Trash2, AlertTriangle, ShieldCheck, Layers } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 import { fsSetLead } from '../services/firestoreService';
@@ -17,6 +17,10 @@ export default function BulkTools() {
   const STATUS_OPTIONS = DATA_CONFIG.getSimpleStatusOptions();
   const [bulkMessage, setBulkMessage] = useState('');
   const [showInvalidPreview, setShowInvalidPreview] = useState(false);
+
+  // 1-Click Merge All States
+  const [isMergingAll, setIsMergingAll] = useState(false);
+  const [mergeProgress, setMergeProgress] = useState('');
 
   // Helper to detect date banners or system text captured as buyer names
   const isDummyName = (name) => {
@@ -72,34 +76,58 @@ export default function BulkTools() {
     .filter(([, group]) => group.length > 1)
     .map(([contact, group]) => ({ contact, group }));
 
-  const handleMerge = async (contact, group) => {
-    const masterId = masterSelections[contact] || group[0].id;
-    const masterLead = group.find(l => l.id === masterId);
-    const duplicates = group.filter(l => l.id !== masterId);
+  const mergeSingleGroup = async (contact, group, prompt = false) => {
+    let masterLead = group.find(l => l.id === masterSelections[contact]);
+    if (!masterLead) {
+      // Pick lead with genuine date (not 30-08-2026 placeholder if another has a real date like 2026-07-26)
+      const realDateLead = group.find(l => l.date && !l.date.startsWith('2026-08-30') && l.date !== '30-08-2026');
+      masterLead = realDateLead || group[0];
+    }
+    const duplicates = group.filter(l => l.id !== masterLead.id);
+    if (!duplicates.length) return;
 
-    if (!window.confirm(`Are you sure you want to merge these duplicate leads into ${masterLead.customerName} (${masterLead.id})? This will combine products, remarks, and update invoices.`)) {
-      return;
+    if (prompt) {
+      if (!window.confirm(`Are you sure you want to merge these duplicate leads into ${masterLead.customerName} (${masterLead.id})? This will combine products, remarks, and update invoices.`)) {
+        return;
+      }
     }
 
     try {
       // 1. Combine product rows
       const masterProds = masterLead.productList?.length 
         ? masterLead.productList 
-        : [{ name: masterLead.product, qty: 1, price: masterLead.orderValue, gst: '5', hsn: '' }];
+        : [{ name: masterLead.product || 'IndiaMART Enquiry', qty: 1, price: masterLead.orderValue || 0, gst: '5', hsn: '' }];
       
       let mergedProducts = [...masterProds];
       duplicates.forEach(d => {
         const dProds = d.productList?.length 
           ? d.productList 
-          : [{ name: d.product, qty: 1, price: d.orderValue, gst: '5', hsn: '' }];
+          : [{ name: d.product || 'IndiaMART Enquiry', qty: 1, price: d.orderValue || 0, gst: '5', hsn: '' }];
         mergedProducts = [...mergedProducts, ...dProds];
       });
 
-      // Remove empty or placeholder items
-      mergedProducts = mergedProducts.filter(p => p.name?.trim());
+      // Deduplicate identical product names
+      const uniqueProducts = [];
+      const seenNames = new Set();
+      mergedProducts.forEach(p => {
+        const pName = (p.name || '').trim();
+        if (!pName || pName === 'IndiaMART Enquiry') {
+          if (!seenNames.has('IndiaMART Enquiry')) {
+            uniqueProducts.push(p);
+            seenNames.add('IndiaMART Enquiry');
+          }
+          return;
+        }
+        if (!seenNames.has(pName.toLowerCase())) {
+          uniqueProducts.push(p);
+          seenNames.add(pName.toLowerCase());
+        }
+      });
+
+      const finalProducts = uniqueProducts.length ? uniqueProducts : masterProds;
 
       // 2. Recalculate combined order value
-      const newOrderValue = mergedProducts.reduce((sum, p) => {
+      const newOrderValue = finalProducts.reduce((sum, p) => {
         const base = (parseFloat(p.price) || 0) * (parseFloat(p.qty) || 0);
         const tax = base * ((parseFloat(p.gst) || 0) / 100);
         return sum + base + tax;
@@ -109,7 +137,7 @@ export default function BulkTools() {
       const combinedRemarks = [
         masterLead.remarks,
         ...duplicates.map(d => d.remarks)
-      ].filter(Boolean).join('\n---\n');
+      ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join('\n---\n');
 
       // 4. Combine history logs chronologically
       let combinedHistory = [...(masterLead.history || [])];
@@ -119,22 +147,26 @@ export default function BulkTools() {
       combinedHistory.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
       combinedHistory.push({
         status: masterLead.status,
-        // eslint-disable-next-line react-hooks/purity
         timestamp: Date.now(),
         note: `Merged duplicate leads: ${duplicates.map(d => d.id).join(', ')}`
       });
 
-      // 5. Fallback fields
+      // 5. Choose genuine date
+      const bestDate = (masterLead.date && !masterLead.date.startsWith('2026-08-30') && masterLead.date !== '30-08-2026')
+        ? masterLead.date
+        : (duplicates.find(d => d.date && !d.date.startsWith('2026-08-30') && d.date !== '30-08-2026')?.date || masterLead.date);
+
       const updates = {
-        productList: mergedProducts,
-        product: mergedProducts.map(p => p.name).join(', '),
+        date: bestDate,
+        productList: finalProducts,
+        product: finalProducts.map(p => p.name).join(', '),
         orderValue: parseFloat(newOrderValue.toFixed(2)),
         remarks: combinedRemarks,
         history: combinedHistory,
         city: masterLead.city || duplicates.find(d => d.city)?.city || '',
         state: masterLead.state || duplicates.find(d => d.state)?.state || '',
         gst: masterLead.gst || duplicates.find(d => d.gst)?.gst || '',
-        source: masterLead.source || duplicates.find(d => d.source)?.source || 'Other',
+        source: masterLead.source || duplicates.find(d => d.source)?.source || 'IndiaMART Direct',
       };
 
       // 6. Update master lead
@@ -152,10 +184,41 @@ export default function BulkTools() {
         await deleteLead(d.id);
       }
 
-      showBanner(`✅ Merged duplicate group into ${masterLead.id}!`, 'success');
+      if (prompt) {
+        showBanner(`✅ Merged duplicate group into ${masterLead.id}!`, 'success');
+      }
     } catch (err) {
       console.error(err);
-      showBanner(`❌ Merge failed: ${err.message}`, 'error');
+      if (prompt) {
+        showBanner(`❌ Merge failed: ${err.message}`, 'error');
+      }
+      throw err;
+    }
+  };
+
+  const handleMerge = (contact, group) => mergeSingleGroup(contact, group, true);
+
+  const handleMergeAllDuplicates = async () => {
+    if (!duplicateGroups.length) return;
+    if (!window.confirm(`⚡ Merge all ${duplicateGroups.length} duplicate groups automatically?\n\nThis will combine all product enquiries, preserve genuine dates, update invoices, and remove duplicate entries in 1 click.`)) {
+      return;
+    }
+
+    setIsMergingAll(true);
+    let count = 0;
+    try {
+      for (const { contact, group } of duplicateGroups) {
+        count++;
+        setMergeProgress(`Merging group ${count} of ${duplicateGroups.length} (${contact})...`);
+        await mergeSingleGroup(contact, group, false);
+      }
+      showBanner(`🎉 Successfully merged all ${duplicateGroups.length} duplicate contact groups!`, 'success');
+    } catch (err) {
+      console.error(err);
+      showBanner(`Merge stopped: ${err.message}`, 'error');
+    } finally {
+      setIsMergingAll(false);
+      setMergeProgress('');
     }
   };
 
@@ -450,19 +513,42 @@ export default function BulkTools() {
         </div>
       </div>
 
-      {/* Duplicate Leads Merger */}
+      {/* Duplicate Leads Merger with 1-Click Action */}
       <div className="glass-card" style={{ marginBottom: '1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
-            <h4 style={{ margin: 0, color: 'var(--text-dim)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              🔍 Duplicate Contacts Merger
+            <h4 style={{ margin: 0, color: 'var(--text-dim)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Layers size={16} style={{ color: 'var(--primary)' }} /> 🔍 Duplicate Contacts Merger
             </h4>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 3 }}>
               {duplicateGroups.length > 0
-                ? `Found ${duplicateGroups.length} contact numbers with multiple lead records.`
+                ? `Found ${duplicateGroups.length} contact numbers with multiple duplicate leads.`
                 : 'No duplicate phone numbers found in leads list.'}
             </div>
           </div>
+          {duplicateGroups.length > 0 && (
+            <button 
+              className="btn btn-primary" 
+              onClick={handleMergeAllDuplicates}
+              disabled={isMergingAll}
+              style={{
+                background: 'linear-gradient(135deg,#10b981,#059669)',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '0.84rem',
+                padding: '0.55rem 1.25rem',
+                borderRadius: '0.45rem',
+                boxShadow: '0 4px 14px rgba(16,185,129,0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: isMergingAll ? 'not-allowed' : 'pointer',
+                opacity: isMergingAll ? 0.7 : 1
+              }}
+            >
+              <span>⚡</span> {isMergingAll ? (mergeProgress || 'Merging in progress...') : `Merge All ${duplicateGroups.length} Duplicates in 1 Click`}
+            </button>
+          )}
         </div>
 
         {duplicateGroups.length > 0 && (
@@ -479,6 +565,7 @@ export default function BulkTools() {
                     <button 
                       className="btn btn-primary" 
                       onClick={() => handleMerge(contact, group)}
+                      disabled={isMergingAll}
                       style={{ fontSize: '0.75rem', padding: '0.3rem 0.7rem' }}
                     >
                       Merge into {currentMasterId}

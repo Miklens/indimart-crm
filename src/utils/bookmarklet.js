@@ -1,11 +1,10 @@
 /**
  * Generates the bookmarklet code injected with the user's specific Firebase config
  * Enhanced with:
- * - Infinite Scroll Nudge Engine (re-triggers IndiaMART scroll observers via micro-scroll bounces)
- * - Live Scroll Sync Listener (syncs cards dynamically as you scroll or as the script auto-scrolls)
- * - Exact date parser (20 Jul -> 2026-07-20)
- * - Phone-first deduplication (updates existing lead dates in-place)
- * - Strict dummy name filter & manual lead protection
+ * - IN-PLACE DATE REWRITE ENGINE: Matches existing CRM leads by phone or buyer name and updates their date/timestamp directly in Firestore without deleting any records or breaking invoices.
+ * - Multi-stage scroll & bounce triggers for complete 30-day scans.
+ * - Exact date parser (20 Jul -> 2026-07-20).
+ * - Safe protection for manual leads and invoice-linked leads.
  */
 export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], crmLeads = [], sellerMobile = '') {
   const configStr = JSON.stringify({ ...firebaseConfig, sellerMobile });
@@ -16,7 +15,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     contact: l.contact || '',
     date: l.date || '',
     customerName: l.customerName || '',
-    source: l.source || ''
+    source: l.source || '',
+    status: l.status || '',
+    orderValue: l.orderValue || 0,
+    remarks: l.remarks || '',
+    city: l.city || '',
+    state: l.state || '',
+    history: l.history || []
   }));
   const existingLeadsStr = JSON.stringify(mappedLeads);
   
@@ -47,7 +52,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     var panelHtml = '<div id="sync-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid #334155; cursor:move;">' +
       '<div style="display:flex; align-items:center; gap:8px;">' +
         '<span style="font-size:18px;">🇮🇳</span>' +
-        '<h3 style="margin:0; font-size:15px; color:#10b981; font-weight:700; letter-spacing:-0.01em;">IndiaMART Sync CRM</h3>' +
+        '<h3 style="margin:0; font-size:15px; color:#10b981; font-weight:700; letter-spacing:-0.01em;">IndiaMART Sync & Date Fixer</h3>' +
       '</div>' +
       '<div style="display:flex; align-items:center; gap:6px;">' +
         '<span id="sync-live-badge" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 8px #10b981;"></span>' +
@@ -81,7 +86,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         '<div id="stat-found" style="font-size:14px; font-weight:700; color:#38bdf8;">0</div>' +
       '</div>' +
       '<div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">' +
-        '<div style="font-size:10px; color:#94a3b8;">SYNCED</div>' +
+        '<div style="font-size:10px; color:#94a3b8;">UPDATED/NEW</div>' +
         '<div id="stat-synced" style="font-size:14px; font-weight:700; color:#10b981;">0</div>' +
       '</div>' +
       '<div style="background:#1e293b; padding:8px 4px; border-radius:6px; border:1px solid #334155;">' +
@@ -211,11 +216,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
         }
       }
 
-      if (distinctCards.length > 0) {
-        return distinctCards;
-      }
-
-      return [];
+      return distinctCards;
     }
 
     function scrollAllLeftToTop() {
@@ -233,7 +234,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
     }
 
     function triggerSidebarScrollDown(lastCard, pixels) {
-      var px = pixels || 550;
+      var px = pixels || 600;
       
       if (lastCard && typeof lastCard.scrollIntoView === 'function') {
         lastCard.scrollIntoView({ block: 'start', behavior: 'instant' });
@@ -433,14 +434,14 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       var btn = document.getElementById('start-sync-btn');
       btn.disabled = true;
       btn.style.opacity = '0.7';
-      btn.innerHTML = '<span>⏳</span> Syncing Leads...';
+      btn.innerHTML = '<span>⏳</span> Rewriting Dates & Syncing...';
 
       var statusDiv = document.getElementById('sync-status');
       var statsGrid = document.getElementById('sync-stats-grid');
       var progBarContainer = document.getElementById('sync-progress-bar-container');
       var progBar = document.getElementById('sync-progress-bar');
       
-      if (statusDiv) { statusDiv.style.display = 'block'; statusDiv.innerHTML = '<span style="color:#38bdf8;">[INIT] Starting IndiaMART Sync Engine...</span><br>'; }
+      if (statusDiv) { statusDiv.style.display = 'block'; statusDiv.innerHTML = '<span style="color:#38bdf8;">[INIT] Starting In-Place Date Correction Engine...</span><br>'; }
       if (statsGrid) { statsGrid.style.display = 'grid'; }
       if (progBarContainer) { progBarContainer.style.display = 'block'; }
 
@@ -458,13 +459,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
       var foundCards = findContactCards();
       
       if (foundCards.length === 0) {
-        if (statusDiv) { statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ No contact cards detected yet. Waiting 2s for page elements to load...</span><br>'; }
+        if (statusDiv) { statusDiv.innerHTML += '<span style="color:#ef4444;">⚠️ Waiting for contact list...</span><br>'; }
         await new Promise(function(r) { setTimeout(r, 2000); });
         foundCards = findContactCards();
       }
 
       if (foundCards.length === 0) {
-        if (statusDiv) { statusDiv.innerHTML += '<span style="color:#ef4444; font-weight:700;">❌ No contact cards found. Please ensure you are on IndiaMART Message Centre (seller.indiamart.com/messagecentre).</span><br>'; }
+        if (statusDiv) { statusDiv.innerHTML += '<span style="color:#ef4444; font-weight:700;">❌ No contact cards found. Please ensure you are on IndiaMART Message Centre.</span><br>'; }
         btn.disabled = false;
         btn.style.opacity = '1';
         btn.innerHTML = '<span>⚡</span> Retry Scan';
@@ -503,7 +504,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             }
           }
 
-          /* Clean up system phrases */
           if (customerName.toLowerCase().startsWith('contact added')) {
             var altName = lines.find(function(l) {
               var low = l.toLowerCase();
@@ -513,7 +513,6 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             else { customerName = 'IndiaMART Buyer'; }
           }
 
-          /* Ignore chat date bubble headers */
           if (/^(january|february|march|april|may|june|july|august|september|october|november|december)\\s+\\d{1,2}/i.test(customerName) ||
               /^\\d{1,2}\\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(customerName)) {
             continue;
@@ -532,14 +531,13 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
           setStat('stat-found', processedUniqueKeys.size);
 
-          /* Check date bounds */
           if (startLimit && leadDate < startLimit) {
             consecutiveOlderCount++;
             skippedCount++;
             setStat('stat-skipped', skippedCount);
             if (consecutiveOlderCount >= 20) {
               reachedDateLimit = true;
-              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached Start Date cutoff (' + formattedDate + ' is older than ' + startDateVal + '). Completed scan.</span><br>'; }
+              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#eab308;">[STOP] Reached 30-Day limit (' + formattedDate + ' is older than ' + startDateVal + ').</span><br>'; }
               break;
             }
             continue;
@@ -631,28 +629,31 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             syncStatus = 'New Enquiry';
           }
 
-          /* Phone-first deduplication */
+          /* Match existing lead: by phone number first, or if phone is 0000000000 by buyer name */
           var existing = existingLeads.find(function(l) { 
-            return l.contact === contact && contact !== '0000000000' && (l.source === 'IndiaMART Direct' || !l.source); 
+            if (contact && contact !== '0000000000' && l.contact === contact) return true;
+            if (l.customerName && customerName && l.customerName.toLowerCase() === customerName.toLowerCase()) return true;
+            return false;
           });
           var docId = existing ? existing.id : 'IM' + String(nextIdNum++).padStart(3, '0');
 
+          /* IN-PLACE REWRITE: If lead already exists, preserve all user edits and invoices, but rewrite DATE and TIMESTAMP! */
           var leadPayload = { 
             id: docId, 
             date: formattedDate, 
-            customerName: customerName, 
-            contact: contact, 
+            customerName: existing ? existing.customerName : customerName, 
+            contact: (contact && contact !== '0000000000') ? contact : (existing ? existing.contact : contact), 
             product: displayProduct, 
-            status: syncStatus, 
-            followUpDate: '', 
-            orderValue: productPrice, 
-            remarks: '', 
-            state: state, 
-            city: city, 
-            source: 'IndiaMART Direct', 
+            status: (existing && existing.status) ? existing.status : syncStatus, 
+            followUpDate: existing ? (existing.followUpDate || '') : '', 
+            orderValue: (existing && existing.orderValue > 0) ? existing.orderValue : productPrice, 
+            remarks: existing ? (existing.remarks || '') : '', 
+            state: state || (existing ? existing.state : '') || '', 
+            city: city || (existing ? existing.city : '') || '', 
+            source: existing ? (existing.source || 'IndiaMART Direct') : 'IndiaMART Direct', 
             timestamp: leadDate.getTime(), 
             productList: [{ name: displayProduct, qty: 1, price: productPrice, gst: productGst, hsn: productHsn }], 
-            history: [{ status: syncStatus, timestamp: Date.now() }] 
+            history: (existing && existing.history && existing.history.length) ? existing.history : [{ status: syncStatus, timestamp: Date.now() }] 
           };
 
           var firestoreFields = {};
@@ -694,11 +695,12 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
             if (response.ok) {
               syncedCount++;
               setStat('stat-synced', syncedCount);
-              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#10b981;">[SYNCED] ' + customerName + ' (' + contact + ') — ' + displayProduct + ' (' + formattedDate + ')</span><br>'; }
+              var actionTag = existing ? '[DATE REWRITTEN]' : '[NEW LEAD]';
+              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#10b981;">' + actionTag + ' ' + customerName + ' (' + docId + ') ➔ ' + formattedDate + '</span><br>'; }
             } else {
               errorCount++;
               setStat('stat-failed', errorCount);
-              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#f43f5e;">[FAIL] Upload rejected for ' + customerName + '</span><br>'; }
+              if (statusDiv) { statusDiv.innerHTML += '<span style="color:#f43f5e;">[FAIL] Update rejected for ' + customerName + '</span><br>'; }
             }
           } catch (err) {
             errorCount++;
@@ -732,7 +734,7 @@ export function generateBookmarkletCode(firebaseConfig, catalogProducts = [], cr
 
       if (progBar) { progBar.style.width = '100%'; }
       if (statusDiv) {
-        statusDiv.innerHTML += '<br><strong style="color:#10b981; font-size:12px;">🎉 Sync Completed!</strong><br><span style="color:#cbd5e1;">Total Discovered: ' + processedUniqueKeys.size + ' | Synced: ' + syncedCount + ' | Skipped: ' + skippedCount + ' | Failed: ' + errorCount + '</span>';
+        statusDiv.innerHTML += '<br><strong style="color:#10b981; font-size:12px;">🎉 Dates Rewritten & Sync Completed!</strong><br><span style="color:#cbd5e1;">Total Scanned: ' + processedUniqueKeys.size + ' | Updated/Synced: ' + syncedCount + ' | Skipped: ' + skippedCount + ' | Failed: ' + errorCount + '</span>';
         statusDiv.scrollTop = statusDiv.scrollHeight;
       }
 

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, Link, X } from 'lucide-react';
+import { Plus, Search, Eye, FileText, Edit3, Trash2, MessageCircle, Filter, Upload, FolderPlus, Link, X, LayoutGrid, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAppUI } from '../context/AppUIContext';
 import { DATA_CONFIG, normalizeDisplayDate } from '../utils/dataConfig';
@@ -7,7 +7,6 @@ import LeadModal from '../components/LeadModal';
 import LeadDetails from '../components/LeadDetails';
 import ProductPicker from '../components/ProductPicker';
 import InvoiceModal from '../components/InvoiceModal';
-
 
 export default function Leads() {
   const { leads, invoiceHistory, updateLeadStatus, updateLead, deleteLead, addLead, showBanner, products, addProduct, companySettings, saveSettings } = useApp();
@@ -35,6 +34,20 @@ export default function Leads() {
   const [quickAddProduct, setQuickAddProduct] = useState(null);
   const [linkProductContext, setLinkProductContext] = useState(null);
   const csvRef = useRef(null);
+
+  const getAvatarColor = (name) => {
+    const colors = [
+      'linear-gradient(135deg, #10b981, #059669)',
+      'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+      'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+      'linear-gradient(135deg, #f59e0b, #b45309)',
+      'linear-gradient(135deg, #ec4899, #be185d)',
+      'linear-gradient(135deg, #06b6d4, #0e7490)'
+    ];
+    let hash = 0;
+    for (let i = 0; i < (name || '').length; i++) hash += name.charCodeAt(i);
+    return colors[hash % colors.length];
+  };
 
   const handleQuickAddProduct = (name, price = 0, hsn = '', gst = '5') => {
     setQuickAddProduct({ name, price, hsn, gst });
@@ -118,8 +131,7 @@ export default function Leads() {
           customerName: row.customername || row['customer name'] || '',
           contact: row.contact || row.mobile || row.phone || '',
           product: row.product || '',
-          city: row.city || '',
-          state: row.state || '',
+          city: row.city || '', state: row.state || '',
           date: row.date || new Date().toISOString().split('T')[0],
           status: row.status || 'New Enquiry',
           source: row.source || 'Other',
@@ -137,7 +149,6 @@ export default function Leads() {
     reader.readAsText(file);
   };
 
-  // Phone/contact normalizer
   const normC = (raw) => {
     if (!raw) return '';
     const d = String(raw).replace(/\D/g, '');
@@ -145,7 +156,6 @@ export default function Leads() {
     return d.slice(-10);
   };
 
-  // Precalculate lead counts per contact for Repeat Customer badges
   const leadCountsByContact = {};
   leads.forEach(l => {
     const key = normC(l.contact) || l.customerName?.trim();
@@ -206,67 +216,89 @@ export default function Leads() {
 
   const payColor = (ps) => ps === 'Paid' ? '#10b981' : ps === 'Partial' ? '#f59e0b' : '#ef4444';
 
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
+  const [viewMode, setViewMode] = useState('list');
 
   if (detailsLeadId) return <LeadDetails leadId={detailsLeadId} onBack={() => setDetailsLeadId(null)} onEdit={openEdit} />;
 
   return (
     <div className="page-section">
       <div className="section-header">
-        <h2 className="section-title">Leads Tracker</h2>
+        <div>
+          <h2 className="section-title">👥 Leads Tracker</h2>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+            Showing {Math.min(visibleCount, filtered.length)} of {filtered.length} leads
+          </span>
+        </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ display: 'flex', background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.4rem', padding: 2, marginRight: '0.5rem' }}>
+          {/* View switcher (Groww style) */}
+          <div style={{ display: 'flex', background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.6rem', padding: 3, marginRight: '0.5rem' }}>
             <button 
               className={`btn ${viewMode === 'list' ? 'btn-primary' : 'btn-secondary'}`} 
               onClick={() => setViewMode('list')} 
-              style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem', border: 'none', minWidth: 60 }}
+              style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem', border: 'none', minHeight: 32, borderRadius: '0.45rem', display: 'flex', alignItems: 'center', gap: 4 }}
             >
-              List
+              <List size={13} /> List
             </button>
             <button 
               className={`btn ${viewMode === 'kanban' ? 'btn-primary' : 'btn-secondary'}`} 
               onClick={() => setViewMode('kanban')} 
-              style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem', border: 'none', minWidth: 60 }}
+              style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem', border: 'none', minHeight: 32, borderRadius: '0.45rem', display: 'flex', alignItems: 'center', gap: 4 }}
             >
-              Kanban
+              <LayoutGrid size={13} /> Kanban
             </button>
           </div>
           <input ref={csvRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImportCSV} />
-          <button className="btn btn-secondary" onClick={() => csvRef.current?.click()}><Upload size={14} /> Import CSV</button>
-          <button className="btn btn-primary" onClick={openAdd}><Plus size={14} /> New Lead</button>
+          <button className="btn btn-secondary" onClick={() => csvRef.current?.click()} style={{ fontSize: '0.82rem' }}>
+            <Upload size={14} /> Import CSV
+          </button>
+          <button className="btn btn-primary" onClick={openAdd} style={{ fontSize: '0.82rem' }}>
+            <Plus size={15} /> New Lead
+          </button>
         </div>
       </div>
 
-      {/* Tabs with live counts */}
+      {/* Tabs with pill counts (Blinkit/Zepto style) */}
       <div className="tabs">
         {[
-          { id: 'all', label: 'All', count: leads.length },
+          { id: 'all', label: 'All Leads', count: leads.length },
           { id: 'payment', label: 'Pending Payment', count: unpaidBilledLeadIds.size },
           { id: 'dispatch', label: 'In Transit', count: leads.filter(l => l.status === 'Material Dispatched').length },
           { id: 'delivered', label: 'Delivered', count: leads.filter(l => l.status === 'Material Reached').length },
         ].map(t => (
           <button key={t.id} className={`tab-btn ${activeTab === t.id ? 'active' : ''}`} onClick={() => setActiveTab(t.id)}>
             {t.label}
-            {t.count > 0 && <span style={{ marginLeft: 5, background: activeTab === t.id ? 'rgba(255,255,255,0.25)' : 'var(--primary-light)', color: activeTab === t.id ? '#fff' : 'var(--primary)', borderRadius: 999, padding: '0 5px', fontSize: '0.65rem', fontWeight: 700 }}>{t.count}</span>}
+            {t.count > 0 && (
+              <span style={{ 
+                marginLeft: 6, 
+                background: activeTab === t.id ? 'rgba(255,255,255,0.25)' : 'var(--primary-light)', 
+                color: activeTab === t.id ? '#fff' : 'var(--primary)', 
+                borderRadius: 999, 
+                padding: '1px 6px', 
+                fontSize: '0.68rem', 
+                fontWeight: 800 
+              }}>
+                {t.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {/* Search & Filter */}
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
-          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search leads..." style={{ paddingLeft: '2rem' }} />
+      {/* Search & Filter bar */}
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+          <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by customer, product, phone or ID..." style={{ paddingLeft: '2.25rem' }} />
         </div>
-        <div style={{ position: 'relative', minWidth: 160 }}>
-          <Filter size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)', zIndex: 1 }} />
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ paddingLeft: '2rem' }}>
+        <div style={{ position: 'relative', minWidth: 170 }}>
+          <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)', zIndex: 1 }} />
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ paddingLeft: '2.25rem' }}>
             {STATUS_FILTERS.map(opt => (
               <option key={opt.id} value={opt.id}>{opt.label}</option>
             ))}
           </select>
         </div>
-        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ minWidth: 140 }}>
+        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ minWidth: 150 }}>
           <option value="all">All Sources</option>
           {DATA_CONFIG.sources.map(s => <option key={s}>{s}</option>)}
         </select>
@@ -279,51 +311,78 @@ export default function Leads() {
             <table>
               <thead>
                 <tr>
-                  <th>ID</th><th>Date</th><th>Customer</th><th>Product</th>
-                  <th>Dispatch</th><th>Status</th><th>Value (₹)</th><th>Follow-up</th><th>Remarks</th><th>Actions</th>
+                  <th style={{ width: 80 }}>ID</th>
+                  <th style={{ width: 110 }}>Date</th>
+                  <th>Customer</th>
+                  <th>Product Enquiry</th>
+                  <th>Dispatch</th>
+                  <th>Status</th>
+                  <th>Value</th>
+                  <th>Follow-up</th>
+                  <th>Remarks</th>
+                  <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 && (
-                  <tr><td colSpan={10} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-dim)' }}>No leads found</td></tr>
+                  <tr><td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-dim)' }}>No leads matching your filters</td></tr>
                 )}
                 {filtered.slice(0, visibleCount).map(lead => (
                   <tr key={lead.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{lead.id}</td>
-                    <td style={{ whiteSpace: 'nowrap', fontSize: '0.78rem' }}>{normalizeDisplayDate(lead.date)}</td>
+                    <td style={{ fontWeight: 800, color: 'var(--primary)' }}>{lead.id}</td>
+                    <td style={{ whiteSpace: 'nowrap', fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 600 }}>
+                      {normalizeDisplayDate(lead.date)}
+                    </td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}
-                          onClick={() => openCustomer360({ name: lead.customerName, contact: lead.contact, city: lead.city })}
-                          title="View Customer 360">
-                          {lead.customerName}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        <div style={{
+                          width: 32, height: 32, borderRadius: '50%',
+                          background: getAvatarColor(lead.customerName),
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontWeight: 800, fontSize: '0.78rem', flexShrink: 0,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                        }}>
+                          {(lead.customerName || 'U')[0].toUpperCase()}
                         </div>
-                        {(() => {
-                          const key = normC(lead.contact) || lead.customerName?.trim();
-                          const count = leadCountsByContact[key] || 1;
-                          if (count > 1) {
-                            return (
-                              <span style={{ fontSize: '0.62rem', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', padding: '1px 5px', borderRadius: 4, fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}>
-                                Repeat ({count})
-                              </span>
-                            );
-                          }
-                          return null;
-                        })()}
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            <span 
+                              style={{ fontWeight: 700, color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.88rem' }}
+                              onClick={() => openCustomer360({ name: lead.customerName, contact: lead.contact, city: lead.city })}
+                              title="Open Customer 360"
+                            >
+                              {lead.customerName}
+                            </span>
+                            {(() => {
+                              const key = normC(lead.contact) || lead.customerName?.trim();
+                              const count = leadCountsByContact[key] || 1;
+                              if (count > 1) {
+                                return (
+                                  <span style={{ fontSize: '0.62rem', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', padding: '1px 6px', borderRadius: 999, fontWeight: 800, border: '1px solid rgba(59,130,246,0.3)' }}>
+                                    Repeat ({count})
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 1 }}>
+                            {lead.contact}{lead.city ? ` • ${lead.city}` : ''}
+                          </div>
+                        </div>
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{lead.contact}{lead.city ? ` | ${lead.city}` : ''}</div>
                     </td>
                     <td>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{lead.product}</span>
+                          <span style={{ fontWeight: 600, fontSize: '0.84rem' }}>{lead.product}</span>
                           {!lead.linkedProduct && !lead.productList?.length && lead.product && (
                             <div style={{ display: 'flex', gap: '0.2rem' }}>
                               {!products.some(p => p.name === lead.product.trim()) && (
                                 <button 
                                   type="button"
                                   className="btn-icon" 
-                                  style={{ color: '#34a853', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                                  style={{ color: '#10b981', padding: 2, minWidth: 24, minHeight: 24 }} 
                                   title="Add to Product Catalog"
                                   onClick={() => handleQuickAddProduct(lead.product)}
                                 >
@@ -333,7 +392,7 @@ export default function Leads() {
                               <button 
                                 type="button"
                                 className="btn-icon" 
-                                style={{ color: '#3b82f6', padding: 2, display: 'inline-flex', alignItems: 'center' }} 
+                                style={{ color: '#3b82f6', padding: 2, minWidth: 24, minHeight: 24 }} 
                                 title="Link to Catalog Product"
                                 onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
                               >
@@ -344,11 +403,11 @@ export default function Leads() {
                         </div>
                         {lead.linkedProduct && (
                           <div style={{ fontSize: '0.7rem', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
-                            <span>Linked to: <strong>{lead.linkedProduct}</strong></span>
+                            <span>Linked: <strong>{lead.linkedProduct}</strong></span>
                             <button 
                               type="button"
                               className="btn-icon" 
-                              style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                              style={{ color: '#3b82f6', padding: 1, minWidth: 20, minHeight: 20 }} 
                               title="Change mapping"
                               onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: -1, currentName: lead.product })}
                             >
@@ -357,7 +416,7 @@ export default function Leads() {
                             <button 
                               type="button"
                               className="btn-icon" 
-                              style={{ color: '#ef4444', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
+                              style={{ color: '#ef4444', padding: 1, minWidth: 20, minHeight: 20 }} 
                               title="Remove mapping"
                               onClick={() => handleUnlinkProduct(lead.id, -1)}
                             >
@@ -366,68 +425,6 @@ export default function Leads() {
                           </div>
                         )}
                       </div>
-                      {lead.productList?.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-                          {lead.productList.map((item, idx) => {
-                            const isLinked = !!item.linkedProduct;
-                            const inCatalog = isLinked || products.some(p => p.name === item.name);
-                            return (
-                              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                  <span>• {item.name} ({item.qty} × ₹{item.price})</span>
-                                  {!isLinked && (
-                                    <div style={{ display: 'flex', gap: '0.2rem' }}>
-                                      {!inCatalog && (
-                                        <button 
-                                          type="button"
-                                          className="btn-icon" 
-                                          style={{ color: '#34a853', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                          title="Add to Product Catalog"
-                                          onClick={() => handleQuickAddProduct(item.name, item.price, item.hsn, item.gst)}
-                                        >
-                                          <FolderPlus size={11} />
-                                        </button>
-                                      )}
-                                      <button 
-                                        type="button"
-                                        className="btn-icon" 
-                                        style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                        title="Link to Catalog Product"
-                                        onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: idx, currentName: item.name })}
-                                      >
-                                        <Link size={11} />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                                {isLinked && (
-                                  <div style={{ fontSize: '0.68rem', color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.25rem', paddingLeft: '0.6rem' }}>
-                                    <span>Linked to: <strong>{item.linkedProduct}</strong></span>
-                                    <button 
-                                      type="button"
-                                      className="btn-icon" 
-                                      style={{ color: '#3b82f6', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                      title="Change mapping"
-                                      onClick={() => setLinkProductContext({ leadId: lead.id, itemIdx: idx, currentName: item.name })}
-                                    >
-                                      <Link size={10} />
-                                    </button>
-                                    <button 
-                                      type="button"
-                                      className="btn-icon" 
-                                      style={{ color: '#ef4444', padding: 1, display: 'inline-flex', alignItems: 'center' }} 
-                                      title="Remove mapping"
-                                      onClick={() => handleUnlinkProduct(lead.id, idx)}
-                                    >
-                                      <X size={10} />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
                     </td>
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 110 }}>
@@ -446,7 +443,7 @@ export default function Leads() {
                       </div>
                     </td>
                     <td>
-                      <div style={{ minWidth: 155 }}>
+                      <div style={{ minWidth: 145 }}>
                         {(() => {
                           const simpleStatus = DATA_CONFIG.getSimpleStatusLabel(lead.status);
                           return (
@@ -461,53 +458,48 @@ export default function Leads() {
                             </select>
                           );
                         })()}
-                        <div style={{ fontSize: '0.68rem', color: payColor(lead.paymentStatus), marginTop: 3 }}>● {lead.paymentStatus || 'Pending'}</div>
-                        {DATA_CONFIG.getLostStatusLabels().includes(lead.status) || DATA_CONFIG.getSimpleStatusLabel(lead.status) === 'Lost' ? (
-                          <input className="table-inline-input"
-                            key={lead.id + '-lr-' + (lead.lostReason || '')}
-                            defaultValue={lead.lostReason || ''} placeholder="Lost reason"
-                            onBlur={e => { if (e.target.value !== (lead.lostReason || '')) updateLead(lead.id, { lostReason: e.target.value }); }}
-                            style={{ marginTop: 3, background: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.2)' }} />
-                        ) : null}
+                        <div style={{ fontSize: '0.7rem', color: payColor(lead.paymentStatus), marginTop: 3, fontWeight: 700 }}>
+                          ● {lead.paymentStatus || 'Pending'}
+                        </div>
                       </div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.4rem', padding: '0 0.35rem', minWidth: 100 }}>
-                        <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>₹</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-input)', border: '1px solid var(--glass-border)', borderRadius: '0.5rem', padding: '0 0.4rem', minWidth: 100 }}>
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem', fontWeight: 600 }}>₹</span>
                         <input type="number" className="table-inline-input"
                           key={lead.id + '-val-' + lead.orderValue}
                           defaultValue={lead.orderValue || 0}
                           onBlur={e => updateLead(lead.id, { orderValue: parseFloat(e.target.value) || 0 })}
-                          style={{ border: 'none', padding: '0.3rem 0', background: 'transparent', fontWeight: 600, textAlign: 'right' }} />
+                          style={{ border: 'none', padding: '0.35rem 0', background: 'transparent', fontWeight: 700, textAlign: 'right' }} />
                       </div>
                     </td>
                     <td style={{ minWidth: 120 }}>
                       <input type="date" className="table-inline-input" value={lead.followUpDate || ''}
                         onChange={e => updateLead(lead.id, { followUpDate: e.target.value })}
-                        style={{ fontSize: '0.72rem', color: lead.followUpDate && lead.followUpDate < new Date().toISOString().split('T')[0] ? '#ef4444' : undefined }} />
+                        style={{ fontSize: '0.75rem', color: lead.followUpDate && lead.followUpDate < new Date().toISOString().split('T')[0] ? '#ef4444' : undefined, fontWeight: 600 }} />
                     </td>
                     <td style={{ maxWidth: 180 }}>
                       <input className="table-inline-input"
                         key={lead.id + '-rem-' + (lead.remarks || '').slice(0,10)}
-                        defaultValue={lead.remarks || ''} placeholder="Remarks"
+                        defaultValue={lead.remarks || ''} placeholder="Remarks..."
                         onBlur={e => { if (e.target.value !== (lead.remarks || '')) updateLead(lead.id, { remarks: e.target.value }); }} />
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
                         <button className="btn-icon" style={{ color: '#25d366' }} title="WhatsApp" onClick={() => window.open(`https://wa.me/91${lead.contact}`)}>
-                          <MessageCircle size={14} />
+                          <MessageCircle size={15} />
                         </button>
-                        <button className="btn-icon" style={{ color: '#3b82f6' }} title="View" onClick={() => setDetailsLeadId(lead.id)}>
-                          <Eye size={14} />
+                        <button className="btn-icon" style={{ color: '#38bdf8' }} title="View Details" onClick={() => setDetailsLeadId(lead.id)}>
+                          <Eye size={15} />
                         </button>
-                        <button className="btn-icon" style={{ color: 'var(--primary)' }} title="Edit" onClick={() => openEdit(lead.id)}>
-                          <Edit3 size={14} />
+                        <button className="btn-icon" style={{ color: 'var(--primary)' }} title="Edit Lead" onClick={() => openEdit(lead.id)}>
+                          <Edit3 size={15} />
                         </button>
-                        <button className="btn-icon" style={{ color: '#f59e0b' }} title="Generate Invoice" onClick={() => handleInvoiceClick(lead)}>
-                          <FileText size={14} />
+                        <button className="btn-icon" style={{ color: '#f59e0b' }} title="Create Invoice" onClick={() => handleInvoiceClick(lead)}>
+                          <FileText size={15} />
                         </button>
-                        <button className="btn-icon" style={{ color: '#ef4444' }} title="Delete" onClick={() => handleDelete(lead.id)}>
-                          <Trash2 size={14} />
+                        <button className="btn-icon" style={{ color: '#ef4444' }} title="Delete Lead" onClick={() => handleDelete(lead.id)}>
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </td>
@@ -518,52 +510,42 @@ export default function Leads() {
           </div>
 
           {filtered.length > visibleCount && (
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem' }}>
-              <button className="btn btn-secondary" onClick={() => setVisibleCount(prev => prev + 50)}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.75rem' }}>
+              <button className="btn btn-secondary" onClick={() => setVisibleCount(prev => prev + 50)} style={{ padding: '0.65rem 1.5rem', fontSize: '0.85rem' }}>
                 Load More Leads ({filtered.length - visibleCount} remaining)
               </button>
             </div>
           )}
         </>
       ) : (
-        /* Kanban View */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginTop: '1rem', alignItems: 'flex-start' }}>
+        /* Kanban View (Groww / Zepto boards) */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem', marginTop: '1rem', alignItems: 'flex-start' }}>
           {STATUS_OPTIONS.map(col => {
             const colLeads = filtered.filter(l => DATA_CONFIG.getSimpleStatusLabel(l.status) === col.value);
             return (
-              <div key={col.value} style={{ background: 'var(--bg-card)', borderRadius: '0.6rem', border: '1px solid var(--glass-border)', padding: '0.75rem', minHeight: '60vh' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', paddingBottom: '0.5rem', borderBottom: '2px solid ' + DATA_CONFIG.getStatusColor(col.value) }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{col.label}</span>
-                  <span style={{ fontSize: '0.72rem', background: 'var(--bg-input)', padding: '2px 6px', borderRadius: 999, fontWeight: 700, color: 'var(--text-dim)' }}>{colLeads.length}</span>
+              <div key={col.value} style={{ background: 'var(--bg-card)', borderRadius: '1rem', border: '1px solid var(--glass-border)', padding: '1rem', minHeight: '60vh', boxShadow: 'var(--shadow-card)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.6rem', borderBottom: '2px solid ' + DATA_CONFIG.getStatusColor(col.value) }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.9rem' }}>{col.label}</span>
+                  <span style={{ fontSize: '0.72rem', background: 'var(--bg-input)', padding: '2px 8px', borderRadius: 999, fontWeight: 800, color: 'var(--text-dim)' }}>{colLeads.length}</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {colLeads.length === 0 && <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textAlign: 'center', padding: '1rem' }}>No leads here</div>}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {colLeads.length === 0 && <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', textAlign: 'center', padding: '1.5rem 0' }}>No leads here</div>}
                   {colLeads.map(lead => (
                     <div 
                       key={lead.id} 
                       className="glass-card" 
-                      style={{ padding: '0.75rem', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', borderLeft: '3px solid ' + DATA_CONFIG.getStatusColor(lead.status), cursor: 'pointer' }}
+                      style={{ padding: '0.9rem', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: '3px solid ' + DATA_CONFIG.getStatusColor(lead.status), cursor: 'pointer' }}
                       onClick={() => setDetailsLeadId(lead.id)}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
                         <span style={{ color: 'var(--primary)' }}>{lead.id}</span>
                         <span>₹{(lead.orderValue || 0).toLocaleString()}</span>
                       </div>
-                      <div style={{ fontWeight: 600 }}>{lead.customerName}</div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{lead.product || '—'}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 4 }}>
-                        <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>{normalizeDisplayDate(lead.date)}</span>
-                        <div style={{ display: 'flex', gap: '0.2rem' }} onClick={e => e.stopPropagation()}>
-                          <button className="btn-icon" style={{ color: '#25d366', padding: 2 }} title="WhatsApp" onClick={() => window.open(`https://wa.me/91${lead.contact}`)}>
-                            <MessageCircle size={12} />
-                          </button>
-                          <button className="btn-icon" style={{ color: '#f59e0b', padding: 2 }} title="Invoice" onClick={() => handleInvoiceClick(lead)}>
-                            <FileText size={12} />
-                          </button>
-                          <button className="btn-icon" style={{ color: 'var(--primary)', padding: 2 }} title="Edit" onClick={() => openEdit(lead.id)}>
-                            <Edit3 size={12} />
-                          </button>
-                        </div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{lead.customerName}</div>
+                      <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>{lead.product}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--glass-border)', fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                        <span>{normalizeDisplayDate(lead.date)}</span>
+                        <span>{lead.city || 'Direct'}</span>
                       </div>
                     </div>
                   ))}
@@ -574,212 +556,16 @@ export default function Leads() {
         </div>
       )}
 
-      {showModal && <LeadModal leadId={modalLeadId} onClose={() => setShowModal(false)} />}
-      {pickerLead && <ProductPicker lead={pickerLead} onConfirm={handlePickerConfirm} onClose={() => setPickerLead(null)} />}
+      {/* Modals */}
+      {showModal && (
+        <LeadModal leadId={modalLeadId} onClose={() => setShowModal(false)} />
+      )}
+      {pickerLead && (
+        <ProductPicker lead={pickerLead} onClose={() => setPickerLead(null)} onConfirm={handlePickerConfirm} />
+      )}
       {invoiceLead && (
-        <InvoiceModal
-          leadId={invoiceLead.id}
-          invoice={null}
-          initialItems={invoiceItems}
-          onClose={() => { setInvoiceLead(null); setInvoiceItems(null); }}
-        />
+        <InvoiceModal lead={invoiceLead} initialProducts={invoiceItems} onClose={() => { setInvoiceLead(null); setInvoiceItems(null); }} />
       )}
-      {quickAddProduct && (
-        <QuickProductModal
-          productName={quickAddProduct.name}
-          initialPrice={quickAddProduct.price}
-          initialHsn={quickAddProduct.hsn}
-          initialGst={quickAddProduct.gst}
-          companySettings={companySettings}
-          onClose={() => setQuickAddProduct(null)}
-          onSave={handleQuickAddSave}
-        />
-      )}
-      {linkProductContext && (
-        <LinkProductModal
-          context={linkProductContext}
-          products={products}
-          onClose={() => setLinkProductContext(null)}
-          onSave={handleLinkProductConfirm}
-        />
-      )}
-    </div>
-  );
-}
-
-const CATEGORIES = [
-  'Biofertilizers', 'Biopesticides', 'Biostimulants', 'Humic Acid', 
-  'Fulvic Acids', 'Chemical Pesticides', 'Herbicides', 'Micronutrients', 'Macronutrients'
-];
-
-function QuickProductModal({ productName, initialPrice, initialHsn, initialGst, onClose, onSave, companySettings }) {
-  const [form, setForm] = useState({ 
-    name: productName || '', 
-    price: initialPrice || '', 
-    hsn: initialHsn || '', 
-    gst: initialGst || '5',
-    category: '' 
-  });
-  const [showCustomInput, setShowCustomInput] = useState(false);
-  const [customCategoryName, setCustomCategoryName] = useState('');
-
-  const allCategories = [
-    ...CATEGORIES,
-    ...(companySettings?.customCategories || [])
-  ];
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const finalCategory = showCustomInput ? customCategoryName.trim() : form.category;
-    onSave({ 
-      ...form, 
-      category: finalCategory,
-      price: parseFloat(form.price) || 0 
-    }, showCustomInput ? finalCategory : null);
-  };
-
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-content" style={{ maxWidth: 400 }}>
-        <div className="modal-header">
-          <h2>Add to Product Catalog</h2>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Product Name</label>
-            <input value={form.name} disabled style={{ opacity: 0.7 }} />
-          </div>
-          
-          <div className="form-group">
-            <label>Category / Group (Optional)</label>
-            <select 
-              value={showCustomInput ? '__custom__' : form.category} 
-              onChange={e => {
-                if (e.target.value === '__custom__') {
-                  setShowCustomInput(true);
-                  setForm(f => ({ ...f, category: '' }));
-                } else {
-                  setShowCustomInput(false);
-                  setForm(f => ({ ...f, category: e.target.value }));
-                }
-              }}
-            >
-              <option value="">Select category (optional)...</option>
-              {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
-              <option value="__custom__" style={{ fontWeight: 'bold', color: 'var(--primary)' }}>+ Add Custom Category...</option>
-            </select>
-          </div>
-
-          {showCustomInput && (
-            <div className="form-group" style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: '0.4rem', border: '1px solid var(--glass-border)' }}>
-              <label style={{ fontSize: '0.72rem' }}>Custom Category Name</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input 
-                  value={customCategoryName} 
-                  onChange={e => setCustomCategoryName(e.target.value)} 
-                  placeholder="e.g. Organic Soil"
-                  required
-                  style={{ flex: 1 }}
-                />
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  onClick={() => {
-                    setShowCustomInput(false);
-                    setCustomCategoryName('');
-                  }}
-                  style={{ padding: '0 0.75rem', fontSize: '0.75rem' }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="form-row">
-            <div className="form-group"><label>Price (₹) (Optional)</label><input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} min="0" step="any" /></div>
-            <div className="form-group"><label>HSN Code (Optional)</label><input value={form.hsn} onChange={e => setForm(f => ({ ...f, hsn: e.target.value }))} /></div>
-          </div>
-          
-          <div className="form-group"><label>GST % (Optional)</label>
-            <select value={form.gst} onChange={e => setForm(f => ({ ...f, gst: e.target.value }))}>
-              {['0','5','12','18','28'].map(g => <option key={g} value={g}>{g}%</option>)}
-            </select>
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Add Product</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function LinkProductModal({ context, products, onClose, onSave }) {
-  const [search, setSearch] = useState('');
-  const filtered = products.filter(p => 
-    p.name?.toLowerCase().includes(search.toLowerCase()) || 
-    p.category?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-content" style={{ maxWidth: 420 }}>
-        <div className="modal-header">
-          <h2>Map to Catalog Product</h2>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
-        </div>
-        <div style={{ padding: '0.25rem 0' }}>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.75rem' }}>
-            Map enquiry product <strong>"{context.currentName}"</strong> to one of your catalog products below:
-          </p>
-          <div style={{ position: 'relative', marginBottom: '1rem' }}>
-            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-            <input 
-              value={search} 
-              onChange={e => setSearch(e.target.value)} 
-              placeholder="Search catalog products..." 
-              style={{ paddingLeft: '2rem', width: '100%', boxSizing: 'border-box' }} 
-            />
-          </div>
-          <div style={{ maxHeight: 250, overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '0.4rem', background: 'var(--bg-input)' }}>
-            {filtered.length === 0 ? (
-              <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.85rem' }}>No catalog products found.</div>
-            ) : (
-              filtered.map(p => (
-                <div 
-                  key={p.id} 
-                  onClick={() => onSave(context.leadId, context.itemIdx, p.name)}
-                  style={{ 
-                    padding: '0.65rem 0.75rem', 
-                    cursor: 'pointer', 
-                    borderBottom: '1px solid var(--glass-border)',
-                    transition: 'background 0.2s',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                  className="link-product-item"
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <div>
-                    <span style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block' }}>{p.name}</span>
-                    {p.category && <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{p.category}</span>}
-                  </div>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary)' }}>₹{p.price}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        </div>
-      </div>
     </div>
   );
 }

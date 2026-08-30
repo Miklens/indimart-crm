@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Users, TrendingUp, AlertCircle, Truck, DollarSign, Zap, FileDown } from 'lucide-react';
+import { Users, TrendingUp, AlertCircle, Truck, DollarSign, Zap, FileDown, Plus, FileText, ListChecks, ArrowUpRight, CheckCircle, Sparkles } from 'lucide-react';
 import { Chart, registerables } from 'chart.js';
 import { useApp } from '../context/AppContext';
 import { DATA_CONFIG } from '../utils/dataConfig';
 
 Chart.register(...registerables);
 
-const ChartCard = ({ title, canvasRef, height = 200, hasData = true }) => (
-  <div className="glass-card" style={{ padding: '1rem' }}>
-    <h4 style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</h4>
+const ChartCard = ({ title, canvasRef, height = 220, hasData = true }) => (
+  <div className="glass-card" style={{ padding: '1.25rem' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <h4 style={{ fontSize: '0.82rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+        {title}
+      </h4>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--primary)' }} />
+    </div>
     <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {hasData ? (
         <canvas ref={canvasRef} />
@@ -33,7 +38,7 @@ export default function Dashboard() {
   const refTrend = useRef(null);
   const canvasRefs = { dist: refDist, lost: refLost, product: refProduct, city: refCity, funnel: refFunnel, trend: refTrend };
 
-  // KPI calculations — only invoices with actual payment received count as "billed"
+  // KPI calculations
   const paidInvoices = invoiceHistory.filter(inv => {
     const latest = inv.versions?.length ? inv.versions[inv.versions.length - 1] : inv;
     return (parseFloat(latest.receivedAmount) || 0) > 0;
@@ -69,16 +74,15 @@ export default function Dashboard() {
   const contactRate = leads.length ? ((contacted.length / leads.length) * 100).toFixed(0) : 0;
 
   const kpis = [
-    { label: 'Pipeline Enquiries', value: leads.length, sub: `${contactRate}% Contacted`, color: '#3b82f6', icon: Users, onClick: () => setCurrentSection('leads') },
-    { label: 'ACTUAL SALES (BILLED)', value: `₹${confirmedRevenue.toLocaleString()}`, sub: `From ${paidOrderCount} Orders`, color: '#10b981', icon: TrendingUp },
-    { label: 'Outstanding Payments', value: `₹${Math.max(0, pendingPaymentTotal).toLocaleString()}`, sub: `Collected: ₹${totalReceived.toLocaleString()}`, color: pendingPaymentTotal > 0 ? '#ef4444' : '#10b981', icon: AlertCircle, onClick: () => setCurrentSection('invoices') },
-    { label: 'In-Transit Orders', value: inTransitCount, sub: 'Active Shipments', color: '#3b82f6', icon: Truck, onClick: () => setCurrentSection('invoices') },
-    { label: 'Projected Revenue', value: `₹${projectedRevenue.toLocaleString()}`, sub: 'Unbilled Enquiries', color: '#f59e0b', icon: DollarSign },
-    { label: '🚀 Conversion Rate', value: `${conversionRate}%`, sub: `${billedLeadIds.size} Billed / ${validLeads} Valid`, color: '#10b981', icon: Zap },
+    { label: 'Pipeline Leads', value: leads.length, sub: `${contactRate}% Contacted`, color: '#38bdf8', icon: Users, onClick: () => setCurrentSection('leads'), bgGlow: 'rgba(56,189,248,0.1)' },
+    { label: 'ACTUAL BILLED SALES', value: `₹${confirmedRevenue.toLocaleString()}`, sub: `From ${paidOrderCount} Orders`, color: '#10b981', icon: TrendingUp, bgGlow: 'rgba(16,185,129,0.12)' },
+    { label: 'Outstanding Balance', value: `₹${Math.max(0, pendingPaymentTotal).toLocaleString()}`, sub: `Collected: ₹${totalReceived.toLocaleString()}`, color: pendingPaymentTotal > 0 ? '#ef4444' : '#10b981', icon: AlertCircle, onClick: () => setCurrentSection('invoices'), bgGlow: 'rgba(239,68,68,0.1)' },
+    { label: 'In-Transit Shipments', value: inTransitCount, sub: 'Active Deliveries', color: '#6366f1', icon: Truck, onClick: () => setCurrentSection('invoices'), bgGlow: 'rgba(99,102,241,0.1)' },
+    { label: 'Projected Pipeline', value: `₹${projectedRevenue.toLocaleString()}`, sub: 'Unbilled Enquiries', color: '#f59e0b', icon: DollarSign, bgGlow: 'rgba(245,158,11,0.1)' },
+    { label: 'Conversion Success', value: `${conversionRate}%`, sub: `${billedLeadIds.size} Billed / ${validLeads} Valid`, color: '#10b981', icon: Zap, bgGlow: 'rgba(16,185,129,0.12)' },
   ];
 
   useEffect(() => {
-    // Destroy old charts
     Object.values(chartsRef.current).forEach(c => c?.destroy());
     chartsRef.current = {};
 
@@ -91,7 +95,7 @@ export default function Dashboard() {
       chartsRef.current.dist = new Chart(canvasRefs.dist.current, {
         type: 'doughnut',
         data: { labels: Object.keys(statusCounts), datasets: [{ data: Object.values(statusCounts), backgroundColor: Object.keys(statusCounts).map(s => DATA_CONFIG.getStatusColor(s)), borderWidth: 0 }] },
-        options: { plugins: { legend: { display: false } }, cutout: '70%', responsive: true, maintainAspectRatio: false },
+        options: { plugins: { legend: { display: false } }, cutout: '72%', responsive: true, maintainAspectRatio: false },
       });
     }
 
@@ -103,7 +107,7 @@ export default function Dashboard() {
       chartsRef.current.lost = new Chart(canvasRefs.lost.current, {
         type: 'polarArea',
         data: { labels: Object.keys(reasonCounts), datasets: [{ data: Object.values(reasonCounts), backgroundColor: ['#ef4444','#f97316','#f59e0b','#84cc16','#06b6d4','#3b82f6','#6366f1'] }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: chartColor.text, boxWidth: 10, font: { size: 10 } } } } },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: chartColor.text, boxWidth: 8, font: { size: 10 } } } } },
       });
     }
 
@@ -113,15 +117,12 @@ export default function Dashboard() {
     leads.filter(l => wonLabels.includes(l.status)).forEach(l => {
       (l.productList || [{ name: l.product, price: l.orderValue, qty: 1 }]).forEach(item => {
         if (!item.name) return;
-        
-        // Find product category
         const clean = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const itemClean = clean(item.name.replace('[NEW] ', ''));
         const catProduct = products.find(p => clean(p.name) === itemClean) || 
                            products.find(p => itemClean.includes(clean(p.name))) || 
                            products.find(p => clean(p.name).includes(itemClean));
         const category = catProduct?.category || 'Uncategorized';
-        
         categoryRevenue[category] = (categoryRevenue[category] || 0) + ((parseFloat(item.price) || 0) * (parseFloat(item.qty) || 1));
       });
     });
@@ -129,7 +130,7 @@ export default function Dashboard() {
     if (canvasRefs.product.current && sortedCats.length) {
       chartsRef.current.product = new Chart(canvasRefs.product.current, {
         type: 'bar',
-        data: { labels: sortedCats.map(p=>p[0]), datasets: [{ label: 'Revenue (₹)', data: sortedCats.map(p=>p[1]), backgroundColor: '#10b981', borderRadius: 5 }] },
+        data: { labels: sortedCats.map(p=>p[0]), datasets: [{ label: 'Revenue (₹)', data: sortedCats.map(p=>p[1]), backgroundColor: '#10b981', borderRadius: 6 }] },
         options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: chartColor.text } }, y: { grid: { display: false }, ticks: { color: chartColor.text } } } },
       });
     }
@@ -145,7 +146,7 @@ export default function Dashboard() {
       chartsRef.current.city = new Chart(canvasRefs.city.current, {
         type: 'pie',
         data: { labels: sortedCities.map(c=>c[0]), datasets: [{ data: sortedCities.map(c=>c[1]), backgroundColor: ['#10b981','#3b82f6','#f59e0b','#8b5cf6','#ec4899'] }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: chartColor.text, boxWidth: 10 } } } },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: chartColor.text, boxWidth: 8 } } } },
       });
     }
 
@@ -160,12 +161,12 @@ export default function Dashboard() {
     if (canvasRefs.funnel.current && leads.length) {
       chartsRef.current.funnel = new Chart(canvasRefs.funnel.current, {
         type: 'bar',
-        data: { labels: ['Total','Contacted','Quoted','Converted','Purchased'], datasets: [{ data: funnelData, backgroundColor: ['#3b82f6','#06b6d4','#f59e0b','#10b981','#047857'], borderRadius: 10 }] },
+        data: { labels: ['Total','Contacted','Quoted','Converted','Purchased'], datasets: [{ data: funnelData, backgroundColor: ['#3b82f6','#06b6d4','#f59e0b','#10b981','#047857'], borderRadius: 8 }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: chartColor.grid }, ticks: { color: chartColor.text } }, x: { grid: { display: false }, ticks: { color: chartColor.text } } } },
       });
     }
 
-    // 6. Monthly trend line with Month-over-Month comparison
+    // 6. Monthly trend line
     const monthlyData = {};
     leads.forEach(l => {
       const month = (l.date || '').substring(0, 7);
@@ -182,7 +183,7 @@ export default function Dashboard() {
           labels: months, 
           datasets: [
             { label: 'Revenue (₹)', data: months.map(m => monthlyData[m].revenue), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.4 },
-            { label: 'Total Enquiries', data: months.map(m => monthlyData[m].count), borderColor: '#3b82f6', backgroundColor: 'transparent', fill: false, tension: 0.4, borderDash: [5, 5] }
+            { label: 'Total Enquiries', data: months.map(m => monthlyData[m].count), borderColor: '#38bdf8', backgroundColor: 'transparent', fill: false, tension: 0.4, borderDash: [4, 4] }
           ] 
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: chartColor.text } } }, scales: { y: { grid: { color: chartColor.grid }, ticks: { color: chartColor.text } }, x: { grid: { display: false }, ticks: { color: chartColor.text } } } },
@@ -190,9 +191,7 @@ export default function Dashboard() {
     }
 
     return () => { Object.values(chartsRef.current).forEach(c => c?.destroy()); };
-  }, [leads, invoiceHistory, products]); // eslint-disable-line react-hooks/exhaustive-deps
-
-
+  }, [leads, invoiceHistory, products]);
 
   const exportPDF = useCallback(async () => {
     setExporting(true);
@@ -203,7 +202,7 @@ export default function Dashboard() {
         margin: [8, 8, 8, 8],
         filename: `IndiaMART_Dashboard_${new Date().toISOString().split('T')[0]}.pdf`,
         image: { type: 'jpeg', quality: 0.97 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#0f172a' },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#070d18' },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
         pagebreak: { mode: ['avoid-all', 'css'] },
       }).from(el).save();
@@ -216,77 +215,133 @@ export default function Dashboard() {
 
   return (
     <div className="page-section" ref={dashboardRef}>
+      {/* Header with Groww-style date & export action */}
       <div className="section-header">
-        <h2 className="section-title">Dashboard</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-          <button className="btn btn-secondary" onClick={exportPDF} disabled={exporting} style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <FileDown size={13} />{exporting ? 'Exporting...' : 'Export PDF'}
+        <div>
+          <h2 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>⚡ Overview & Analytics</span>
+          </h2>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+            {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button className="btn btn-secondary" onClick={exportPDF} disabled={exporting} style={{ fontSize: '0.8rem', padding: '0.5rem 0.9rem' }}>
+            <FileDown size={14} /> {exporting ? 'Generating PDF...' : 'Export PDF'}
           </button>
         </div>
       </div>
 
-      {/* KPI Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+      {/* Quick Action Dock (Zepto/Blinkit speed dock) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+        <button 
+          className="btn btn-primary" 
+          onClick={() => setCurrentSection('leads')}
+          style={{ padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <Users size={16} /> <span>View Leads</span>
+          </div>
+          <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem' }}>{leads.length}</span>
+        </button>
+
+        <button 
+          className="btn btn-secondary" 
+          onClick={() => setCurrentSection('invoices')}
+          style={{ padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <FileText size={16} style={{ color: 'var(--primary)' }} /> <span>Invoices & Billing</span>
+          </div>
+          <span style={{ background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem' }}>{invoiceHistory.length}</span>
+        </button>
+
+        <button 
+          className="btn btn-secondary" 
+          onClick={() => setCurrentSection('bulk')}
+          style={{ padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <ListChecks size={16} style={{ color: '#f59e0b' }} /> <span>Bulk Actions</span>
+          </div>
+          <ArrowUpRight size={14} style={{ color: 'var(--text-dim)' }} />
+        </button>
+      </div>
+
+      {/* Groww-style KPI Metric Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
         {kpis.map((kpi, i) => (
-          <div key={i} className="kpi-card" style={{ borderLeft: `4px solid ${kpi.color}`, cursor: kpi.onClick ? 'pointer' : 'default' }} onClick={kpi.onClick}>
-            <span className="kpi-label">{kpi.label}</span>
-            <span className="kpi-value" style={{ color: kpi.color, fontSize: '1.6rem' }}>{kpi.value}</span>
-            <div className="kpi-trend"><kpi.icon size={12} /> {kpi.sub}</div>
+          <div 
+            key={i} 
+            className="kpi-card" 
+            style={{ 
+              cursor: kpi.onClick ? 'pointer' : 'default',
+              borderTop: `3px solid ${kpi.color}`
+            }} 
+            onClick={kpi.onClick}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <span className="kpi-label">{kpi.label}</span>
+              <div style={{ width: 28, height: 28, borderRadius: '0.45rem', background: kpi.bgGlow, display: 'flex', alignItems: 'center', justifyContent: 'center', color: kpi.color }}>
+                <kpi.icon size={15} />
+              </div>
+            </div>
+            <span className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</span>
+            <div className="kpi-trend">
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: kpi.color, display: 'inline-block' }} />
+              {kpi.sub}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* ROI Calculator */}
+      {/* Modern ROI Calculator */}
       <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
-        <h3 style={{ fontSize: '0.95rem', marginBottom: '1rem', color: 'var(--primary)' }}>💰 ROI Calculator</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h3 style={{ fontSize: '1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>💰 Marketing ROI & Acquisition Economics</span>
+          </h3>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Auto-calculated from paid invoices</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: 4 }}>MONTHLY COST (₹)</label>
+            <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: 6, fontWeight: 700 }}>INDIA MART MONTHLY COST (₹)</label>
             <input type="number" value={monthlyCost} onChange={e => { const v = parseFloat(e.target.value) || 0; setMonthlyCost(v); localStorage.setItem('indimart_monthlyCost', v); }}
-              placeholder="e.g. 50000" style={{ width: '100%' }} />
+              placeholder="e.g. 50000" />
           </div>
-          <div className="kpi-card" style={{ borderLeft: '4px solid #10b981', margin: 0 }}>
-            <span className="kpi-label">Net ROI</span>
-            <span className="kpi-value" style={{ color: (confirmedRevenue - monthlyCost) >= 0 ? '#10b981' : '#ef4444', fontSize: '1.4rem' }}>
+          <div className="kpi-card" style={{ borderLeft: '4px solid #10b981', margin: 0, padding: '1rem' }}>
+            <span className="kpi-label">Net Return</span>
+            <span className="kpi-value" style={{ color: (confirmedRevenue - monthlyCost) >= 0 ? '#10b981' : '#ef4444', fontSize: '1.45rem' }}>
               ₹{(confirmedRevenue - monthlyCost).toLocaleString()}
             </span>
-            <div className="kpi-trend">{monthlyCost > 0 ? `${((confirmedRevenue / monthlyCost) * 100).toFixed(0)}% return` : 'Enter cost to calculate'}</div>
+            <div className="kpi-trend">{monthlyCost > 0 ? `${((confirmedRevenue / monthlyCost) * 100).toFixed(0)}% ROI` : 'Enter subscription cost'}</div>
           </div>
-          <div className="kpi-card" style={{ borderLeft: '4px solid #3b82f6', margin: 0 }}>
+          <div className="kpi-card" style={{ borderLeft: '4px solid #38bdf8', margin: 0, padding: '1rem' }}>
             <span className="kpi-label">Cost Per Lead</span>
-            <span className="kpi-value" style={{ color: '#3b82f6', fontSize: '1.4rem' }}>
+            <span className="kpi-value" style={{ color: '#38bdf8', fontSize: '1.45rem' }}>
               {leads.length && monthlyCost ? `₹${Math.round(monthlyCost / leads.length).toLocaleString()}` : '—'}
             </span>
-            <div className="kpi-trend">{leads.length} total leads</div>
+            <div className="kpi-trend">{leads.length} total captured</div>
           </div>
-          <div className="kpi-card" style={{ borderLeft: '4px solid #f59e0b', margin: 0 }}>
-            <span className="kpi-label">Cost Per Conversion</span>
-            <span className="kpi-value" style={{ color: '#f59e0b', fontSize: '1.4rem' }}>
+          <div className="kpi-card" style={{ borderLeft: '4px solid #f59e0b', margin: 0, padding: '1rem' }}>
+            <span className="kpi-label">Cost Per Paid Order</span>
+            <span className="kpi-value" style={{ color: '#f59e0b', fontSize: '1.45rem' }}>
               {billedLeadIds.size && monthlyCost ? `₹${Math.round(monthlyCost / billedLeadIds.size).toLocaleString()}` : '—'}
             </span>
-            <div className="kpi-trend">{billedLeadIds.size} conversions</div>
+            <div className="kpi-trend">{billedLeadIds.size} paid conversions</div>
           </div>
         </div>
       </div>
 
       {/* Charts Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
         <ChartCard title="Lead Status Distribution" canvasRef={refDist} hasData={leads.length > 0} />
-        <ChartCard title="Lost Reason Analysis" canvasRef={refLost} hasData={leads.filter(l => DATA_CONFIG.getLostStatusLabels().includes(l.status)).length > 0} />
+        <ChartCard title="Monthly Revenue & Pipeline Trend" canvasRef={refTrend} hasData={leads.filter(l => l.date).length > 0} />
+        <ChartCard title="Sales Funnel Conversion" canvasRef={refFunnel} hasData={leads.length > 0} />
         <ChartCard title="Top Categories by Revenue" canvasRef={refProduct} hasData={leads.filter(l => DATA_CONFIG.getWonStatusLabels().includes(l.status)).length > 0} />
-        <ChartCard title="City-wise Revenue" canvasRef={refCity} hasData={leads.filter(l => DATA_CONFIG.getWonStatusLabels().includes(l.status)).length > 0} />
-        <ChartCard title="Sales Funnel" canvasRef={refFunnel} hasData={leads.length > 0} />
-        <ChartCard title="Monthly Revenue Trend" canvasRef={refTrend} hasData={leads.filter(l => l.date).length > 0} />
+        <ChartCard title="City-wise Revenue Performance" canvasRef={refCity} hasData={leads.filter(l => DATA_CONFIG.getWonStatusLabels().includes(l.status)).length > 0} />
+        <ChartCard title="Lost Deal Root Cause Analysis" canvasRef={refLost} hasData={leads.filter(l => DATA_CONFIG.getLostStatusLabels().includes(l.status)).length > 0} />
       </div>
-
-      {leads.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-dim)', marginTop: '2rem' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📊</div>
-          <h3 style={{ marginBottom: '0.5rem' }}>No data yet</h3>
-          <p>Add your first lead to see analytics here.</p>
-        </div>
-      )}
     </div>
   );
 }
